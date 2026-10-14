@@ -309,7 +309,7 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
 
   Widget _topBar() {
     return Container(
-      height: WwSpace.topBarHeight,
+      constraints: const BoxConstraints(minHeight: WwSpace.topBarHeight),
       padding: const EdgeInsets.symmetric(horizontal: WwSpace.screenMargin),
       decoration: const BoxDecoration(
         color: WwColors.nav,

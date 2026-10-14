@@ -276,6 +276,9 @@ class WwType {
 /// Spacing: 8dp grid, 16dp screen margin (audit §5).
 class WwSpace {
   static const screenMargin = 16.0;
+
+  /// Minimum top-bar height; bars grow with their content under
+  /// larger text scales.
   static const topBarHeight = 56.0;
   static const minTarget = 48.0;
 }

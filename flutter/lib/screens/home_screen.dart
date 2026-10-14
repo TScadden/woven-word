@@ -374,7 +374,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ? '?'
         : profileName.trim()[0].toUpperCase();
     return Container(
-      height: WwSpace.topBarHeight,
+      constraints: const BoxConstraints(minHeight: WwSpace.topBarHeight),
       padding: const EdgeInsets.symmetric(horizontal: WwSpace.screenMargin),
       decoration: const BoxDecoration(
         color: WwColors.nav,

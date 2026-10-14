@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:woven_word/data/bible_data.dart';
 import 'package:woven_word/screens/home_screen.dart';
+import 'package:woven_word/screens/my_notes_screen.dart';
+import 'package:woven_word/screens/profiles_screen.dart';
 import 'package:woven_word/theme/ww_theme.dart';
 import 'package:woven_word/widgets/home_layout.dart';
 
@@ -400,25 +402,9 @@ void main() {
     expect(controller(tester).offset, closeTo(target, _tolerance));
   });
 
-  /// At text scale 1.3 the shipped top bar's fixed 56dp height
-  /// overflows its title column by ~20dp in the test font (a
-  /// pre-existing property of the shipped Home, outside the scroll
-  /// content and outside this package's no-literal-change rule).
-  /// T7's subject is the scroll model, so the T7 tests tolerate
-  /// that one known overflow report and nothing else.
-  void tolerateTopBarOverflow(WidgetTester tester) {
-    final previous = FlutterError.onError;
-    FlutterError.onError = (details) {
-      if (details.exceptionAsString().contains('overflowed')) return;
-      previous?.call(details);
-    };
-    addTearDown(() => FlutterError.onError = previous);
-  }
-
   group('T7 — second geometry (400 wide, text scale 1.3)', () {
     testWidgets('extent truth at second geometry', (tester) async {
       addTearDown(tester.view.reset);
-      tolerateTopBarOverflow(tester);
       final data = manyData();
       await pumpHome(
         tester,
@@ -450,7 +436,6 @@ void main() {
 
     testWidgets('landings at second geometry', (tester) async {
       addTearDown(tester.view.reset);
-      tolerateTopBarOverflow(tester);
       final data = fakeData();
       await pumpHome(
         tester,
@@ -473,6 +458,122 @@ void main() {
           width: 400,
         );
       }
+    });
+  });
+
+  group('T8 — top bar under text scale', () {
+    Finder topBar(String title) => find.ancestor(
+      of: find.text(title),
+      matching: find.byWidgetPredicate(
+        (w) =>
+            w is Container &&
+            w.decoration is BoxDecoration &&
+            (w.decoration as BoxDecoration).color == WwColors.nav,
+      ),
+    );
+
+    List<String> collectFlutterErrors() {
+      final collected = <String>[];
+      final previous = FlutterError.onError;
+      FlutterError.onError = (details) {
+        collected.add(details.exceptionAsString());
+      };
+      addTearDown(() => FlutterError.onError = previous);
+      return collected;
+    }
+
+    void expectNoOverflow(List<String> collected) {
+      expect(
+        collected.where((e) => e.contains('overflowed')),
+        isEmpty,
+        reason: 'collected Flutter errors: $collected',
+      );
+    }
+
+    Future<void> pumpScreen(
+      WidgetTester tester,
+      Widget screen,
+      double textScale,
+    ) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wwTheme(),
+          builder: (context, child) {
+            var mq = MediaQuery.of(context);
+            mq = mq.copyWith(textScaler: TextScaler.linear(textScale));
+            return MediaQuery(data: mq, child: child!);
+          },
+          home: screen,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    testWidgets('T8a — Home bar is exactly 56.0 at text scale 1.0',
+        (tester) async {
+      addTearDown(tester.view.reset);
+      final data = fakeData();
+      await pumpHome(
+        tester,
+        data: data,
+        size: const Size(400, 800),
+        textScale: 1.0,
+      );
+      expect(tester.getSize(topBar('Woven Word').first).height, 56.0);
+    });
+
+    testWidgets('T8b — Home bar: zero overflow at text scale 1.3',
+        (tester) async {
+      addTearDown(tester.view.reset);
+      final collected = collectFlutterErrors();
+      final data = fakeData();
+      await pumpHome(
+        tester,
+        data: data,
+        size: const Size(400, 800),
+        textScale: 1.3,
+      );
+      expectNoOverflow(collected);
+      expect(
+        tester.getSize(topBar('Woven Word').first).height,
+        greaterThan(56),
+      );
+    });
+
+    testWidgets('T8c — Home bar: zero overflow at text scale 1.5',
+        (tester) async {
+      addTearDown(tester.view.reset);
+      final collected = collectFlutterErrors();
+      final data = fakeData();
+      await pumpHome(
+        tester,
+        data: data,
+        size: const Size(400, 800),
+        textScale: 1.5,
+      );
+      expectNoOverflow(collected);
+      expect(
+        tester.getSize(topBar('Woven Word').first).height,
+        greaterThan(56),
+      );
+    });
+
+    testWidgets('T8d — Profiles and My Notes bars at text scale 1.3: '
+        'no overflow, exactly 56.0', (tester) async {
+      addTearDown(tester.view.reset);
+      final collected = collectFlutterErrors();
+      await pumpScreen(tester, const ProfilesScreen(), 1.3);
+      expectNoOverflow(collected);
+      expect(tester.getSize(topBar('Profiles').first).height, 56.0);
+      await tester.pumpWidget(const SizedBox());
+      await pumpScreen(tester, MyNotesScreen(data: fakeData()), 1.3);
+      expectNoOverflow(collected);
+      expect(tester.getSize(topBar('My Notes').first).height, 56.0);
     });
   });
 }

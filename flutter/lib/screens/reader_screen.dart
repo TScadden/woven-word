@@ -350,9 +350,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                         ),
                         child: Text(
                           'Try again',
-                          style: WwType.paperButtonLabel.copyWith(
-                            color: WwColors.goldTextOnPaper,
-                          ),
+                          style: WwType.paperButtonLabelGold,
                         ),
                       ),
                     ],
@@ -544,15 +542,24 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     ),
                     if (hasConns) ...[
                       const SizedBox(height: 4),
-                      // The dot is the DARK gold token on paper
-                      // (3.20:1 — passes the 3:1 meaningful-icon
-                      // threshold), never goldBright on cream
-                      // (research desk note, board run 3).
+                      // The dot's contrast in both states: on
+                      // paper the DARK gold token passes at 3.20:1,
+                      // but on the selected-verse background
+                      // (hlGold at 45% over paper = #FBF0C6) it
+                      // falls to 2.85:1, below the 3:1
+                      // meaningful-icon threshold — so when
+                      // selected the dot switches to
+                      // goldTextOnPaper (4.11:1 on #FBF0C6),
+                      // mirroring the verse-number pattern.
+                      // Never goldBright on cream (research desk
+                      // note, board run 3; Petra High-1).
                       Container(
                         width: 6,
                         height: 6,
-                        decoration: const BoxDecoration(
-                          color: WwColors.gold,
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? WwColors.goldTextOnPaper
+                              : WwColors.gold,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -614,7 +621,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       label ?? (isPrev ? 'Previous' : 'Next'),
       style: enabled
           ? WwType.paperButtonLabel
-          : WwType.paperButtonLabel.copyWith(color: WwColors.mutedOnPaper),
+          : WwType.paperButtonLabelDisabled,
       overflow: TextOverflow.ellipsis,
     );
     final icon = Icon(

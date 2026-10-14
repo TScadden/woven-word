@@ -178,6 +178,24 @@ class WwType {
     fontWeight: FontWeight.w600,
     color: WwColors.ink,
   );
+
+  /// Paper button label in gold text: paperButtonLabel with
+  /// goldTextOnPaper (4.62:1 on paper) — the "Try again" action on
+  /// the reader error state (Petra Low-1, board run 3).
+  static const paperButtonLabelGold = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    color: WwColors.goldTextOnPaper,
+  );
+
+  /// Paper button label when disabled: paperButtonLabel with
+  /// mutedOnPaper (4.6:1 on paper) — the unavailable prev/next
+  /// chapter button (Petra Low-1, board run 3).
+  static const paperButtonLabelDisabled = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    color: WwColors.mutedOnPaper,
+  );
   static const translationUnselected = TextStyle(
     fontSize: 14,
     fontWeight: FontWeight.w600,

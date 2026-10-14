@@ -67,6 +67,12 @@ List<ConferenceTalk> citingTalks(
     if (data.refsForTalk(talk.id).isNotEmpty) talk,
 ];
 
+/// Every labeled control in this branch wraps its content in
+/// [ExcludeSemantics] under its [Semantics] container, so
+/// descendant text never merges into the node's label: the
+/// semantics tree holds one node per control, labeled exactly
+/// per §7 (the §3.5 container-label discipline).
+///
 /// One browse list row (spec §4.2/§4.3): the shipped list-row
 /// construction — Material(surface, row radius) + InkWell,
 /// minHeight 48, horizontal 12 / vertical 8 padding, the whole
@@ -83,39 +89,41 @@ Widget browseRow({
     container: true,
     button: true,
     label: semanticsLabel,
-    child: Material(
-      color: WwColors.surface,
-      borderRadius: BorderRadius.circular(WwRadius.row),
-      child: InkWell(
+    child: ExcludeSemantics(
+      child: Material(
+        color: WwColors.surface,
         borderRadius: BorderRadius.circular(WwRadius.row),
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      style: WwType.controlLabel.copyWith(
-                        fontWeight: FontWeight.w600,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(WwRadius.row),
+          onTap: onTap,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: WwType.controlLabel.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(subtitle, style: WwType.captionOnDark),
-                  ],
+                      const SizedBox(height: 2),
+                      Text(subtitle, style: WwType.captionOnDark),
+                    ],
+                  ),
                 ),
-              ),
-              const Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: WwColors.mutedOnDark,
-              ),
-            ],
+                const Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: WwColors.mutedOnDark,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -501,27 +509,29 @@ class _TalkViewScreenState extends State<TalkViewScreen> {
       container: true,
       button: true,
       label: semanticsLabel,
-      child: ElevatedButton(
-        onPressed: _openInGospelLibrary,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: WwColors.goldBright,
-          foregroundColor: WwColors.onGold,
-          minimumSize: const Size.fromHeight(WwSpace.minTarget),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(WwRadius.chip),
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.open_in_new,
-              size: 18,
-              color: WwColors.onGold,
+      child: ExcludeSemantics(
+        child: ElevatedButton(
+          onPressed: _openInGospelLibrary,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: WwColors.goldBright,
+            foregroundColor: WwColors.onGold,
+            minimumSize: const Size.fromHeight(WwSpace.minTarget),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(WwRadius.chip),
             ),
-            const SizedBox(width: 8),
-            Text(label, style: WwType.goldButtonLabel),
-          ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.open_in_new,
+                size: 18,
+                color: WwColors.onGold,
+              ),
+              const SizedBox(width: 8),
+              Text(label, style: WwType.goldButtonLabel),
+            ],
+          ),
         ),
       ),
     );
@@ -543,40 +553,42 @@ class _TalkViewScreenState extends State<TalkViewScreen> {
       container: true,
       button: true,
       label: 'Open $ref',
-      child: Material(
-        color: WwColors.surface,
-        borderRadius: BorderRadius.circular(WwRadius.row),
-        child: InkWell(
+      child: ExcludeSemantics(
+        child: Material(
+          color: WwColors.surface,
           borderRadius: BorderRadius.circular(WwRadius.row),
-          onTap: () => widget.onOpenVerse(globalChapter, verse),
-          child: Container(
-            constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(ref, style: WwType.refLabelOnDark),
-                      const SizedBox(height: 2),
-                      Text(
-                        snippet,
-                        style: WwType.bodyOnDark,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+          child: InkWell(
+            borderRadius: BorderRadius.circular(WwRadius.row),
+            onTap: () => widget.onOpenVerse(globalChapter, verse),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(ref, style: WwType.refLabelOnDark),
+                        const SizedBox(height: 2),
+                        Text(
+                          snippet,
+                          style: WwType.bodyOnDark,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const Icon(
-                  Icons.chevron_right,
-                  size: 20,
-                  color: WwColors.mutedOnDark,
-                ),
-              ],
+                  const Icon(
+                    Icons.chevron_right,
+                    size: 20,
+                    color: WwColors.mutedOnDark,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

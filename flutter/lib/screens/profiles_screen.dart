@@ -622,53 +622,54 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   /// be an unexamined default). The row and the switch are ONE
   /// semantics node: container + toggled flag, label exactly
   /// 'Show conference talks', the state carried by the flag only
-  /// (§2.5). The switch's own semantics are excluded so the tree
-  /// holds that single node for this one action.
+  /// (§2.5). The row's inner semantics are excluded so descendant
+  /// text cannot merge into the node's label — the tree holds
+  /// that single node, with that exact label, for this action.
   Widget _conferenceRow() {
     return Semantics(
       container: true,
       button: true,
       toggled: _conferenceEnabled,
       label: 'Show conference talks',
-      child: Material(
-        color: WwColors.surface,
-        borderRadius: BorderRadius.circular(WwRadius.row),
-        child: InkWell(
+      child: ExcludeSemantics(
+        child: Material(
+          color: WwColors.surface,
           borderRadius: BorderRadius.circular(WwRadius.row),
-          onTap: () => _toggleConference(!_conferenceEnabled),
-          child: Container(
-            constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.menu_book,
-                  size: 20,
-                  color: WwColors.goldBright,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Show conference talks',
-                        style: WwType.controlLabel.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      const Text(
-                        'Verse connections and the Library browse',
-                        style: WwType.captionOnDark,
-                      ),
-                    ],
+          child: InkWell(
+            borderRadius: BorderRadius.circular(WwRadius.row),
+            onTap: () => _toggleConference(!_conferenceEnabled),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.menu_book,
+                    size: 20,
+                    color: WwColors.goldBright,
                   ),
-                ),
-                const SizedBox(width: 12),
-                ExcludeSemantics(
-                  child: Switch(
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Show conference talks',
+                          style: WwType.controlLabel.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Verse connections and the Library browse',
+                          style: WwType.captionOnDark,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Switch(
                     value: _conferenceEnabled,
                     onChanged: _toggleConference,
                     activeTrackColor: WwColors.goldBright,
@@ -693,8 +694,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                           : null,
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

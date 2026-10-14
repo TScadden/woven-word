@@ -385,37 +385,39 @@ class LibraryRootState extends State<LibraryRoot> {
               'General Conference, '
               '${n == 1 ? '1 conference' : '$n conferences'}, '
               '${m == 1 ? '1 talk' : '$m talks'}',
-          child: Material(
-            color: WwColors.surface,
-            borderRadius: BorderRadius.circular(WwRadius.row),
-            child: InkWell(
+          child: ExcludeSemantics(
+            child: Material(
+              color: WwColors.surface,
               borderRadius: BorderRadius.circular(WwRadius.row),
-              onTap: widget.onOpenConference,
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 72),
-                padding: const EdgeInsets.all(WwSpace.screenMargin),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                            'General Conference',
-                            style: WwType.selectionTitle,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(caption, style: WwType.captionOnDark),
-                        ],
+              child: InkWell(
+                borderRadius: BorderRadius.circular(WwRadius.row),
+                onTap: widget.onOpenConference,
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 72),
+                  padding: const EdgeInsets.all(WwSpace.screenMargin),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'General Conference',
+                              style: WwType.selectionTitle,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(caption, style: WwType.captionOnDark),
+                          ],
+                        ),
                       ),
-                    ),
-                    const Icon(
-                      Icons.chevron_right,
-                      size: 20,
-                      color: WwColors.mutedOnDark,
-                    ),
-                  ],
+                      const Icon(
+                        Icons.chevron_right,
+                        size: 20,
+                        color: WwColors.mutedOnDark,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

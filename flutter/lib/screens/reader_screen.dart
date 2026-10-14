@@ -859,6 +859,8 @@ class ReaderScreenState extends State<ReaderScreen>
         // in bodyOnPaper w600, the speaker line beneath it, and
         // NO trailing control — a talk has no screen in this app;
         // the row itself opens its talk view in the Library (§3.3).
+        // Its content's semantics are excluded under the
+        // container (§3.5): one node, the exact label.
         Widget talkRow(ConferenceTalk talk) {
           return Semantics(
             container: true,
@@ -866,32 +868,34 @@ class ReaderScreenState extends State<ReaderScreen>
             label:
                 'Open talk: ${talk.title}, by ${talk.speaker}, '
                 '${talk.conferenceLabel}',
-            child: InkWell(
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                confHost?.openConferenceTalk(talk);
-              },
-              child: Container(
-                constraints: const BoxConstraints(
-                  minHeight: WwSpace.minTarget,
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      talk.title,
-                      style: WwType.bodyOnPaper.copyWith(
-                        fontWeight: FontWeight.w600,
+            child: ExcludeSemantics(
+              child: InkWell(
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  confHost?.openConferenceTalk(talk);
+                },
+                child: Container(
+                  constraints: const BoxConstraints(
+                    minHeight: WwSpace.minTarget,
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        talk.title,
+                        style: WwType.bodyOnPaper.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${talk.speaker} · ${talk.conferenceLabel}',
-                      style: WwType.captionOnPaper,
-                    ),
-                  ],
+                      const SizedBox(height: 2),
+                      Text(
+                        '${talk.speaker} · ${talk.conferenceLabel}',
+                        style: WwType.captionOnPaper,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

@@ -122,14 +122,18 @@ void main() {
   });
 
   group('talksForVerse ordering', () {
-    test('newest first: year desc, October before April, title asc', () {
-      // John 1:1 citers: 2024-O Bednar / Freeman / Wada (title
-      // order), then 2024-A Uchtdorf, then 1990-O Nelson.
+    test('newest first: year desc, October before April, dataset '
+        'order within a conference', () {
+      // John 1:1 citers: 2024-O in dataset order — Wada (1),
+      // Freeman (3), Bednar (7) — then 2024-A Uchtdorf, then
+      // 1990-O Nelson. Title order within 2024 October would be
+      // Bednar / Freeman / Wada, so this assertion fails if any
+      // alphabetical tie-break returns (spec §3.3, fix F-1).
       final titles = data.talksForVerse(997, 1).map((t) => t.title).toList();
       expect(titles, [
-        'Be Still, and Know That I Am God',
-        'Live Up to Your Privileges',
         'The Words of Christ and the Holy Ghost Will Lead Us to the Truth',
+        'Live Up to Your Privileges',
+        'Be Still, and Know That I Am God',
         'A Higher Joy',
         'Choices',
       ]);

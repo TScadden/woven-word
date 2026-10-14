@@ -60,16 +60,16 @@ class ConferenceTalk {
 int _sessionRank(String session) => session == 'O' ? 1 : 0;
 
 /// Newest-first talk order, the one sort every surface shares:
-/// year descending, October before April within a year, title
-/// ascending for stability, then id ascending so the order is
-/// total even on duplicate titles.
+/// year descending, October before April within a year, then
+/// dataset order within one conference (spec §3.3 — a conference
+/// is a program, and its talks keep the order they were given;
+/// never a title re-sort). Ids are bundled-table indices, so id
+/// ascending IS dataset order, and it makes the order total.
 int _newestFirst(ConferenceTalk a, ConferenceTalk b) {
   final byYear = b.year.compareTo(a.year);
   if (byYear != 0) return byYear;
   final bySession = _sessionRank(b.session).compareTo(_sessionRank(a.session));
   if (bySession != 0) return bySession;
-  final byTitle = a.title.compareTo(b.title);
-  if (byTitle != 0) return byTitle;
   return a.id.compareTo(b.id);
 }
 
@@ -155,8 +155,9 @@ class ConferenceData {
   ConferenceTalk? talkById(int id) => _byId[id];
 
   /// Talks citing one verse, newest first (year descending,
-  /// October before April within a year, title ascending). An
-  /// out-of-canon or uncited verse returns an empty list.
+  /// October before April within a year, dataset order within
+  /// one conference). An out-of-canon or uncited verse returns
+  /// an empty list.
   List<ConferenceTalk> talksForVerse(int globalChapter, int verse) {
     final found = _byVerse[(globalChapter, verse)];
     if (found == null || found.isEmpty) return const [];

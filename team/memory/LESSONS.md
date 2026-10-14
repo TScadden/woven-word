@@ -87,3 +87,31 @@ rounds Rusty ran before the studio was founded).
     `decisions/2026-10-14-intro-decision.md`). When the evidence is that
     clear, decide from it, record it, and keep the craft lessons (#5, #6)
     for wherever the technique belongs.
+
+## Design & data (Oct 14, 2026 board run 2 — home redesign)
+13. **Audit a palette before building on it; split tokens by role.**
+    Petra's computed audit kept black/cream/gold but caught `gold`
+    (#B8860B) at 3.20:1 on paper — and the luminance windows prove no
+    single hex can be both normal text on paper (needs L ≤ 0.1795) and
+    a fill under an `onGold` label (needs L ≥ 0.2036). The fix is a
+    role split, not a nudge: `gold` = fills/large/icons on paper only,
+    new `goldTextOnPaper` (#956D09, 4.62:1) = small paper text, and
+    `goldBright` documented dark-surfaces-only (1.89:1 on paper). Run
+    the audit in the package BEFORE the one that depends on the tokens
+    (here: the reader), and correct contrast comments to computed
+    values — two annotations in ww_theme.dart were stale.
+14. **A lazy list cannot scroll to an item it has not built.** The
+    home list's GlobalKey + `ensureVisible` jumps (search, partner,
+    restore) silently no-op when the target book's section is outside
+    the built window. Auto-scroll in a lazy sliver list needs an offset
+    model; shipping without one is acceptable only when the limitation
+    is named in the package report, never left for the founder to find.
+15. **Research reconciliation is a producer step with teeth.** The
+    category research validated the founder's spine (list-as-home,
+    chapter grid, scope filtering list + map together, partners ranked
+    by count) and still changed the build: resume state was adopted
+    (Gospel Library / Logos / Dwell all restore your place), while
+    keyword/topic search was rejected because the licensed TSK data is
+    a reference graph that cannot answer it honestly, and per-chapter
+    count badges were rejected inside the 48dp picker grid on
+    legibility. Research that changes nothing was decoration.

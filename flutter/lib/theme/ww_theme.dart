@@ -168,6 +168,59 @@ class WwType {
     height: 1.4,
     color: WwColors.ink,
   );
+
+  /// Reference label on dark surfaces (My Notes rows, board run 5):
+  /// refLabel's size and weight in goldBright, the dark-surface
+  /// gold (goldTextOnPaper is a paper-only role). Contrast computed
+  /// at the run-5 gate.
+  static const refLabelOnDark = TextStyle(
+    fontSize: 13,
+    fontWeight: FontWeight.w600,
+    color: WwColors.goldBright,
+  );
+
+  /// Destructive action label on dark dialogs (board run 5):
+  /// buttonLabel's size and weight in the danger tint.
+  static const dangerActionLabel = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    color: WwColors.danger,
+  );
+
+  /// Primary action label on dark dialogs (board run 5): buttonLabel
+  /// in goldBright; the disabled state uses mutedOnDark.
+  static const dialogActionLabel = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    color: WwColors.goldBright,
+  );
+  static const dialogActionLabelDisabled = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    color: WwColors.mutedOnDark,
+  );
+
+  /// The "Active" caption under the active profile's name (board
+  /// run 5): caption size, goldBright — paired with a check icon so
+  /// the state never rides on color alone (lesson 17).
+  static const activeCaption = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+    color: WwColors.goldBright,
+  );
+
+  /// Profile avatar letters (board run 5): on the goldBright fill
+  /// (onGold) and on surfaceHigh (goldBright).
+  static const avatarLetterOnGold = TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.w700,
+    color: WwColors.onGold,
+  );
+  static const avatarLetterOnDark = TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.w700,
+    color: WwColors.goldBright,
+  );
   static const captionOnPaper = TextStyle(
     fontSize: 12,
     color: WwColors.mutedOnPaper,
@@ -275,6 +328,38 @@ class WwPageRoute<T> extends PageRouteBuilder<T> {
         },
       );
 }
+
+/// Shows a dialog honoring reduced motion (audit §8, Petra run-5
+/// condition): with animations disabled the dialog renders its
+/// final state instantly instead of running the stock fade/scale
+/// entrance, which never consults MediaQuery.disableAnimations.
+Future<T?> wwShowDialog<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+}) {
+  if (MediaQuery.of(context).disableAnimations) {
+    return showGeneralDialog<T>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      barrierColor: Colors.black54,
+      transitionDuration: Duration.zero,
+      pageBuilder: (context, _, _) => builder(context),
+    );
+  }
+  return showDialog<T>(context: context, builder: builder);
+}
+
+/// Animation style for modal bottom sheets honoring reduced
+/// motion (audit §8): zero-duration under reduced motion, the
+/// stock style otherwise.
+AnimationStyle? wwSheetAnimationStyle(BuildContext context) =>
+    MediaQuery.of(context).disableAnimations
+    ? const AnimationStyle(
+        duration: Duration.zero,
+        reverseDuration: Duration.zero,
+      )
+    : null;
 
 ThemeData wwTheme() {
   return ThemeData(

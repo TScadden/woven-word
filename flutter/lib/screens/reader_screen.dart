@@ -51,12 +51,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
   ScriptureText? _texts;
   Object? _error;
 
-  /// Per-profile highlights and notes for this session. The active
-  /// profile is [UserData.defaultProfileId] until profiles land
-  /// (board run 5). A failed store load leaves an empty in-memory
-  /// model, so persistence never blocks reading.
+  /// Per-profile highlights and notes for this session, scoped to
+  /// the store's active profile (board run 5); switching profiles
+  /// on the Profiles screen swaps what a newly opened reader shows.
+  /// A failed store load leaves an empty in-memory model, so
+  /// persistence never blocks reading.
   UserDataStore? _userStore;
   UserData _userData = UserData();
+  String _profileId = UserData.defaultProfileId;
 
   final _scrollCtl = ScrollController();
   final _verseKeys = <int, GlobalKey>{};
@@ -132,11 +134,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
         final prefs = await SharedPreferences.getInstance();
         _userStore = await UserDataStore.load(prefs);
         _userData = _userStore!.data;
+        _profileId = _userData.activeProfileId;
       } catch (_) {
         // Persistence failure never blocks reading: the session
         // keeps an empty in-memory model.
         _userStore = null;
         _userData = UserData();
+        _profileId = UserData.defaultProfileId;
       }
       final texts = await ScriptureText.load();
       if (!mounted) return;
@@ -180,10 +184,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   HlColor? _highlightFor(int ch, int v) =>
-      _userData.highlight(UserData.defaultProfileId, _verseKeyFor(ch, v));
+      _userData.highlight(_profileId, _verseKeyFor(ch, v));
 
   String? _noteFor(int ch, int v) =>
-      _userData.note(UserData.defaultProfileId, _verseKeyFor(ch, v));
+      _userData.note(_profileId, _verseKeyFor(ch, v));
 
   /// The theme tint a highlight color renders in (full opacity).
   Color _tintFor(HlColor color) => switch (color) {
@@ -208,14 +212,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   void _applyHighlight(String key, HlColor? color) {
-    setState(
-      () => _userData.setHighlight(UserData.defaultProfileId, key, color),
-    );
+    setState(() => _userData.setHighlight(_profileId, key, color));
     _persistUserData();
   }
 
   void _applyNote(String key, String text) {
-    setState(() => _userData.setNote(UserData.defaultProfileId, key, text));
+    setState(() => _userData.setNote(_profileId, key, text));
     _persistUserData();
   }
 
@@ -295,6 +297,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       context: context,
       backgroundColor: WwColors.paper,
       isScrollControlled: true,
+      sheetAnimationStyle: wwSheetAnimationStyle(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(
           top: Radius.circular(WwRadius.sheet),
@@ -303,11 +306,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (sheetContext, setSheetState) {
-            final currentHighlight = _userData.highlight(
-              UserData.defaultProfileId,
-              key,
-            );
-            final currentNote = _userData.note(UserData.defaultProfileId, key);
+            final currentHighlight = _userData.highlight(_profileId, key);
+            final currentNote = _userData.note(_profileId, key);
             final Widget sheetBody;
             if (editingNote) {
               // Note editor: an in-sheet swap (instant, no fade) of

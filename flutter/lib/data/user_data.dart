@@ -95,17 +95,149 @@ class ProfileData {
 }
 
 /// All profiles' user data, persisted as one JSON document:
-/// `{"version":1,"profiles":{"default":{"highlights":{...},
-/// "notes":{...}}}}`. Profile-ready by design: run 5 adds profiles
-/// and a My Notes surface on top of this shape without a rewrite.
+/// `{"version":2,"activeProfileId":"default",
+/// "names":{"default":"My Profile"},"seq":0,
+/// "profiles":{"default":{"highlights":{...},"notes":{...}}}}`.
+/// Version 1 documents (board run 4: profiles only) load with the
+/// default profile active and unnamed — their data carries over
+/// untouched.
 class UserData {
   UserData({Map<String, ProfileData>? profiles})
     : profiles = profiles ?? <String, ProfileData>{};
 
   static const String defaultProfileId = 'default';
-  static const int version = 1;
+  static const int version = 2;
+
+  /// Display name of the built-in profile until it is renamed.
+  static const String defaultProfileName = 'My Profile';
 
   final Map<String, ProfileData> profiles;
+
+  /// Explicit display names by profile id. Ids without an entry use
+  /// a fallback (see [profileName]); fallbacks are never persisted.
+  final Map<String, String> profileNames = <String, String>{};
+
+  String? _activeProfileId;
+  int _profileSeq = 0;
+
+  /// Every profile id, in creation order. A store with no profiles
+  /// at all still reports the built-in default profile — at least
+  /// one profile always exists.
+  List<String> get profileIds {
+    final ids = <String>[
+      ...profiles.keys,
+      for (final id in profileNames.keys)
+        if (!profiles.containsKey(id)) id,
+    ];
+    return ids.isEmpty ? const [defaultProfileId] : ids;
+  }
+
+  bool hasProfile(String profileId) => profileIds.contains(profileId);
+
+  /// The active profile: the stored choice when it still names a
+  /// real profile, else the default profile when it exists, else
+  /// the first profile. Always a member of [profileIds].
+  String get activeProfileId {
+    final ids = profileIds;
+    final stored = _activeProfileId;
+    if (stored != null && ids.contains(stored)) return stored;
+    if (ids.contains(defaultProfileId)) return defaultProfileId;
+    return ids.first;
+  }
+
+  /// Makes [profileId] the active profile. Unknown ids are ignored.
+  void setActiveProfile(String profileId) {
+    if (!hasProfile(profileId)) return;
+    _activeProfileId = profileId;
+  }
+
+  /// The display name of a profile: its explicit name, else the
+  /// built-in name for the default profile, else a generic label.
+  String profileName(String profileId) {
+    final name = profileNames[profileId];
+    if (name != null) return name;
+    return profileId == defaultProfileId ? defaultProfileName : 'Profile';
+  }
+
+  static String _normalizedName(String name, String fallback) {
+    final trimmed = name.trim();
+    return trimmed.isEmpty ? fallback : trimmed;
+  }
+
+  /// Creates a profile with a fresh id and makes it active.
+  /// Returns the new profile's id. Creating the first profile also
+  /// materializes the built-in default profile, so the profile list
+  /// always shows real entries.
+  String createProfile(String name) {
+    if (profiles.isEmpty && profileNames.isEmpty) {
+      _bucketForWrite(defaultProfileId);
+    }
+    String id;
+    do {
+      _profileSeq++;
+      id = 'p$_profileSeq';
+    } while (hasProfile(id));
+    _bucketForWrite(id);
+    profileNames[id] = _normalizedName(name, 'New profile');
+    _activeProfileId = id;
+    return id;
+  }
+
+  /// Renames a profile (the default profile included — its id never
+  /// changes, only its display name). Unknown ids and names that are
+  /// empty after trimming are ignored.
+  void renameProfile(String profileId, String name) {
+    if (!hasProfile(profileId)) return;
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    profileNames[profileId] = trimmed;
+  }
+
+  /// Deletes a profile together with ALL of its highlights and
+  /// notes. Deleting the active profile falls back to a remaining
+  /// one (the default when it exists). The last remaining profile
+  /// can never be deleted; unknown ids are ignored.
+  void deleteProfile(String profileId) {
+    final ids = profileIds;
+    if (!ids.contains(profileId) || ids.length <= 1) return;
+    final wasActive = activeProfileId == profileId;
+    profiles.remove(profileId);
+    profileNames.remove(profileId);
+    if (wasActive || _activeProfileId == profileId) {
+      _activeProfileId = null;
+    }
+  }
+
+  /// One profile's notes in canonical order — book index, then
+  /// chapter, then verse (numeric, never string order) — each entry
+  /// carrying its parsed position. Notes whose key does not parse
+  /// are dropped (defensive; our own writes always parse).
+  List<({String key, int book, int chapter, int verse, String text})>
+  notesFor(String profileId) {
+    final profile = profiles[profileId];
+    if (profile == null) return const [];
+    final entries =
+        <({String key, int book, int chapter, int verse, String text})>[];
+    for (final entry in profile.notes.entries) {
+      final parsed = parseVerseKey(entry.key);
+      if (parsed == null) continue;
+      entries.add((
+        key: entry.key,
+        book: parsed.$1,
+        chapter: parsed.$2,
+        verse: parsed.$3,
+        text: entry.value,
+      ));
+    }
+    entries.sort((a, b) {
+      final byBook = a.book.compareTo(b.book);
+      if (byBook != 0) return byBook;
+      final byChapter = a.chapter.compareTo(b.chapter);
+      if (byChapter != 0) return byChapter;
+      return a.verse.compareTo(b.verse);
+    });
+    return entries;
+  }
 
   ProfileData _bucketForWrite(String profileId) =>
       profiles.putIfAbsent(profileId, () => ProfileData());
@@ -145,6 +277,9 @@ class UserData {
 
   Map<String, dynamic> toJson() => {
     'version': version,
+    'activeProfileId': activeProfileId,
+    'names': Map<String, String>.from(profileNames),
+    'seq': _profileSeq,
     'profiles': {
       for (final entry in profiles.entries) entry.key: entry.value.toJson(),
     },
@@ -152,9 +287,24 @@ class UserData {
 
   /// Defensive parse: wrong shapes anywhere in the document are
   /// dropped, never thrown — a corrupt document loads as whatever
-  /// valid subset exists (empty if none).
+  /// valid subset exists (empty if none). Version 1 documents have
+  /// no names/active/seq keys and load with defaults for all three.
   factory UserData.fromJson(Map<String, dynamic> json) {
     final data = UserData();
+    final rawNames = json['names'];
+    if (rawNames is Map) {
+      for (final entry in rawNames.entries) {
+        final id = entry.key;
+        final name = entry.value;
+        if (id is! String || name is! String) continue;
+        if (name.trim().isEmpty) continue;
+        data.profileNames[id] = name;
+      }
+    }
+    final rawActive = json['activeProfileId'];
+    if (rawActive is String) data._activeProfileId = rawActive;
+    final rawSeq = json['seq'];
+    if (rawSeq is num) data._profileSeq = rawSeq.toInt();
     final rawProfiles = json['profiles'];
     if (rawProfiles is! Map) return data;
     for (final entry in rawProfiles.entries) {

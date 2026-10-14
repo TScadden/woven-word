@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/bible_data.dart';
+import '../data/user_data.dart';
 import '../theme/ww_theme.dart';
 import '../widgets/arc_stage.dart';
+import 'my_notes_screen.dart';
+import 'profiles_screen.dart';
 import 'reader_screen.dart';
 
 /// Home screen: the whole-Bible book/chapter list, with a compact arc
@@ -38,6 +41,11 @@ class _HomeScreenState extends State<HomeScreen> {
   String _scope = 'all';
   int? _selected;
 
+  /// The user-data store copy behind the top bar's profile chip
+  /// (board run 5). Reloaded after returning from the Profiles
+  /// screen so the chip always names the active profile.
+  UserData _userData = UserData();
+
   final _searchCtl = TextEditingController();
   final _scrollCtl = ScrollController();
 
@@ -62,6 +70,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _load() async {
     try {
       final data = await BibleData.load();
+      if (!mounted) return;
+      await _reloadUserData();
       if (!mounted) return;
       final restored = await _restoreState(data);
       if (!mounted) return;
@@ -124,6 +134,33 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       // A failed write only loses the resume point, never the session.
     }
+  }
+
+  /// Loads (or reloads) the user-data model for the profile chip.
+  /// Persistence is a convenience here: a failure leaves the
+  /// in-memory default and never blocks the home screen.
+  Future<void> _reloadUserData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final store = await UserDataStore.load(prefs);
+      if (!mounted) return;
+      setState(() => _userData = store.data);
+    } catch (_) {
+      // The chip falls back to the default profile's name.
+    }
+  }
+
+  Future<void> _openProfiles() async {
+    await Navigator.of(
+      context,
+    ).push(WwPageRoute(builder: (_) => const ProfilesScreen()));
+    _reloadUserData();
+  }
+
+  void _openMyNotes(BibleData data) {
+    Navigator.of(
+      context,
+    ).push(WwPageRoute(builder: (_) => MyNotesScreen(data: data)));
   }
 
   (int, int) get _range => _data!.scopeRange(_scope);
@@ -251,7 +288,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            _topBar(),
+            _topBar(data),
             if (data != null) _tools(data),
             if (data != null) _miniMap(data),
             Expanded(child: data != null ? _scrollArea(data) : _statusArea()),
@@ -295,7 +332,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _topBar() {
+  Widget _topBar(BibleData? data) {
+    final profileName = _userData.profileName(_userData.activeProfileId);
+    final initial = profileName.trim().isEmpty
+        ? '?'
+        : profileName.trim()[0].toUpperCase();
     return Container(
       height: WwSpace.topBarHeight,
       padding: const EdgeInsets.symmetric(horizontal: WwSpace.screenMargin),
@@ -303,15 +344,64 @@ class _HomeScreenState extends State<HomeScreen> {
         color: WwColors.nav,
         border: Border(bottom: BorderSide(color: WwColors.borderDarkSoft)),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Woven Word', style: WwType.appTitle),
-              Text('BIBLE CROSS REFERENCES', style: WwType.appSubtitle),
-            ],
+          const Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Woven Word', style: WwType.appTitle),
+                Text('BIBLE CROSS REFERENCES', style: WwType.appSubtitle),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'My notes',
+            onPressed: data == null ? null : () => _openMyNotes(data),
+            icon: const Icon(Icons.notes, color: WwColors.navInk),
+            constraints: const BoxConstraints(
+              minWidth: WwSpace.minTarget,
+              minHeight: WwSpace.minTarget,
+            ),
+          ),
+          // Profile chip: a 40dp gold avatar (the active profile's
+          // initial, onGold — the ratified pair) centered in a 48dp
+          // target; the hit area is the target, never the glyph
+          // (audit §7, Petra run-5 ruling).
+          Semantics(
+            button: true,
+            label: 'Profiles',
+            child: Material(
+              color: Colors.transparent,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: _openProfiles,
+                child: SizedBox(
+                  width: WwSpace.minTarget,
+                  height: WwSpace.minTarget,
+                  child: Center(
+                    child: Tooltip(
+                      message: 'Profiles',
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        alignment: Alignment.center,
+                        decoration: const BoxDecoration(
+                          color: WwColors.goldBright,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          initial,
+                          style: WwType.avatarLetterOnGold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),

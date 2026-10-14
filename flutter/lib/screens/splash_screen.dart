@@ -22,8 +22,8 @@ class SplashGate extends StatefulWidget {
 
 class _SplashGateState extends State<SplashGate> with TickerProviderStateMixin {
   static const _word = 'Woven Word';
-  static const _perChar = Duration(milliseconds: 85);
-  static const _holdFor = Duration(milliseconds: 380);
+  static const _perChar = Duration(milliseconds: 150);
+  static const _holdFor = Duration(milliseconds: 420);
 
   _Phase _phase = _Phase.typing;
   int _typed = 0;
@@ -36,7 +36,7 @@ class _SplashGateState extends State<SplashGate> with TickerProviderStateMixin {
   )..repeat(reverse: true);
   late final AnimationController _dust = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1050),
+    duration: const Duration(milliseconds: 1900),
   );
   late final AnimationController _slide = AnimationController(
     vsync: this,
@@ -118,28 +118,36 @@ class _SplashGateState extends State<SplashGate> with TickerProviderStateMixin {
     if (bytes == null) return const [];
     final rng = Random(7);
     final out = <_DustParticle>[];
-    const step = 3;
+    const step = 2;
     final w = size.width.ceil();
     final left = origin.dx.floor(), top = origin.dy.floor();
     final right = (origin.dx + painter.width).ceil();
     final bottom = (origin.dy + painter.height).ceil();
+    // Ash palette (Infinity War disintegration): warm grays and tans,
+    // a whisper of gold. Fine particles, never bright confetti colors.
+    const ash = [
+      Color(0xFFC9BBA3),
+      Color(0xFFA79B84),
+      Color(0xFF8A8071),
+      Color(0xFF6E675C),
+      Color(0xFFD8C49A),
+    ];
     for (var y = top; y < bottom; y += step) {
       for (var x = left; x < right; x += step) {
         final alpha = bytes.getUint8((y * w + x) * 4 + 3);
         if (alpha < 90) continue;
-        final roll = rng.nextDouble();
+        // Erosion sweep: the form crumbles left to right, with noise,
+        // so particles release in a front instead of all at once.
+        final sweep = (x - left) / max(1, right - left);
         out.add(
           _DustParticle(
             origin: Offset(x.toDouble(), y.toDouble()),
-            angle: -pi / 2 + (rng.nextDouble() - 0.5) * 1.9,
-            speed: 26 + rng.nextDouble() * 95,
-            delay: rng.nextDouble() * 0.35,
-            size: 1.4 + rng.nextDouble() * 1.9,
-            color: roll < 0.45
-                ? WwColors.goldBright
-                : roll < 0.8
-                ? WwColors.navInk
-                : WwColors.gold,
+            angle: -0.42 + (rng.nextDouble() - 0.5) * 0.85,
+            speed: 34 + rng.nextDouble() * 105,
+            delay: (sweep * 0.5 + rng.nextDouble() * 0.22).clamp(0.0, 0.72),
+            size: 0.8 + rng.nextDouble() * 1.3,
+            wobble: rng.nextDouble() * pi * 2,
+            color: ash[rng.nextInt(ash.length)],
           ),
         );
       }
@@ -186,7 +194,9 @@ class _SplashGateState extends State<SplashGate> with TickerProviderStateMixin {
           child: AnimatedBuilder(
             animation: _dust,
             builder: (context, _) {
-              final fade = inDust ? (1 - _dust.value * 6).clamp(0.0, 1.0) : 1.0;
+              final fade = inDust
+                  ? (1 - _dust.value * 1.35).clamp(0.0, 1.0)
+                  : 1.0;
               return Opacity(
                 opacity: fade,
                 child: Row(
@@ -251,6 +261,7 @@ class _DustParticle {
     required this.speed,
     required this.delay,
     required this.size,
+    required this.wobble,
     required this.color,
   });
 
@@ -259,6 +270,7 @@ class _DustParticle {
   final double speed;
   final double delay;
   final double size;
+  final double wobble;
   final Color color;
 }
 
@@ -274,13 +286,16 @@ class _DustPainter extends CustomPainter {
     for (final p in particles) {
       final lt = ((progress - p.delay) / (1 - p.delay)).clamp(0.0, 1.0);
       if (lt <= 0 || lt >= 1) continue;
-      final ease = 1 - (1 - lt) * (1 - lt);
-      final dx = cos(p.angle) * p.speed * ease;
-      final dy = sin(p.angle) * p.speed * ease - 20 * ease;
-      paint.color = p.color.withValues(alpha: 1 - lt);
+      // Ash behaviour: slow lift-off, then the wind carries it —
+      // ease-in drift, mostly sideways and up, with a soft wobble.
+      final carried = lt * lt * (3 - 2 * lt);
+      final dx = cos(p.angle) * p.speed * carried;
+      final dy = sin(p.angle) * p.speed * carried - 14 * carried;
+      final wob = sin(p.wobble + lt * 5.5) * 3.2 * lt;
+      paint.color = p.color.withValues(alpha: 0.88 * (1 - lt));
       canvas.drawCircle(
-        p.origin + Offset(dx, dy),
-        p.size * (1 - 0.55 * lt),
+        p.origin + Offset(dx, dy + wob),
+        p.size * (1 - 0.35 * lt),
         paint,
       );
     }

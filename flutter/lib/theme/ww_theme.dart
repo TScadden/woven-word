@@ -119,6 +119,86 @@ class WwType {
     fontWeight: FontWeight.w700,
     color: WwColors.onGold,
   );
+
+  // Reader roles (paper surfaces). Palette law (board run 2 audit):
+  // small gold text on paper is goldTextOnPaper only; gold is fills,
+  // borders, and large text; goldBright is dark surfaces only — the
+  // one reader exception is the goldBright FILL under an onGold
+  // label (9.71:1, computed), never goldBright text on paper.
+  static const readerTitle = TextStyle(
+    fontFamily: serif,
+    fontFamilyFallback: serifFallback,
+    fontSize: 24,
+    fontWeight: FontWeight.bold,
+    color: WwColors.ink,
+  );
+  static const readerBody = TextStyle(
+    fontFamily: serif,
+    fontFamilyFallback: serifFallback,
+    fontSize: 18,
+    height: 1.55,
+    color: WwColors.ink,
+  );
+
+  /// The verse's own text at the top of the connections sheet:
+  /// readerBody at 15sp.
+  static const readerSheetVerse = TextStyle(
+    fontFamily: serif,
+    fontFamilyFallback: serifFallback,
+    fontSize: 15,
+    height: 1.55,
+    color: WwColors.ink,
+  );
+
+  /// Connections sheet header: the verse reference.
+  static const sheetRefTitle = TextStyle(
+    fontFamily: serif,
+    fontFamilyFallback: serifFallback,
+    fontSize: 17,
+    fontWeight: FontWeight.w600,
+    color: WwColors.ink,
+  );
+  static const refLabel = TextStyle(
+    fontSize: 13,
+    fontWeight: FontWeight.w600,
+    color: WwColors.goldTextOnPaper,
+  );
+  static const snippet = TextStyle(
+    fontSize: 13,
+    height: 1.4,
+    color: WwColors.ink,
+  );
+  static const captionOnPaper = TextStyle(
+    fontSize: 12,
+    color: WwColors.mutedOnPaper,
+  );
+  static const bodyOnPaper = TextStyle(fontSize: 13, color: WwColors.ink);
+  static const paperButtonLabel = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    color: WwColors.ink,
+  );
+  static const translationUnselected = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    color: WwColors.goldTextOnPaper,
+  );
+  static const verseNumber = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w700,
+    color: WwColors.goldTextOnPaper,
+  );
+
+  /// Verse number on the selected-verse highlight (hlGold at 45%
+  /// over paper = #FBF0C6): goldTextOnPaper fails there at 4.11:1,
+  /// under the 4.5 normal-text floor; ink passes at 15.23:1 (Petra
+  /// contrast finding, board run 3). Any goldTextOnPaper element
+  /// that can sit on the selected background uses this role instead.
+  static const verseNumberSelected = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w700,
+    color: WwColors.ink,
+  );
 }
 
 /// Spacing: 8dp grid, 16dp screen margin (audit §5).

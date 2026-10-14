@@ -47,6 +47,14 @@ class BibleData {
   /// chapter -> {partnerChapter: verseRefCount}, both directions.
   final Map<int, Map<int, int>> chapterPartners;
 
+  /// Verse-level connections, keyed by the clamped global verse
+  /// position (see [versePos]) of the source verse. Every ref row is
+  /// stored both ways, mirroring the web v1 `refsByVerse` map: values
+  /// are [targetChapter, targetVerse, votes] with the target verse
+  /// clamped to its chapter's length. Entries are NOT deduped here —
+  /// [verseConnections] dedupes on read.
+  final Map<int, List<List<int>>> verseConnsByPos;
+
   const BibleData._(
     this.books,
     this.chapters,
@@ -56,7 +64,45 @@ class BibleData {
     this.totalVerses,
     this.chapterConnCount,
     this.chapterPartners,
+    this.verseConnsByPos,
   );
+
+  /// The connections of one verse: deduped by target (keeping the
+  /// highest votes for a target), sorted by votes descending, then
+  /// target chapter ascending, then target verse ascending — the web
+  /// v1 connections order, with a deterministic tie-break.
+  List<List<int>> verseConnections(int ch, int v) {
+    if (ch < 0 || ch >= chapters.length) return const [];
+    final raw = verseConnsByPos[versePos(ch, v)];
+    if (raw == null || raw.isEmpty) return const [];
+    // Target verse is < 1000 for every real chapter, so this key is
+    // unique per (targetChapter, targetVerse) pair.
+    final bestVotes = <int, int>{};
+    for (final entry in raw) {
+      final key = entry[0] * 1000 + entry[1];
+      final prev = bestVotes[key];
+      if (prev == null || entry[2] > prev) bestVotes[key] = entry[2];
+    }
+    final deduped = [
+      for (final e in bestVotes.entries) [e.key ~/ 1000, e.key % 1000, e.value],
+    ];
+    deduped.sort((a, b) {
+      final byVotes = b[2].compareTo(a[2]);
+      if (byVotes != 0) return byVotes;
+      final byChapter = a[0].compareTo(b[0]);
+      if (byChapter != 0) return byChapter;
+      return a[1].compareTo(b[1]);
+    });
+    return deduped;
+  }
+
+  /// True when the verse has at least one recorded connection (the
+  /// reader's gold dot).
+  bool verseHasConnections(int ch, int v) {
+    if (ch < 0 || ch >= chapters.length) return false;
+    final raw = verseConnsByPos[versePos(ch, v)];
+    return raw != null && raw.isNotEmpty;
+  }
 
   /// The chapter's partners sorted by connection count descending,
   /// ties broken by chapter index ascending.
@@ -173,6 +219,25 @@ class BibleData {
       link(tc, fc);
     }
 
+    // Verse-level connections, bidirectional like the web v1
+    // refsByVerse: each row is stored from its source verse and from
+    // its target verse. Verses clamp to their chapter's length on
+    // both sides (versePos clamps the key; the stored target verse
+    // clamps explicitly).
+    final verseConns = <int, List<List<int>>>{};
+    void linkVerse(int fromCh, int fromV, int toCh, int toV, int votes) {
+      if (fromCh < 0 || fromCh >= chapters.length) return;
+      if (toCh < 0 || toCh >= chapters.length) return;
+      final key = chapterStart[fromCh] + fromV.clamp(1, chapters[fromCh].v) - 1;
+      final targetV = toV.clamp(1, chapters[toCh].v);
+      verseConns.putIfAbsent(key, () => []).add([toCh, targetV, votes]);
+    }
+
+    for (final r in refs) {
+      linkVerse(r[0], r[1], r[2], r[3], r[4]);
+      linkVerse(r[2], r[3], r[0], r[1], r[4]);
+    }
+
     return BibleData._(
       books,
       chapters,
@@ -182,6 +247,7 @@ class BibleData {
       acc,
       connCount,
       partners,
+      verseConns,
     );
   }
 

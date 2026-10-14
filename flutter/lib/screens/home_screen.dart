@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/bible_data.dart';
 import '../theme/ww_theme.dart';
 import '../widgets/arc_stage.dart';
+import 'reader_screen.dart';
 
 /// Home screen: the whole-Bible book/chapter list, with a compact arc
 /// mini-map pinned at the top showing the current selection.
@@ -180,10 +181,12 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_scrollCtl.hasClients) _scrollCtl.jumpTo(0);
   }
 
-  /// Selects [ch]. Search and partner-chip jumps widen the scope to
-  /// 'all' when the chapter falls outside it, and scroll the list to
-  /// the chapter's book. A tap on a visible chapter chip passes
-  /// [scroll] false — the chapter is already on screen.
+  /// Selects [ch]. Search jumps widen the scope to 'all' when the
+  /// chapter falls outside it, and scroll the list to the chapter's
+  /// book. A tap on a visible chapter chip passes [scroll] false —
+  /// the chapter is already on screen. (Partner chips no longer
+  /// select: they open the reader at the partner chapter, founder
+  /// direction Oct 13, 2026.)
   void _select(int ch, {required bool scroll}) {
     final data = _data;
     if (data == null) return;
@@ -485,6 +488,26 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).push(
+                WwPageRoute(
+                  builder: (_) => ReaderScreen(data: data, chapter: ch),
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: WwColors.goldBright,
+                foregroundColor: WwColors.onGold,
+                minimumSize: const Size.fromHeight(WwSpace.minTarget),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(WwRadius.chip),
+                ),
+              ),
+              child: Text(
+                'Read ${data.chapterName(ch)}',
+                style: WwType.goldButtonLabel,
+              ),
+            ),
+            const SizedBox(height: 12),
             const Text('Connected chapters', style: WwType.captionOnDark),
             const SizedBox(height: 8),
             Wrap(
@@ -507,7 +530,13 @@ class _HomeScreenState extends State<HomeScreen> {
       borderRadius: BorderRadius.circular(WwRadius.chip),
       child: InkWell(
         borderRadius: BorderRadius.circular(WwRadius.chip),
-        onTap: () => _select(entry.key, scroll: true),
+        // Founder direction (Oct 13, 2026): tapping a partner opens
+        // it to read, rather than re-selecting it in the list.
+        onTap: () => Navigator.of(context).push(
+          WwPageRoute(
+            builder: (_) => ReaderScreen(data: data, chapter: entry.key),
+          ),
+        ),
         child: Container(
           constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

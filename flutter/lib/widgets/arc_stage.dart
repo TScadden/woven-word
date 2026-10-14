@@ -61,6 +61,25 @@ Color _arcColor(double distFrac, double alpha) {
   return HSLColor.fromAHSL(alpha, hue, 0.85, 0.58).toColor();
 }
 
+/// The ambient web's one color (run-8 fix round, Defect 2): the
+/// gold token, nothing else. The pre-fix ambient path ran the
+/// hue sweep above through additive (BlendMode.plus) blending, so
+/// thousands of overlapping arcs summed past 1.0 near the axis and
+/// clipped to a white/yellow dome with green/cyan/purple fringes —
+/// measured on the pre-fix tree at the Home parameters: arc-region
+/// mean luminance 0.593, 59.6% of pixels above 0.9 luminance.
+/// The sweep survives ONLY in the selection painter (shipped
+/// behavior, single-pass normal blending, no accumulation).
+///
+/// The ambient path now draws this token with srcOver compositing.
+/// srcOver accumulation of one color over black is bounded by
+/// construction: stacked arcs converge toward the token and can
+/// never exceed it, so the brightest possible ambient pixel is
+/// WwColors.gold (#B8860B, WCAG relative luminance 0.273) at full
+/// accumulation — dim gold, never white — and sparse regions sit
+/// far below it at the per-arc alpha (see renderArcImage).
+const ambientArcToken = WwColors.gold;
+
 void _drawArc(Canvas canvas, ArcGeometry g, int pa, int pb, Paint paint) {
   final x1 = g.xForPos(pa), x2 = g.xForPos(pb);
   if ((x2 - x1).abs() < 0.8) return;
@@ -95,10 +114,12 @@ Future<ui.Image> renderArcImage({
 
   final arcPaint = Paint()
     ..style = PaintingStyle.stroke
-    ..strokeWidth = 1.6
-    ..blendMode = BlendMode.plus;
+    ..strokeWidth = 1.6;
   if (includeArcs) {
     if (faint) {
+      // Faint mode is untouched by the fix round: additive, one
+      // flat dim color, drawn under the live selection overlay.
+      arcPaint.blendMode = BlendMode.plus;
       arcPaint.color = const Color.fromRGBO(70, 66, 60, 0.05);
       for (final arc in data.chapterArcs) {
         final a = arc[0], b = arc[1];
@@ -112,16 +133,20 @@ Future<ui.Image> renderArcImage({
         );
       }
     } else {
+      // Ambient web (run-8 fix round, Defect 2): srcOver, the one
+      // gold token, per-arc alpha unchanged in form — min(0.30,
+      // 0.028 + log10(n) * 0.055) * density, so at the Home band
+      // (0.30) alpha runs 0.0084–0.09 and at full density at most
+      // 0.30. Stacking deepens toward the token (bounded, see
+      // ambientArcToken) instead of summing to white.
+      arcPaint.blendMode = BlendMode.srcOver;
       for (final arc in data.chapterArcs) {
         final a = arc[0], b = arc[1], n = arc[2];
         if (a < lo || a > hi || b < lo || b > hi) continue;
         final pa = data.versePos(a, (data.chapters[a].v / 2).ceil());
         final pb = data.versePos(b, (data.chapters[b].v / 2).ceil());
         final alpha = math.min(0.30, 0.028 + log10(n) * 0.055) * density;
-        arcPaint.color = _arcColor(
-          (pb - pa).abs() / (g.hiV - g.loV),
-          alpha,
-        );
+        arcPaint.color = ambientArcToken.withValues(alpha: alpha);
         _drawArc(canvas, g, pa, pb, arcPaint);
       }
     }

@@ -212,9 +212,16 @@ class ConferenceData {
   /// Every conference present in the dataset as
   /// `(year, session, talkCount)`, newest first (year descending,
   /// October before April within a year).
+  ///
+  /// The count is talks with at least one Bible citation (spec
+  /// §4.1) — exactly the talks that are keys of [_byTalk], the
+  /// deduped-edge index built by [parse]. A conference whose
+  /// talks cite no Bible verses has a zero count and is absent
+  /// from the result (spec §4.2).
   List<(int, String, int)> conferences() {
     final counts = <(int, String), int>{};
     for (final talk in _talks) {
+      if (!(_byTalk[talk.id]?.isNotEmpty ?? false)) continue;
       final key = (talk.year, talk.session);
       counts[key] = (counts[key] ?? 0) + 1;
     }
@@ -229,19 +236,15 @@ class ConferenceData {
     return result;
   }
 
-  /// The talks of one conference, sorted by title ascending
-  /// (id ascending on duplicate titles, so the order is total).
+  /// The talks of one conference, in the dataset's own session
+  /// order (spec §4.3 + §3.3): filtering [_talks] preserves the
+  /// bundled (id) order, and no re-sort is applied — a conference
+  /// is a program, and its talks keep the order they were given.
   List<ConferenceTalk> talksInConference(int year, String session) {
-    final found = [
+    return [
       for (final t in _talks)
         if (t.year == year && t.session == session) t,
     ];
-    found.sort((a, b) {
-      final byTitle = a.title.compareTo(b.title);
-      if (byTitle != 0) return byTitle;
-      return a.id.compareTo(b.id);
-    });
-    return found;
   }
 
   /// Pure parse of the bundled shape (testable without the asset

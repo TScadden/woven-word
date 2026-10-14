@@ -190,12 +190,57 @@ void main() {
       ]);
     });
 
-    test('talksInConference sorts by title', () {
+    test('talksInConference keeps dataset order, not title order', () {
+      // The fixture's bundled order for 2024 October is Wada (1),
+      // Freeman (3), Bednar (7) — title order would be
+      // [7, 3, 1] (Be Still / Live Up / The Words), so this
+      // assertion fails if any alphabetical re-sort returns.
       final ids = data.talksInConference(2024, 'O').map((t) => t.id).toList();
-      expect(ids, [7, 3, 1]); // Be Still / Live Up / The Words
+      expect(ids, [1, 3, 7]);
       expect(data.talksInConference(2024, 'A').map((t) => t.id), [2, 5]);
       expect(data.talksInConference(2000, 'A'), isEmpty);
     });
+
+    test('conferences counts only talks with a Bible citation', () {
+      final mixed = ConferenceData.parse(
+        '{"v":1,"talks":['
+        '{"i":0,"t":"Citing Talk","s":"S","y":2025,"e":"O","n":"N",'
+        '"u":null,"c":0},'
+        '{"i":1,"t":"Non Citing Talk","s":"S","y":2025,"e":"O","n":"N",'
+        '"u":null,"c":0},'
+        '{"i":2,"t":"Another Citing Talk","s":"S","y":2024,"e":"A",'
+        '"n":"N","u":null,"c":0}'
+        '],"edges":[[0,0,1],[2,0,1]]}',
+        chapterVerseCounts: [for (final c in canon.chapters) c.v],
+        chapters: canon.chapters,
+      );
+      // 2025 October holds two talks in the dataset but only one
+      // cites the Bible, so its count is 1, not 2 (spec §4.1).
+      expect(mixed.conferences(), [(2025, 'O', 1), (2024, 'A', 1)]);
+    });
+
+    test(
+      'a conference with zero citing talks is absent from conferences()',
+      () {
+        final zero = ConferenceData.parse(
+          '{"v":1,"talks":['
+          '{"i":0,"t":"Citing Talk","s":"S","y":2025,"e":"O","n":"N",'
+          '"u":null,"c":0},'
+          '{"i":1,"t":"Out Of Canon Only","s":"S","y":2020,"e":"A",'
+          '"n":"N","u":null,"c":0},'
+          '{"i":2,"t":"No Citations","s":"S","y":2019,"e":"O","n":"N",'
+          '"u":null,"c":0}'
+          '],"edges":[[0,0,1],[1,0,99]]}',
+          chapterVerseCounts: [for (final c in canon.chapters) c.v],
+          chapters: canon.chapters,
+        );
+        // Talk 1's only edge is out of canon (verse 99 of a
+        // 10-verse chapter, dropped at parse) and talk 2 has no
+        // edges at all, so neither 2020 April nor 2019 October
+        // appears (spec §4.2).
+        expect(zero.conferences(), [(2025, 'O', 1)]);
+      },
+    );
 
     test('coverage stats span the dataset', () {
       expect(data.talkCount, 8);

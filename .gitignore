@@ -3,3 +3,7 @@ web_raw.json
 web_vpl.zip
 eng-web_vpl.txt
 .DS_Store
+
+# Signing keystores must never be committed (see ~/workspace/woven-word-signing/)
+*.jks
+*.keystore

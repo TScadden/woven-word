@@ -29,11 +29,31 @@ android {
         versionName = flutter.versionName
     }
 
+    // CI vs local signing: CI decodes a fixed release keystore from a
+    // GitHub secret and points WOVEN_KEYSTORE_PATH at it (see
+    // .github/workflows/flutter.yml), so every CI build shares one
+    // signature and can install over the previous build. Local dev sets
+    // none of these env vars, so release falls back to debug signing.
+    val wovenKeystorePath = System.getenv("WOVEN_KEYSTORE_PATH")
+
+    signingConfigs {
+        if (wovenKeystorePath != null) {
+            create("release") {
+                storeFile = java.io.File(wovenKeystorePath)
+                storePassword = System.getenv("WOVEN_STORE_PASSWORD")
+                keyAlias = System.getenv("WOVEN_KEY_ALIAS")
+                keyPassword = System.getenv("WOVEN_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (wovenKeystorePath != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

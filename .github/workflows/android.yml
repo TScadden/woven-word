@@ -12,13 +12,24 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '17' }
-      - uses: gradle/actions/setup-gradle@v4
-        with: { gradle-version: '8.9' }
-      - name: Build debug APK
-        working-directory: android
-        run: gradle assembleDebug --stacktrace
-      - name: Stage APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk woven-word.apk
+      - name: Build APK with SDK tools (no Gradle, no external dependencies)
+        run: |
+          set -e
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$SDK/build-tools/34.0.0"
+          JAR="$SDK/platforms/android-34/android.jar"
+          mkdir -p android/app/src/main/assets/www classes dexout
+          cp index.html app.js data.json kjv.json web.json manifest.json icon-512.png android/app/src/main/assets/www/
+          keytool -genkeypair -keystore debug.keystore -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null
+          "$BT/aapt2" link -o unsigned.apk -I "$JAR" --manifest android/app/src/main/AndroidManifest.xml -A android/app/src/main/assets --min-sdk-version 24 --target-sdk-version 34 --version-code 1 --version-name 1.0
+          javac --release 8 -cp "$JAR" -d classes android/app/src/main/java/com/tscadden/wovenword/MainActivity.java
+          "$BT/d8" --lib "$JAR" --output dexout $(find classes -name '*.class')
+          cp unsigned.apk woven-word.apk
+          zip -j woven-word.apk dexout/classes.dex >/dev/null
+          "$BT/zipalign" -f 4 woven-word.apk woven-word-aligned.apk
+          "$BT/apksigner" sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out woven-word.apk woven-word-aligned.apk
+          "$BT/apksigner" verify woven-word.apk
+          ls -la woven-word.apk
       - uses: actions/upload-artifact@v4
         with: { name: woven-word-apk, path: woven-word.apk }
       - name: Publish to apk-latest release

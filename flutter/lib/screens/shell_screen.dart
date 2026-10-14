@@ -8,6 +8,7 @@ import '../data/screen_state.dart';
 import '../data/scripture_text.dart';
 import '../data/user_data.dart';
 import '../theme/ww_theme.dart';
+import 'conference_screens.dart';
 import 'home_tab.dart';
 import 'library_tab.dart';
 import 'my_notes_screen.dart';
@@ -48,7 +49,8 @@ class _RootRoute<T> extends PageRouteBuilder<T> {
       );
 }
 
-class ShellController extends ChangeNotifier implements ReaderHost {
+class ShellController extends ChangeNotifier
+    implements ReaderHost, ConferenceHost, ConferenceLayerState {
   ShellController({
     required this.dataLoader,
     required this.textsLoader,
@@ -77,12 +79,14 @@ class ShellController extends ChangeNotifier implements ReaderHost {
   /// Whether the conference layer is enabled. Persisted under
   /// [conferenceLayerKey]; read in [_loadPrefs], written by
   /// [setConferenceEnabled].
+  @override
   bool conferenceEnabled = false;
 
   /// The loaded conference dataset, or null while the layer is
   /// disabled, still loading, or after a failed load (a failed
   /// asset load degrades to "the layer shows nothing" — the shell
   /// never crashes over it).
+  @override
   ConferenceData? conferenceData;
 
   Future<void>? _conferenceLoad;
@@ -410,6 +414,106 @@ class ShellController extends ChangeNotifier implements ReaderHost {
     );
   }
 
+  // ------------------------------------------ conference browse (§4)
+
+  /// The Library root tile's tap: push the conferences list.
+  void openConferenceBrowse() {
+    _pushConferencesList();
+  }
+
+  /// A sheet talk row's tap (§3.3): the sheet has already popped;
+  /// switch to the Library tab and land on the talk's talk view
+  /// with the conferences list and that conference's talks list
+  /// placed beneath it, so Back unwinds the browse coherently
+  /// (§4.5). The reader's place in the Screens tab is untouched.
+  @override
+  void openConferenceTalk(ConferenceTalk talk) {
+    switchTab('library');
+    final nav = libraryNavKey.currentState;
+    if (nav == null) return;
+    nav.popUntil((route) => route.isFirst);
+    _pushConferencesList();
+    _pushTalksList(talk.year, talk.session);
+    _pushTalkView(talk);
+  }
+
+  void _pushConferencesList() {
+    final cd = conferenceData;
+    final nav = libraryNavKey.currentState;
+    if (cd == null || nav == null) return;
+    nav.push(
+      WwPageRoute(
+        settings: const RouteSettings(name: 'ww-conferences'),
+        builder: (_) => ConferenceListScreen(
+          conferenceData: cd,
+          onBack: () => nav.pop(),
+          onBreadcrumbRoot: () => nav.popUntil((r) => r.isFirst),
+          onOpenConference: _pushTalksList,
+        ),
+      ),
+    );
+  }
+
+  void _pushTalksList(int year, String session) {
+    final cd = conferenceData;
+    final nav = libraryNavKey.currentState;
+    if (cd == null || nav == null) return;
+    nav.push(
+      WwPageRoute(
+        settings: const RouteSettings(name: 'ww-conference-talks'),
+        builder: (_) => ConferenceTalksScreen(
+          conferenceData: cd,
+          year: year,
+          session: session,
+          onBack: () => nav.pop(),
+          onBreadcrumb: (value) {
+            if (value == 'library') {
+              nav.popUntil((r) => r.isFirst);
+            } else if (value == 'conferences') {
+              nav.popUntil(
+                (r) => r.isFirst || r.settings.name == 'ww-conferences',
+              );
+            }
+          },
+          onOpenTalk: _pushTalkView,
+        ),
+      ),
+    );
+  }
+
+  void _pushTalkView(ConferenceTalk talk) {
+    final d = data;
+    final cd = conferenceData;
+    final nav = libraryNavKey.currentState;
+    if (d == null || cd == null || nav == null) return;
+    nav.push(
+      WwPageRoute(
+        settings: const RouteSettings(name: 'ww-conference-talk'),
+        builder: (_) => TalkViewScreen(
+          data: d,
+          conferenceData: cd,
+          talk: talk,
+          textsLoader: textsLoader,
+          onBack: () => nav.pop(),
+          onBreadcrumb: (value) {
+            if (value == 'library') {
+              nav.popUntil((r) => r.isFirst);
+            } else if (value == 'conferences') {
+              nav.popUntil(
+                (r) => r.isFirst || r.settings.name == 'ww-conferences',
+              );
+            } else if (value == 'talks') {
+              nav.popUntil(
+                (r) => r.isFirst || r.settings.name == 'ww-conference-talks',
+              );
+            }
+          },
+          onOpenVerse: (ch, verse) => openChapter(ch, verse: verse),
+        ),
+      ),
+    );
+  }
+
   void _pushChapterGrid(int bookIndex) {
     final d = data;
     final nav = libraryNavKey.currentState;
@@ -672,6 +776,8 @@ class _WwShellState extends State<WwShell> {
       dataFuture: _ctl.dataFuture,
       onTestament: _ctl._pushBookGrid,
       onOpenChapter: (ch) => _ctl.openChapter(ch),
+      conferenceState: _ctl,
+      onOpenConference: _ctl.openConferenceBrowse,
     );
   }
 

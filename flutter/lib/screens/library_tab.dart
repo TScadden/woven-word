@@ -3,7 +3,20 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../data/bible_data.dart';
+import '../data/conference_data.dart';
 import '../theme/ww_theme.dart';
+
+/// A live view of the General Conference layer's state for the
+/// Library root (board run 8, spec §4.1). The shell's controller
+/// implements this; the root reads through the getters at render
+/// time (and rebuilds on the controller's notifications when it
+/// is also a [Listenable]), so a toggle flipped on another tab
+/// agrees with the next Library render (§1.1) without the root
+/// holding a stale snapshot.
+abstract class ConferenceLayerState {
+  bool get conferenceEnabled;
+  ConferenceData? get conferenceData;
+}
 
 /// Text measurements derived from the framework's own text layout
 /// (lesson 21): a `Text` renders its style MERGED with the ambient
@@ -142,11 +155,20 @@ class LibraryRoot extends StatefulWidget {
     required this.dataFuture,
     required this.onTestament,
     required this.onOpenChapter,
+    this.conferenceState,
+    this.onOpenConference,
   });
 
   final Future<BibleData> dataFuture;
   final void Function(bool isOT) onTestament;
   final void Function(int ch) onOpenChapter;
+
+  /// The conference layer's live state (board run 8, §4.1). Null
+  /// (standalone pumps) renders the shipped root, exactly.
+  final ConferenceLayerState? conferenceState;
+
+  /// Pushes the conference browse (§4.2). The shell provides it.
+  final VoidCallback? onOpenConference;
 
   @override
   State<LibraryRoot> createState() => LibraryRootState();
@@ -246,6 +268,7 @@ class LibraryRootState extends State<LibraryRoot> {
                       _testamentTile(data, isOT: true),
                       const SizedBox(height: 8),
                       _testamentTile(data, isOT: false),
+                      _conferenceTileSlot(),
                       const SizedBox(height: 24),
                     ],
                   );
@@ -307,6 +330,98 @@ class LibraryRootState extends State<LibraryRoot> {
           ),
         ),
       ),
+    );
+  }
+
+  /// The conference tile's slot (board run 8, §4.1): when the
+  /// layer is OFF — or no state was supplied — this is nothing
+  /// at all (absent, not disabled, §1.1). When the state object
+  /// is listenable (the shell controller is), the slot rebuilds
+  /// on its notifications so a toggle flipped elsewhere agrees
+  /// with this render.
+  Widget _conferenceTileSlot() {
+    final state = widget.conferenceState;
+    if (state == null) return const SizedBox.shrink();
+    if (state is Listenable) {
+      return ListenableBuilder(
+        listenable: state as Listenable,
+        builder: (context, _) => _conferenceTile(state),
+      );
+    }
+    return _conferenceTile(state);
+  }
+
+  /// The General Conference tile (§4.1): built exactly like a
+  /// testament tile, below the New Testament tile with the
+  /// shipped 8dp inter-tile gap, its caption counted from the
+  /// loaded dataset at render time — conferences present in the
+  /// browse and the talks it lists (talks with at least one
+  /// Bible citation, per [ConferenceData.conferences]). No
+  /// coverage or year-range copy appears here (Flag F-6).
+  /// Dataset-empty rule: with zero conferences the tile does
+  /// not render — a tile into an empty browse is a dead control.
+  Widget _conferenceTile(ConferenceLayerState state) {
+    if (!state.conferenceEnabled) return const SizedBox.shrink();
+    final conferenceData = state.conferenceData;
+    if (conferenceData == null) return const SizedBox.shrink();
+    final conferences = conferenceData.conferences();
+    if (conferences.isEmpty) return const SizedBox.shrink();
+    final n = conferences.length;
+    var m = 0;
+    for (final conference in conferences) {
+      m += conference.$3;
+    }
+    final caption =
+        '${n == 1 ? '1 conference' : '$n conferences'} · '
+        '${m == 1 ? '1 talk' : '$m talks'}';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 8),
+        Semantics(
+          container: true,
+          button: true,
+          label:
+              'General Conference, '
+              '${n == 1 ? '1 conference' : '$n conferences'}, '
+              '${m == 1 ? '1 talk' : '$m talks'}',
+          child: Material(
+            color: WwColors.surface,
+            borderRadius: BorderRadius.circular(WwRadius.row),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(WwRadius.row),
+              onTap: widget.onOpenConference,
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 72),
+                padding: const EdgeInsets.all(WwSpace.screenMargin),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'General Conference',
+                            style: WwType.selectionTitle,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(caption, style: WwType.captionOnDark),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.chevron_right,
+                      size: 20,
+                      color: WwColors.mutedOnDark,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

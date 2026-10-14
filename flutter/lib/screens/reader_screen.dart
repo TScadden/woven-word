@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/bible_data.dart';
+import '../data/conference_data.dart';
 import '../data/screen_state.dart';
 import '../data/scripture_text.dart';
 import '../data/user_data.dart';
@@ -37,6 +38,24 @@ abstract class ReaderHost {
 
   /// Breadcrumb action: switch to Library and focus its search.
   void jumpToReference();
+}
+
+/// Conference layer services the reader's connections sheet
+/// needs (board run 8, spec §3). The shell implements this
+/// alongside [ReaderHost]; a host that does not (the standalone
+/// reader test harness) leaves the sheet exactly as shipped —
+/// the layer OFF contract (§1.1) by construction.
+abstract class ConferenceHost {
+  /// Whether the General Conference layer is enabled.
+  bool get conferenceEnabled;
+
+  /// The loaded conference dataset, or null while unloaded.
+  ConferenceData? get conferenceData;
+
+  /// Opens [talk]'s talk view on the Library stack, with the
+  /// conferences list and that conference's talks list beneath
+  /// it, so Back unwinds the browse (§3.3, §4.5).
+  void openConferenceTalk(ConferenceTalk talk);
 }
 
 /// The reader: one screen's view of one book, PAGED (board run 7

@@ -173,3 +173,39 @@ rounds Rusty ran before the studio was founded).
     its background, tint, radius, field decoration, and
     reduced-motion behavior explicitly — each guarded default fails
     silently in code review and only surfaces on the phone.
+
+## Scroll model & data safety (board run 6)
+21. **Measure text the way the renderer does — ambient style
+    included.** Run 6's offset model derives every text height from
+    `TextPainter`, but raw role styles ran **404dp short** over the
+    full Bible list: a `Text` renders its style MERGED with the
+    ambient `DefaultTextStyle` (the theme's bodyMedium carries a
+    1.43 height multiplier), so the model must merge the same
+    ambient style, read live from a context INSIDE the Scaffold
+    (the scrollable's `storageContext` — the State's own context
+    sits above the Scaffold and measures wrong). No multiplier is
+    hard-coded; the merge is derivation, and it is ground-truthed
+    three ways: predicted extent vs `maxScrollExtent`, rendered
+    landings vs section keys, and an `ensureVisible` cross-check
+    (all ≤0.5dp, extents exact, at two widths and text scale 1.3).
+    An offset model that agrees only with itself proves nothing.
+22. **Validation is a gate in front of the parser, never the parser
+    itself.** The defensive loader (lessons #18/#19) silently drops
+    malformed entries — correct for loading your own data, wrong
+    as an import check. Import runs a pure shape validator with
+    named error classes (not JSON / not a backup document / newer
+    version / parses to nothing) that never writes; an empty parse
+    is rejected, not installed behind a counts dialog; the confirm
+    dialog's counts come from the exact model instance to be
+    installed, counted by one method on both sides. "A malformed
+    file changes nothing" is structural, and tested as such (the
+    stored string stays byte-untouched across 8 malformed inputs).
+23. **A binding spec that isn't in the brief doesn't exist — stop,
+    and persist specs as files.** Run 6's first build dispatch
+    referenced Petra's spec "appended verbatim" but the text never
+    arrived; Maren stopped with zero files changed rather than
+    inventing copy and coverage, and the run only proceeded once
+    the spec was both embedded in the brief AND saved to
+    `team/memory/decisions/` (the run-6 spec record). A coordinator
+    who improvises across a missing attachment manufactures
+    unverifiable work; a specialist who stops costs one dispatch.

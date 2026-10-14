@@ -360,6 +360,14 @@ class ReaderScreenState extends State<ReaderScreen>
       _pending = _PendingLanding(_LandingKind.restore, _currentChapter);
       _pendingAttempts = 0;
     });
+    // Same-book rebind: the pager's scroll position survives a
+    // controller swap, so set it directly to the bound page.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_pageCtl.hasClients) return;
+      final book = widget.data.books[_bookIndex];
+      final idx = _currentChapter - book.start;
+      if (_pageCtl.page?.round() != idx) _pageCtl.jumpToPage(idx);
+    });
     _attemptPending();
   }
 
@@ -422,6 +430,10 @@ class ReaderScreenState extends State<ReaderScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _performPending();
     });
+    // A same-chapter landing changes no widget state, so nothing
+    // else schedules the frame this callback waits for — schedule
+    // it, or the landing starves until an unrelated invalidation.
+    WidgetsBinding.instance.scheduleFrame();
   }
 
   Future<void> _performPending() async {
@@ -471,9 +483,35 @@ class ReaderScreenState extends State<ReaderScreen>
     _pending = null;
     final isRestore = pending.kind == _LandingKind.restore;
     if (!isRestore) _screen.anchorVerse = verse;
-    // Already fully visible? Land in place (§5.8): flash without
-    // scrolling for verse landings; restores never scroll a
-    // visible anchor.
+    if (!isRestore && pending.kind == _LandingKind.verse) {
+      // §5.8's shipped order: SELECT, then the ensureVisible
+      // landing. The selection must render first because the
+      // selected construction changes the verse block's height
+      // (its 2dp outline adds to the block's effective padding):
+      // a scroll computed against the unselected geometry would
+      // land a half-border off the alignment the mechanism itself
+      // would then correct (R-T4). Flash first; scroll next frame,
+      // against the final rendered geometry.
+      _flash(target, verse);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _finishVerseLanding(target, verse, isRestore: false);
+      });
+      return;
+    }
+    await _finishVerseLanding(target, verse, isRestore: true);
+  }
+
+  /// The in-page half of a verse landing (§4.2 step 2): if the
+  /// verse is already fully visible on its page, land in place;
+  /// otherwise `Scrollable.ensureVisible` at the shipped
+  /// alignment 0.5 (duration zero for restores / reduced motion).
+  Future<void> _finishVerseLanding(
+    int target,
+    int verse, {
+    required bool isRestore,
+  }) async {
+    final ctx = verseContext(target, verse);
+    if (ctx == null || !mounted) return;
     final verseBox = ctx.findRenderObject() as RenderBox?;
     final scrollable = Scrollable.of(ctx);
     final vpBox = scrollable.context.findRenderObject() as RenderBox?;
@@ -503,9 +541,6 @@ class ReaderScreenState extends State<ReaderScreen>
         curve: WwMotion.curve,
       );
       if (!mounted) return;
-    }
-    if (!isRestore && pending.kind == _LandingKind.verse) {
-      _flash(target, verse);
     }
     if (!isRestore) widget.host.persistScreens();
   }
@@ -1058,6 +1093,11 @@ class ReaderScreenState extends State<ReaderScreen>
   Widget _pager(BibleData data, ScriptureText texts) {
     final book = data.books[_bookIndex];
     return PageView.builder(
+      // §4.7: a page-set swap REBUILDS the pager for the new book —
+      // the per-book key gives the rebuilt pager a fresh scroll
+      // position at the new controller's initial page, instead of
+      // migrating the outgoing book's position into it.
+      key: ValueKey('pager-$_bookIndex'),
       controller: _pageCtl,
       itemCount: book.chapters,
       onPageChanged: _onPageChanged,

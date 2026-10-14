@@ -2,7 +2,9 @@
 <!-- Launch splash screen: black stage (WwColors.stage, #000000) with the
      app icon centered. No white anywhere in the launch path. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="#000000" />
+    <item>
+        <color android:color="#000000" />
+    </item>
 
     <item>
         <bitmap

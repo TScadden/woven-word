@@ -89,7 +89,11 @@ function drawWeb(){
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
   const [lo, hi] = scopeRange();
   const loV = chapterStart[lo], hiV = chapterStart[hi] + DATA.chapters[hi].v;
-  const padX = 8, axisY = H - 108, maxArcH = axisY - 64;
+  const padX = 8, axisY = H - 108, maxArcH = Math.min(axisY - 64, W * 0.85);
+  // Density scaling: in a narrow (portrait) canvas, thousands of verses
+  // share each pixel column, so full-strength additive arcs saturate to
+  // a white dome. Scale alpha by canvas width so the web stays wispy.
+  const density = Math.min(1, Math.max(0.22, W / 1500));
   const X = pos => padX + (pos - loV) / (hiV - loV) * (W - padX * 2);
   // chapter bars
   for (let ch = lo; ch <= hi; ch++){
@@ -101,7 +105,7 @@ function drawWeb(){
     ctx.fillRect(x0, axisY, Math.max(1, x1 - x0 - 0.4), h);
   }
   // book labels
-  ctx.fillStyle = '#7d7763'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#9a947f'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
   for (const b of DATA.books){
     const mid = b.start + (b.chapters - 1) / 2;
     if (mid < lo || mid > hi) continue;
@@ -129,7 +133,7 @@ function drawWeb(){
       if (a < lo || a > hi || b < lo || b > hi) continue;
       const pa = versePos(a, Math.ceil(DATA.chapters[a].v / 2));
       const pb = versePos(b, Math.ceil(DATA.chapters[b].v / 2));
-      drawArc(pa, pb, arcColor(Math.abs(pb - pa), Math.min(0.30, 0.028 + Math.log10(n) * 0.055)));
+      drawArc(pa, pb, arcColor(Math.abs(pb - pa), Math.min(0.30, 0.028 + Math.log10(n) * 0.055) * density));
     }
   } else {
     for (const [a, b] of DATA.chapterArcs){
@@ -144,7 +148,7 @@ function drawWeb(){
       const pa = versePos(selChapter, Math.ceil(DATA.chapters[selChapter].v / 2));
       const pb = versePos(p, Math.ceil(DATA.chapters[p].v / 2));
       for (let i = 0; i < Math.min(3, 1 + Math.floor(Math.log10(n))); i++)
-        drawArc(pa, pb, arcColor(Math.abs(pb - pa), 0.5));
+        drawArc(pa, pb, arcColor(Math.abs(pb - pa), 0.5 * Math.max(density, 0.45)));
     }
   }
   ctx.globalCompositeOperation = 'source-over';
@@ -152,6 +156,9 @@ function drawWeb(){
 }
 canvas.addEventListener('click', e => {
   if (!viewCache) return;
+  if ($('#sheet').classList.contains('open')){
+    $('#sheet').classList.remove('open'); selChapter = null; drawWeb(); return;
+  }
   const r = canvas.getBoundingClientRect();
   const x = e.clientX - r.left;
   const frac = (x - 8) / (viewCache.W - 16);
@@ -173,11 +180,12 @@ function selectChapter(ch){
   sheet.innerHTML = `
     <h2>${chName(ch)}</h2>
     <div class="sub">${DATA.chapters[ch].v} verses · ${out + into} connections woven from this chapter</div>
-    ${top.map(([p, n]) => `<div class="conn" data-ch="${p}"><b>${chName(p)}</b><span>${n} connection${n === 1 ? '' : 's'}</span></div>`).join('')}
-    <div class="row">
+    <div class="row" style="margin:0 0 10px">
       <button id="sheetClose">Close</button>
       <button class="primary" id="sheetRead">Read ${chName(ch)}</button>
-    </div>`;
+    </div>
+    ${top.map(([p, n]) => `<div class="conn" data-ch="${p}"><b>${chName(p)}</b><span>${n} connection${n === 1 ? '' : 's'}</span></div>`).join('')}
+    `;
   sheet.classList.add('open');
   sheet.querySelectorAll('.conn').forEach(el => el.onclick = () => selectChapter(+el.dataset.ch));
   $('#sheetClose').onclick = () => { sheet.classList.remove('open'); selChapter = null; drawWeb(); };

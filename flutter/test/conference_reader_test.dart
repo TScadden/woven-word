@@ -354,7 +354,7 @@ void main() {
 
   testWidgets('reduced motion: the ON sheet presents its '
       'conference section with animations disabled', (tester) async {
-    final host = await pumpConfReader(
+    await pumpConfReader(
       tester,
       enabled: true,
       disableAnimations: true,

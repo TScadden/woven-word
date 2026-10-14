@@ -39,7 +39,7 @@ android {
     signingConfigs {
         if (wovenKeystorePath != null) {
             create("release") {
-                storeFile = java.io.File(wovenKeystorePath)
+                storeFile = file(wovenKeystorePath)
                 storePassword = System.getenv("WOVEN_STORE_PASSWORD")
                 keyAlias = System.getenv("WOVEN_KEY_ALIAS")
                 keyPassword = System.getenv("WOVEN_KEY_PASSWORD")

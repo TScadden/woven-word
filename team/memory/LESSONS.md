@@ -209,3 +209,33 @@ rounds Rusty ran before the studio was founded).
     `team/memory/decisions/` (the run-6 spec record). A coordinator
     who improvises across a missing attachment manufactures
     unverifiable work; a specialist who stops costs one dispatch.
+
+## Reader flow, semantics & landings (board run 7)
+24. **Verify the mechanism from the primary artifact before
+    building on an interpretation.** Run 7's flow brief read the
+    founder's walkthrough video as a continuous reader and overruled
+    the research desk's documented finding (Gospel Library =
+    swipe-to-change-chapter, paged). The founder corrected it
+    himself mid-build ("I was swiping between sides"); the cost was
+    a parked stream reader (35f62de), a full spec amendment, and a
+    rebuild. A researched, sourced finding outranks a brief's
+    impression of a video — where they conflict, surface the
+    conflict before building, not after.
+25. **A tooltip IS the semantics label, and a semantics
+    requirement is only real with a semantics-tree assertion.**
+    The Screens close button's tooltip satisfied the visual spec
+    while assistive tech heard no place name. The fix needed
+    `Semantics(container: true)` because a plain wrapper's label
+    merges upward into the row's node — mutation-verified both
+    ways at Petra's re-gate: removing the container, or the place
+    from the label, each fails the `find.bySemanticsLabel`
+    assertion (§13 item 22 / §6.3, adee5aa).
+26. **Land on final geometry: state first, measure second.**
+    The selected verse block grows 4.0dp when selected (the border
+    contributes through padding), so a landing that scrolls before
+    applying selection lands 2dp off the mechanism's own
+    alignment — §5.8's order (select/flash, then `ensureVisible`
+    against final geometry) is the rule. Companion: a landing path
+    that mutates no state (a same-chapter jump) schedules no
+    frame — it must `scheduleFrame()` itself or it hangs until an
+    unrelated invalidation (7b277bc).

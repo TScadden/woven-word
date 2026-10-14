@@ -37,6 +37,7 @@ dependencies:
   shared_preferences: ^2.5.6
   share_plus: ^13.3.1
   file_picker: ^13.1.0
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
@@ -62,6 +63,7 @@ flutter:
 
   assets:
     - assets/app_icon.png
+    - assets/conference.json
     - assets/data.json
     - assets/kjv.json
     - assets/web.json

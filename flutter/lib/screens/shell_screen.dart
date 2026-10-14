@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/bible_data.dart';
+import '../data/conference_data.dart';
 import '../data/screen_state.dart';
 import '../data/scripture_text.dart';
 import '../data/user_data.dart';
@@ -21,10 +22,16 @@ import 'screens_tab.dart';
 /// procedure every entry point uses, and the §6 screen set's
 /// persistence write points.
 class WwShell extends StatefulWidget {
-  const WwShell({super.key, this.dataLoader, this.textsLoader});
+  const WwShell({
+    super.key,
+    this.dataLoader,
+    this.textsLoader,
+    this.conferenceLoader,
+  });
 
   final Future<BibleData> Function()? dataLoader;
   final Future<ScriptureText> Function()? textsLoader;
+  final Future<ConferenceData> Function(BibleData canon)? conferenceLoader;
 
   @override
   State<WwShell> createState() => _WwShellState();
@@ -42,7 +49,11 @@ class _RootRoute<T> extends PageRouteBuilder<T> {
 }
 
 class ShellController extends ChangeNotifier implements ReaderHost {
-  ShellController({required this.dataLoader, required this.textsLoader}) {
+  ShellController({
+    required this.dataLoader,
+    required this.textsLoader,
+    this.conferenceLoader,
+  }) {
     dataFuture = (dataLoader ?? BibleData.load)();
     dataFuture.then((d) {
       data = d;
@@ -53,8 +64,67 @@ class ShellController extends ChangeNotifier implements ReaderHost {
 
   final Future<BibleData> Function()? dataLoader;
   final Future<ScriptureText> Function()? textsLoader;
+  final Future<ConferenceData> Function(BibleData canon)? conferenceLoader;
   late final Future<BibleData> dataFuture;
   BibleData? data;
+
+  // ------------------------------------------------- conference layer
+
+  /// The persisted toggle for the General Conference connections
+  /// layer (board run 8): off by default, opt-in only.
+  static const String conferenceLayerKey = 'ww_conference_layer';
+
+  /// Whether the conference layer is enabled. Persisted under
+  /// [conferenceLayerKey]; read in [_loadPrefs], written by
+  /// [setConferenceEnabled].
+  bool conferenceEnabled = false;
+
+  /// The loaded conference dataset, or null while the layer is
+  /// disabled, still loading, or after a failed load (a failed
+  /// asset load degrades to "the layer shows nothing" — the shell
+  /// never crashes over it).
+  ConferenceData? conferenceData;
+
+  Future<void>? _conferenceLoad;
+
+  /// Loads the conference dataset on first use. Concurrent calls
+  /// share one in-flight load; a call after a failure retries.
+  /// Never throws.
+  Future<void> ensureConferenceLoaded() async {
+    if (conferenceData != null) return;
+    final inFlight = _conferenceLoad;
+    if (inFlight != null) return inFlight;
+    final d = data;
+    if (d == null) return;
+    final load = () async {
+      try {
+        conferenceData = await (conferenceLoader ?? ConferenceData.load)(d);
+      } catch (e) {
+        debugPrint('Woven Word: conference layer failed to load: $e');
+        conferenceData = null;
+      } finally {
+        _conferenceLoad = null;
+      }
+      notifyListeners();
+    }();
+    _conferenceLoad = load;
+    return load;
+  }
+
+  /// Sets and persists the conference layer toggle. Enabling the
+  /// layer kicks off its lazy load; disabling never unloads data
+  /// already in memory.
+  Future<void> setConferenceEnabled(bool enabled) async {
+    if (conferenceEnabled != enabled) {
+      conferenceEnabled = enabled;
+      notifyListeners();
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(conferenceLayerKey, enabled);
+    } catch (_) {}
+    if (enabled) await ensureConferenceLoaded();
+  }
 
   String tab = 'home';
   List<ReadingScreen> screens = [];
@@ -100,6 +170,12 @@ class ShellController extends ChangeNotifier implements ReaderHost {
       screens = parsed;
       activeScreenIndex = active;
       _nextScreenId = screens.length + 1;
+      // Conference layer (board run 8): the toggle restores from
+      // prefs, and the dataset loads on startup only when the
+      // persisted choice is already on — otherwise it stays
+      // unloaded until the layer is first enabled.
+      conferenceEnabled = prefs.getBool(conferenceLayerKey) ?? false;
+      if (conferenceEnabled) ensureConferenceLoaded();
     } catch (_) {
       if (screens.isEmpty) {
         final ch = selection ?? 0;
@@ -485,6 +561,7 @@ class _WwShellState extends State<WwShell> {
     _ctl = ShellController(
       dataLoader: widget.dataLoader,
       textsLoader: widget.textsLoader,
+      conferenceLoader: widget.conferenceLoader,
     );
   }
 

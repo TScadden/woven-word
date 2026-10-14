@@ -278,7 +278,7 @@ class _SplashGateState extends State<SplashGate> with TickerProviderStateMixin {
             y,
             stripStarts[stripCount - 1],
             forceFine: true,
-            colorOverride: _DustScene.goldTint,
+            colorOverride: WwColors.ashGold,
           ),
         );
       }
@@ -372,8 +372,13 @@ class _SplashGateState extends State<SplashGate> with TickerProviderStateMixin {
       color:
           colorOverride ??
           (roll < 0.06
-              ? _DustScene.goldTint // rare muted-gold tint only
-              : _DustScene.ash[rng.nextInt(_DustScene.ash.length)]),
+              ? WwColors.ashGold // rare muted-gold tint only
+              : const [
+                  WwColors.ashLight,
+                  WwColors.ash,
+                  WwColors.ashMid,
+                  WwColors.ashDeep,
+                ][rng.nextInt(4)]),
     );
   }
 
@@ -483,18 +488,6 @@ class _DustScene {
   });
 
   static const stripCount = 48;
-
-  /// Ash palette (Infinity War disintegration): warm grays and tans.
-  /// No bright or saturated colour ever becomes a particle.
-  static const ash = [
-    Color(0xFFC9BBA3),
-    Color(0xFFA79B84),
-    Color(0xFF8A8071),
-    Color(0xFF6E675C),
-  ];
-
-  /// The single muted gold permitted as a rare tint.
-  static const goldTint = Color(0xFFD8C49A);
 
   /// The wordmark, rasterized at 2× (drawn at 0.5 scale by the painter).
   final ui.Picture picture;

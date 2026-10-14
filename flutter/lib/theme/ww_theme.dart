@@ -39,6 +39,15 @@ class WwColors {
   static const barB = Color(0xFF8F8A7A);
   static const bookLabel = Color(0xFF7D7763); // 4.68:1 on black
 
+  // Splash ash — dust dissolve palette (Infinity War disintegration:
+  // warm grays and tans; no bright or saturated colour ever becomes a
+  // particle). ashGold is the single muted gold permitted as a rare tint.
+  static const ashLight = Color(0xFFC9BBA3);
+  static const ash = Color(0xFFA79B84);
+  static const ashMid = Color(0xFF8A8071);
+  static const ashDeep = Color(0xFF6E675C);
+  static const ashGold = Color(0xFFD8C49A);
+
   // Highlight palette (reader, screen d).
   static const hlGold = Color(0xFFF7E08A);
   static const hlGreen = Color(0xFFCFE6B8);

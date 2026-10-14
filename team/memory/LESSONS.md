@@ -130,3 +130,18 @@ rounds Rusty ran before the studio was founded).
     sit on passes — selected, flashed, and reduced-motion-persistent
     states included. Petra caught it by computing the selected chain;
     the fix made the dot conditional exactly like the number.
+17. **Highlights multiply the surface matrix; selection needs a
+    non-color cue.** Board run 4 (highlights + notes): adding 5 tints
+    turned the verse block's audit into 12 surfaces (resting × paper +
+    5 tints, selected × the same 6) — the verse number's gold was
+    legal on exactly 1 (rest/paper 4.62) and the dot's `gold` on
+    exactly 1 (3.20), failing everywhere else (2.23–4.11). Roles
+    became rules, not states: number and dot use their gold only when
+    NOT selected AND NOT highlighted, ink / `goldTextOnPaper`
+    otherwise; the note indicator took one color on all 12 surfaces
+    (goldTextOnPaper, min 3.22). And a selected state built by
+    blending a tint over the background is chromatically invisible
+    on that same tint (hlGold over hlGold, delta 1.000) — selection
+    is carried by a 2dp outline in an audited color, checked against
+    BOTH adjacencies (the composite inside, 3.35–4.11; the paper
+    outside, 4.62). Compute the matrix before assigning any role.

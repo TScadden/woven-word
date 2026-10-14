@@ -9,7 +9,6 @@ import '../data/screen_state.dart';
 import '../data/scripture_text.dart';
 import '../data/user_data.dart';
 import '../theme/ww_theme.dart';
-import '../widgets/reader_layout.dart';
 
 /// Host services the reader needs from the shell (Petra spec §7.4,
 /// §4.4, §6.4). The shell implements this; the reader never reaches
@@ -26,7 +25,8 @@ abstract class ReaderHost {
   /// A §6.4 write point has been reached: persist the screen set.
   void persistScreens();
 
-  /// A §2.2 selection event (explicit action / history landing).
+  /// A §2.2 selection event (explicit action / history landing /
+  /// page turn).
   void recordSelection(int ch);
 
   /// Breadcrumb: leave to browse at the Library root.
@@ -39,9 +39,14 @@ abstract class ReaderHost {
   void jumpToReference();
 }
 
-/// The reader: one screen's view of one book — every chapter of the
-/// book in one continuous vertical stream (board run 7 part B, §4),
-/// with the verse-action toolbar anchored at the tapped verse (§5).
+/// The reader: one screen's view of one book, PAGED (board run 7
+/// part B, §4 as amended by Amendment A) — one whole chapter per
+/// page, a horizontal swipe (or the §4.6 label-block buttons) turns
+/// the page, in-page scroll stops at the chapter's end. There is no
+/// continuous cross-chapter stream and no offset model anywhere in
+/// this reader: verse landing is the shipped `GlobalKey` +
+/// `Scrollable.ensureVisible` mechanism at chapter scope (§4.2),
+/// on pages that build all their verses eagerly (§4.1).
 class ReaderScreen extends StatefulWidget {
   const ReaderScreen({
     super.key,
@@ -87,22 +92,21 @@ class ReaderScreenState extends State<ReaderScreen>
   UserData _userData = UserData();
   String _profileId = UserData.defaultProfileId;
 
-  final _scrollCtl = ScrollController();
+  // Pager state (§4.1/§4.3). [_currentChapter] is the single
+  // current-chapter truth: the pager's reported current page,
+  // mapped to its chapter. In-page scroll never writes it.
+  late PageController _pageCtl;
+  int _bookIndex = 0;
+  int _currentChapter = 0;
+  final _pageControllers = <int, ScrollController>{};
   final _verseKeys = <String, GlobalKey>{};
   Timer? _flashTimer;
 
-  ReaderStreamLayout? _layout;
-  String? _layoutKey;
   _PendingLanding? _pending;
+  int _pendingAttempts = 0;
 
-  int _chapterAtTop = 0;
   int? _selectedChapter;
   int? _selectedVerse;
-
-  // Chrome hide-on-scroll (§4.5).
-  bool _chromeVisible = true;
-  double _lastOffset = 0;
-  double _cumDown = 0;
 
   // Verse toolbar (§5).
   int? _toolbarChapter;
@@ -110,21 +114,42 @@ class ReaderScreenState extends State<ReaderScreen>
   bool _toolbarEditing = false;
   final _noteCtl = TextEditingController();
   final _cardKey = GlobalKey();
+  final _stackKey = GlobalKey();
   Offset? _toolbarPos;
   double _toolbarRaiseOffset = 0;
+  bool _toolbarScrollGuard = false;
   bool _sheetOpen = false;
 
-  int get chapterAtTop => _chapterAtTop;
+  // ---- test seams (§12): rendered-state accessors, no model ----
+  int get currentChapter => _currentChapter;
   ReadingScreen get screen => _screen;
+  PageController get pageController => _pageCtl;
+  ScrollController? scrollControllerFor(int ch) => _pageControllers[ch];
+  BuildContext? verseContext(int ch, int v) =>
+      _verseKeys['$ch:$v']?.currentContext;
+
+  /// R-T4's cross-check: repeat the §4.2 landing call on the
+  /// already-landed verse and report how far the page moved.
+  Future<void> debugEnsureVisible(int ch, int v) {
+    final ctx = verseContext(ch, v);
+    if (ctx == null) return Future.value();
+    return Scrollable.ensureVisible(
+      ctx,
+      alignment: 0.5,
+      duration: Duration.zero,
+    );
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _screen = widget.screen;
-    _chapterAtTop = _screen.globalChapter;
-    _pending = const _PendingLanding(_LandingKind.restore, 0);
-    _scrollCtl.addListener(_onScroll);
+    _bookIndex =
+        _screen.bookIndex ?? widget.data.chapters[_screen.globalChapter].b;
+    _currentChapter = _screen.globalChapter;
+    _pageCtl = _newPageController(_currentChapter);
+    _pending = _PendingLanding(_LandingKind.restore, _currentChapter);
     _load();
   }
 
@@ -134,8 +159,10 @@ class ReaderScreenState extends State<ReaderScreen>
     // §6.4 write point: the reader's dispose.
     widget.host.persistScreens();
     _flashTimer?.cancel();
-    _scrollCtl.removeListener(_onScroll);
-    _scrollCtl.dispose();
+    _pageCtl.dispose();
+    for (final ctl in _pageControllers.values) {
+      ctl.dispose();
+    }
     _noteCtl.dispose();
     super.dispose();
   }
@@ -144,6 +171,38 @@ class ReaderScreenState extends State<ReaderScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // §6.4 write point: app pause.
     if (state == AppLifecycleState.paused) widget.host.persistScreens();
+  }
+
+  PageController _newPageController(int globalChapter) {
+    final book = widget.data.books[widget.data.chapters[globalChapter].b];
+    return PageController(
+      initialPage: globalChapter - book.start,
+    );
+  }
+
+  void _replacePageController(int globalChapter) {
+    final old = _pageCtl;
+    _pageCtl = _newPageController(globalChapter);
+    WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+  }
+
+  ScrollController _controllerFor(int ch) {
+    return _pageControllers.putIfAbsent(ch, () {
+      final ctl = ScrollController();
+      ctl.addListener(() {
+        // Toolbar dismisses on in-page travel beyond 8dp (§5.1).
+        // Programmatic docked scrolls (§5.1 rule 3) are guarded.
+        if (_toolbarScrollGuard) return;
+        if (_toolbarVerse != null &&
+            _toolbarChapter == ch &&
+            ch == _currentChapter &&
+            ctl.hasClients &&
+            (ctl.offset - _toolbarRaiseOffset).abs() > 8) {
+          _dismissToolbar();
+        }
+      });
+      return ctl;
+    });
   }
 
   // ---------------------------------------------------------------- load
@@ -172,6 +231,7 @@ class ReaderScreenState extends State<ReaderScreen>
         _texts = texts;
         _error = null;
       });
+      _attemptPending();
     } catch (e) {
       if (mounted) setState(() => _error = e);
     }
@@ -187,18 +247,37 @@ class ReaderScreenState extends State<ReaderScreen>
 
   Future<void> _setTranslation(WwTranslation t) async {
     if (t == _translation) return;
-    // §4.7: rebuild the model and re-anchor at the current
-    // chapter's heading in the new model; offsets never transfer.
-    setState(() {
-      _translation = t;
-      _layout = null;
-      _layoutKey = null;
-      _pending = _PendingLanding(_LandingKind.chapter, _chapterAtTop);
-    });
+    // §4.7 (paged): the pager stays on the same chapter page; the
+    // page's content rebuilds from the new translation. A held
+    // verse anchor re-anchors in-page (§4.2, no flash); otherwise
+    // the page returns to its top. No offset transfers anywhere.
+    setState(() => _translation = t);
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(ReaderScreen.translationKey, t.label);
     } catch (_) {}
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final anchor = _screen.anchorVerse;
+      final ctx = anchor != null
+          ? verseContext(_currentChapter, anchor)
+          : null;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.5,
+          duration: WwMotion.reduced(context)
+              ? Duration.zero
+              : WwMotion.push,
+          curve: WwMotion.curve,
+        );
+      } else {
+        final ctl = _pageControllers[_currentChapter];
+        if (ctl != null && ctl.hasClients && ctl.offset != 0) {
+          ctl.jumpTo(0);
+        }
+      }
+    });
   }
 
   // ------------------------------------------------------------ user data
@@ -243,23 +322,19 @@ class ReaderScreenState extends State<ReaderScreen>
   // ------------------------------------------------------------- landings
 
   /// Shell entry point: land on (chapter, verse?) in the current
-  /// screen, flashing a verse target (§5.8). Replaces any restore.
+  /// screen (§7.4 step 4, §5.8). Verse targets flash; chapter
+  /// targets land on the page top.
   void landTo(int ch, int? verse) {
-    // Stream swap (§4.7): a landing for a different book must not
-    // be performed against the outgoing book's layout — invalidate
-    // it so the LayoutBuilder rebuilds the target book's model and
-    // re-attempts the pending landing against it.
-    final book = widget.data.chapters[ch].b;
-    if (_layout != null && _layout!.bookIndex != book) {
-      setState(() {
-        _layout = null;
-        _layoutKey = null;
-        _verseKeys.clear();
-      });
-    }
     _pending = verse != null
         ? _PendingLanding(_LandingKind.verse, ch, verse)
         : _PendingLanding(_LandingKind.chapter, ch);
+    _pendingAttempts = 0;
+    final book = widget.data.chapters[ch].b;
+    if (book != _bookIndex) {
+      _swapToBook(book, ch);
+    } else if (ch != _currentChapter) {
+      _setPageDirect(ch);
+    }
     _attemptPending();
   }
 
@@ -270,29 +345,80 @@ class ReaderScreenState extends State<ReaderScreen>
     _flashTimer?.cancel();
     setState(() {
       _screen = screen;
-      _chapterAtTop = screen.globalChapter;
+      _bookIndex =
+          screen.bookIndex ?? widget.data.chapters[screen.globalChapter].b;
+      _currentChapter = screen.globalChapter;
       _selectedChapter = null;
       _selectedVerse = null;
       _toolbarChapter = null;
       _toolbarVerse = null;
+      _toolbarEditing = false;
       _toolbarPos = null;
       _verseKeys.clear();
-      _layout = null;
-      _layoutKey = null;
-      _pending = const _PendingLanding(_LandingKind.restore, 0);
-      _chromeVisible = true;
-      _cumDown = 0;
+      _disposePageControllersDeferred();
+      _replacePageController(_currentChapter);
+      _pending = _PendingLanding(_LandingKind.restore, _currentChapter);
+      _pendingAttempts = 0;
     });
     _attemptPending();
   }
 
-  String _geometrySig(double width, TextScaler scaler) =>
-      '${width.toStringAsFixed(1)}|${scaler.scale(1.0)}|${_translation.label}';
+  /// Page scroll controllers are still attached to the outgoing
+  /// pages during a setState; dispose them after the frame that
+  /// unmounts those pages.
+  void _disposePageControllersDeferred() {
+    final stale = _pageControllers.values.toList();
+    _pageControllers.clear();
+    if (stale.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final ctl in stale) {
+        ctl.dispose();
+      }
+    });
+  }
+
+  /// Page-set swap (§4.7): the pager is rebuilt for the new book
+  /// with the target chapter as its initial page. No turn across
+  /// the seam ever happens.
+  void _swapToBook(int book, int ch) {
+    setState(() {
+      _bookIndex = book;
+      _screen.bookIndex = book;
+      _currentChapter = ch;
+      _screen.globalChapter = ch;
+      _selectedChapter = null;
+      _selectedVerse = null;
+      _toolbarChapter = null;
+      _toolbarVerse = null;
+      _toolbarEditing = false;
+      _toolbarPos = null;
+      _verseKeys.clear();
+      _disposePageControllersDeferred();
+      _replacePageController(ch);
+    });
+  }
+
+  /// Commanded arrival on a page of the same book (§4.2 step 1):
+  /// the pager is set directly to the target page — it never
+  /// animates or flips through intermediate chapters.
+  void _setPageDirect(int ch) {
+    setState(() {
+      _currentChapter = ch;
+      _screen.globalChapter = ch;
+    });
+    final book = widget.data.books[_bookIndex];
+    final idx = ch - book.start;
+    if (_pageCtl.hasClients) {
+      _pageCtl.jumpToPage(idx);
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _pageCtl.hasClients) _pageCtl.jumpToPage(idx);
+      });
+    }
+  }
 
   void _attemptPending() {
-    final layout = _layout;
-    if (layout == null || _texts == null || !mounted) return;
-    if (_pending == null) return;
+    if (_pending == null || _texts == null || !mounted) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _performPending();
     });
@@ -300,141 +426,88 @@ class ReaderScreenState extends State<ReaderScreen>
 
   Future<void> _performPending() async {
     final pending = _pending;
-    final layout = _layout;
-    if (pending == null || layout == null || !_scrollCtl.hasClients) return;
-    // Never consume a landing against the wrong book's model: keep
-    // it pending, force the stream's layout to rebuild, and let the
-    // builder re-attempt (§4.2/§4.7).
-    final targetChapter = pending.kind == _LandingKind.restore
+    if (pending == null || _texts == null || !mounted) return;
+    final target = pending.kind == _LandingKind.restore
         ? _screen.globalChapter
         : pending.chapter;
-    if (layout.bookIndex != widget.data.chapters[targetChapter].b) {
-      setState(() {
-        _layout = null;
-        _layoutKey = null;
-      });
+    // The target page must be the current page before any in-page
+    // landing is attempted (§4.2 step 1 before step 2).
+    if (target != _currentChapter) {
+      final book = widget.data.chapters[target].b;
+      if (book != _bookIndex) {
+        _swapToBook(book, target);
+      } else {
+        _setPageDirect(target);
+      }
+      _attemptPending();
+      return;
+    }
+    final verse = pending.kind == _LandingKind.chapter
+        ? null
+        : (pending.kind == _LandingKind.verse
+              ? pending.verse
+              : _screen.anchorVerse);
+    if (verse == null) {
+      // Chapter / anchorless-restore landing: the page opens at
+      // its top — offset 0 by construction (§4.2).
+      _pending = null;
+      _screen.anchorVerse = null;
+      final ctl = _pageControllers[target];
+      if (ctl != null && ctl.hasClients && ctl.offset != 0) {
+        ctl.jumpTo(0);
+      }
+      if (pending.kind != _LandingKind.restore) {
+        widget.host.persistScreens();
+      }
+      return;
+    }
+    final ctx = verseContext(target, verse);
+    if (ctx == null) {
+      // The page builds eagerly, but its first frame may not have
+      // run yet after a swap/jump; retry on the next frame.
+      if (++_pendingAttempts <= 10) _attemptPending();
       return;
     }
     _pending = null;
-    final viewport = _scrollCtl.position.viewportDimension;
-    final reduced = WwMotion.reduced(context);
-    setState(() => _chromeVisible = true);
-
-    Future<void> scrollTo(double target, {required bool animate}) async {
-      final clamped = target
-          .clamp(
-            0.0,
-            math.max(0.0, _scrollCtl.position.maxScrollExtent),
-          )
-          .toDouble();
-      if (!animate || reduced) {
-        _scrollCtl.jumpTo(clamped);
-      } else {
-        await _scrollCtl.animateTo(
-          clamped,
-          duration: WwMotion.push,
-          curve: WwMotion.curve,
-        );
-      }
+    final isRestore = pending.kind == _LandingKind.restore;
+    if (!isRestore) _screen.anchorVerse = verse;
+    // Already fully visible? Land in place (§5.8): flash without
+    // scrolling for verse landings; restores never scroll a
+    // visible anchor.
+    final verseBox = ctx.findRenderObject() as RenderBox?;
+    final scrollable = Scrollable.of(ctx);
+    final vpBox = scrollable.context.findRenderObject() as RenderBox?;
+    var fullyVisible = false;
+    if (verseBox != null && vpBox != null) {
+      final verseRect = Rect.fromPoints(
+        verseBox.localToGlobal(Offset.zero),
+        verseBox.localToGlobal(
+          verseBox.size.bottomRight(Offset.zero),
+        ),
+      );
+      final vpRect = Rect.fromPoints(
+        vpBox.localToGlobal(Offset.zero),
+        vpBox.localToGlobal(vpBox.size.bottomRight(Offset.zero)),
+      );
+      fullyVisible =
+          verseRect.top >= vpRect.top - 0.5 &&
+          verseRect.bottom <= vpRect.bottom + 0.5;
     }
-
-    switch (pending.kind) {
-      case _LandingKind.verse:
-        final ch = pending.chapter;
-        final v = pending.verse!;
-        _screen.anchorVerse = v;
-        // Already fully visible? Flash in place, no scroll (§5.8).
-        final verseOffset = layout.offsetOfVerse(ch, v);
-        final verseHeight = _verseItemHeight(layout, ch, v);
-        final current = _scrollCtl.offset;
-        final fullyVisible =
-            verseOffset >= current - 0.5 &&
-            verseOffset + verseHeight <= current + viewport + 0.5;
-        if (!fullyVisible) {
-          await scrollTo(
-            layout.verseLandingOffset(ch, v, viewport),
-            animate: true,
-          );
-          if (!mounted) return;
-          _ensureCorrection(ch, v, alignment: 0.5);
-        }
-        _flash(ch, v);
-      case _LandingKind.chapter:
-        final ch = pending.chapter;
-        _screen.anchorVerse = null;
-        await scrollTo(layout.chapterLandingOffset(ch, viewport), animate: true);
-        if (!mounted) return;
-        _ensureCorrection(ch, null, alignment: 0.0);
-        if (mounted) {
-          setState(() {
-            _chapterAtTop = ch;
-            _selectedChapter = null;
-            _selectedVerse = null;
-          });
-        }
-      case _LandingKind.restore:
-        final sig = _screen.geometrySig;
-        final currentSig = _currentSig;
-        if (sig != null && sig == currentSig && _screen.offset > 0) {
-          final target = math.min(
-            _screen.offset,
-            _scrollCtl.position.maxScrollExtent,
-          );
-          _scrollCtl.jumpTo(target);
-        } else if (_screen.anchorVerse != null) {
-          await scrollTo(
-            layout.verseLandingOffset(
-              _screen.globalChapter,
-              _screen.anchorVerse!,
-              viewport,
-            ),
-            animate: false,
-          );
-        } else {
-          await scrollTo(
-            layout.chapterLandingOffset(_screen.globalChapter, viewport),
-            animate: false,
-          );
-        }
-        if (mounted) {
-          setState(() => _chapterAtTop = _screen.globalChapter);
-        }
+    if (!fullyVisible) {
+      await Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.5,
+        duration: (isRestore || WwMotion.reduced(context))
+            ? Duration.zero
+            : WwMotion.push,
+        curve: WwMotion.curve,
+      );
+      if (!mounted) return;
     }
-    _screen.geometrySig = _currentSig;
-    widget.host.persistScreens();
-  }
-
-  double _verseItemHeight(ReaderStreamLayout layout, int ch, int v) {
-    for (final item in layout.items) {
-      if (item.kind == ReaderItemKind.verse &&
-          item.chapter == ch &&
-          item.verse == v) {
-        return item.height;
-      }
+    if (!isRestore && pending.kind == _LandingKind.verse) {
+      _flash(target, verse);
     }
-    return WwSpace.minTarget;
-  }
-
-  String? get _currentSig {
-    final layout = _layout;
-    if (layout == null) return null;
-    return _geometrySig(
-      layout.viewportWidth,
-      layout.metrics.textScaler,
-    );
-  }
-
-  /// The single permitted correction pass (§4.2): after a model
-  /// landing, `ensureVisible` on the now-built target.
-  void _ensureCorrection(int ch, int? v, {required double alignment}) {
-    final key = v != null ? _keyForVerse(ch, v) : _keyForHeading(ch);
-    final ctx = key.currentContext;
-    if (ctx == null) return;
-    Scrollable.ensureVisible(
-      ctx,
-      duration: Duration.zero,
-      alignment: alignment,
-    );
+    if (!isRestore) widget.host.persistScreens();
   }
 
   void _flash(int ch, int v) {
@@ -442,8 +515,6 @@ class ReaderScreenState extends State<ReaderScreen>
     setState(() {
       _selectedChapter = ch;
       _selectedVerse = v;
-      _chapterAtTop = _layout?.chapterAtOffset(_scrollCtl.offset + 1) ??
-          _chapterAtTop;
     });
     if (WwMotion.reduced(context)) return;
     _flashTimer = Timer(_flashDuration, () {
@@ -458,53 +529,50 @@ class ReaderScreenState extends State<ReaderScreen>
 
   GlobalKey _keyForVerse(int ch, int v) =>
       _verseKeys.putIfAbsent('$ch:$v', () => GlobalKey());
-  GlobalKey _keyForHeading(int ch) =>
-      _verseKeys.putIfAbsent('h:$ch', () => GlobalKey());
 
-  // --------------------------------------------------------------- scroll
+  // ------------------------------------------------------------ page turns
 
-  void _onScroll() {
-    if (!mounted || !_scrollCtl.hasClients) return;
-    final offset = _scrollCtl.offset;
-    final delta = offset - _lastOffset;
-    _lastOffset = offset;
-    // Memory-only place update (§4.3/§6.4): no persistence here.
-    _screen.offset = offset;
-    if (_layout != null) _screen.geometrySig = _currentSig;
+  /// The pager's page report (§4.3): a page change is a §6.4 write
+  /// point and a §2.2 selection event; the verse anchor clears.
+  /// In-page scrolling never reaches this method.
+  void _onPageChanged(int index) {
+    final book = widget.data.books[_bookIndex];
+    final global = book.start + index;
+    if (global == _currentChapter) return;
+    _flashTimer?.cancel();
+    setState(() {
+      _currentChapter = global;
+      _selectedChapter = null;
+      _selectedVerse = null;
+      _toolbarChapter = null;
+      _toolbarVerse = null;
+      _toolbarEditing = false;
+      _toolbarPos = null;
+    });
+    _screen.globalChapter = global;
+    _screen.anchorVerse = null;
+    widget.host.recordSelection(global);
+    widget.host.persistScreens();
+  }
 
-    // Toolbar dismisses on stream travel beyond 8dp (§5.1).
-    if (_toolbarVerse != null &&
-        (offset - _toolbarRaiseOffset).abs() > 8) {
-      _dismissToolbar();
+  /// The §4.6 label-block buttons: turn the page exactly as the
+  /// swipe does — animated 300ms/easeOut, instant under reduced
+  /// motion. No history push (§7.2). The toolbar dismisses first
+  /// and the turn proceeds (§5.1).
+  void _turnTo(int globalChapter) {
+    final book = widget.data.books[_bookIndex];
+    final idx = globalChapter - book.start;
+    if (idx < 0 || idx >= book.chapters) return;
+    _dismissToolbar();
+    if (WwMotion.reduced(context)) {
+      _pageCtl.jumpToPage(idx);
+    } else {
+      _pageCtl.animateToPage(
+        idx,
+        duration: WwMotion.push,
+        curve: WwMotion.curve,
+      );
     }
-
-    var needsSetState = false;
-    final layout = _layout;
-    if (layout != null) {
-      final chapter = layout.chapterAtOffset(offset + 1);
-      if (chapter != _chapterAtTop) {
-        _chapterAtTop = chapter;
-        _screen.globalChapter = chapter;
-        needsSetState = true;
-      }
-    }
-    // Chrome hide-on-scroll (§4.5); never under reduced motion.
-    if (!WwMotion.reduced(context)) {
-      if (delta > 0) {
-        _cumDown += delta;
-        if (_cumDown > 48 && _chromeVisible) {
-          _chromeVisible = false;
-          needsSetState = true;
-        }
-      } else if (delta < 0) {
-        _cumDown = 0;
-        if (!_chromeVisible) {
-          _chromeVisible = true;
-          needsSetState = true;
-        }
-      }
-    }
-    if (needsSetState && mounted) setState(() {});
   }
 
   // -------------------------------------------------------------- toolbar
@@ -515,9 +583,9 @@ class ReaderScreenState extends State<ReaderScreen>
       _dismissToolbar();
       return;
     }
-    // A verse tap is an anchor event (§4.3), never history (§7.2).
+    // A verse tap sets the screen's verse anchor (§4.3); it is
+    // never history (§7.2) and never a selection event (§2.2).
     _screen.anchorVerse = v;
-    _screen.globalChapter = _chapterAtTop;
     setState(() {
       _selectedChapter = ch;
       _selectedVerse = v;
@@ -525,10 +593,9 @@ class ReaderScreenState extends State<ReaderScreen>
       _toolbarVerse = v;
       _toolbarEditing = false;
       _toolbarPos = null;
-      _chromeVisible = true;
-      _cumDown = 0;
     });
-    _toolbarRaiseOffset = _scrollCtl.hasClients ? _scrollCtl.offset : 0;
+    final ctl = _pageControllers[ch];
+    _toolbarRaiseOffset = (ctl != null && ctl.hasClients) ? ctl.offset : 0;
     _measureToolbar(ch, v);
   }
 
@@ -539,9 +606,9 @@ class ReaderScreenState extends State<ReaderScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _toolbarVerse != v || _toolbarChapter != ch) return;
       final cardCtx = _cardKey.currentContext;
-      final verseCtx = _keyForVerse(ch, v).currentContext;
-      final stackCtx = context;
-      if (cardCtx == null || verseCtx == null) return;
+      final verseCtx = verseContext(ch, v);
+      final stackCtx = _stackKey.currentContext;
+      if (cardCtx == null || verseCtx == null || stackCtx == null) return;
       final cardBox = cardCtx.findRenderObject() as RenderBox?;
       final verseBox = verseCtx.findRenderObject() as RenderBox?;
       final stackBox = stackCtx.findRenderObject() as RenderBox?;
@@ -559,25 +626,24 @@ class ReaderScreenState extends State<ReaderScreen>
         top = verseTop - 8 - cardH;
       } else {
         top = viewport.height - 8 - cardH;
-        // Docked: scroll the minimum so the verse's top reaches
-        // the viewport top, keeping its number and first lines
-        // above the card.
-        final layout = _layout;
-        if (layout != null && _scrollCtl.hasClients) {
-          final target = layout
-              .offsetOfVerse(ch, v)
-              .clamp(0.0, _scrollCtl.position.maxScrollExtent);
-          if (WwMotion.reduced(context)) {
-            _scrollCtl.jumpTo(target);
-          } else {
-            _scrollCtl.animateTo(
-              target,
-              duration: WwMotion.push,
-              curve: WwMotion.curve,
-            );
+        // Docked (§5.1 rule 3): scroll in-page the minimum — never
+        // more than putting the verse's top at the viewport top —
+        // so the verse's number and first lines stay above the card.
+        _toolbarScrollGuard = true;
+        Scrollable.ensureVisible(
+          verseCtx,
+          alignment: 0.0,
+          duration: WwMotion.reduced(context)
+              ? Duration.zero
+              : WwMotion.push,
+          curve: WwMotion.curve,
+        ).whenComplete(() {
+          _toolbarScrollGuard = false;
+          final ctl = _pageControllers[ch];
+          if (ctl != null && ctl.hasClients) {
+            _toolbarRaiseOffset = ctl.offset;
           }
-          _toolbarRaiseOffset = target;
-        }
+        });
       }
       if (mounted) setState(() => _toolbarPos = Offset(16, top));
     });
@@ -617,19 +683,10 @@ class ReaderScreenState extends State<ReaderScreen>
     final history = _screen.history;
     if (history.isNotEmpty) {
       final (ch, v) = history.removeLast();
-      // Stream swap first if the entry's book differs (§7.1 rung 1).
-      final book = widget.data.chapters[ch].b;
-      if (book != _screen.bookIndex) {
-        _screen.bookIndex = book;
-        _layout = null;
-        _layoutKey = null;
-        _verseKeys.clear();
-      }
-      _screen.globalChapter = ch;
-      _chapterAtTop = ch;
+      // Page-set swap first if the entry's book differs — landTo
+      // performs it (§7.1 rung 1, §4.7).
       widget.host.recordSelection(ch);
       landTo(ch, v);
-      setState(() {});
       return true;
     }
     return false;
@@ -851,11 +908,17 @@ class ReaderScreenState extends State<ReaderScreen>
       body: SafeArea(
         child: Column(
           children: [
-            _animatedTopBar(data),
+            // §4.5 as amended: the top bar is FIXED. It never hides.
+            _topBar(data, showToggle: true),
             Expanded(
               child: Stack(
+                key: _stackKey,
                 children: [
-                  _streamBody(data, texts),
+                  GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: _dismissToolbar,
+                    child: _pager(data, texts),
+                  ),
                   if (_toolbarVerse != null) _toolbarOverlay(data),
                 ],
               ),
@@ -866,30 +929,12 @@ class ReaderScreenState extends State<ReaderScreen>
     );
   }
 
-  Widget _animatedTopBar(BibleData data) {
-    return AnimatedContainer(
-      key: const ValueKey('readerTopBar'),
-      duration: WwMotion.reduced(context)
-          ? Duration.zero
-          : WwMotion.expand,
-      curve: WwMotion.curveInOut,
-      height: _chromeVisible ? 49 : 0,
-      child: ClipRect(
-        child: OverflowBox(
-          minHeight: 49,
-          maxHeight: 49,
-          alignment: Alignment.topCenter,
-          child: _topBar(data, showToggle: _texts != null),
-        ),
-      ),
-    );
-  }
-
   Widget _topBar(BibleData data, {required bool showToggle}) {
-    final bookIndex = widget.data.chapters[_chapterAtTop].b;
+    final bookIndex = widget.data.chapters[_currentChapter].b;
     final testament = bookIndex < 39 ? 'Old Testament' : 'New Testament';
     final bookName = widget.data.books[bookIndex].name;
     return Container(
+      key: const ValueKey('readerTopBar'),
       height: 49,
       padding: const EdgeInsets.symmetric(horizontal: WwSpace.screenMargin),
       decoration: const BoxDecoration(
@@ -948,7 +993,7 @@ class ReaderScreenState extends State<ReaderScreen>
                   children: [
                     Flexible(
                       child: Text(
-                        data.chapterName(_chapterAtTop),
+                        data.chapterName(_currentChapter),
                         style: WwType.readerTitle,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1008,142 +1053,109 @@ class ReaderScreenState extends State<ReaderScreen>
     );
   }
 
-  Widget _streamBody(BibleData data, ScriptureText texts) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final bookIndex = _screen.bookIndex ?? data.chapters[_chapterAtTop].b;
-        final key =
-            '$bookIndex|${_translation.label}|${constraints.maxWidth}|'
-            '${MediaQuery.textScalerOf(context)}';
-        if (_layout == null || _layoutKey != key) {
-          _layout = ReaderStreamLayout(
-            data: data,
-            texts: texts,
-            translation: _translation,
-            bookIndex: bookIndex,
-            viewportWidth: constraints.maxWidth,
-            textScaler: MediaQuery.textScalerOf(context),
-            ambientStyle: DefaultTextStyle.of(context).style,
-          );
-          _layoutKey = key;
-          _attemptPending();
-        }
-        final layout = _layout!;
-        return ListView.builder(
-          controller: _scrollCtl,
-          padding: EdgeInsets.zero,
-          itemCount: layout.items.length,
-          itemExtentBuilder: (index, _) => layout.items[index].height,
-          itemBuilder: (context, index) {
-            final item = layout.items[index];
-            return SizedBox(
-              height: item.height,
-              child: switch (item.kind) {
-                ReaderItemKind.heading => _headingBlock(data, layout, item),
-                ReaderItemKind.verse => _verseBlock(
-                  data,
-                  item.chapter,
-                  item.verse!,
-                  texts.verseText(
-                    _translation,
-                    data,
-                    item.chapter,
-                    item.verse!,
-                  ),
-                ),
-                ReaderItemKind.endOfBook => _endBlock(data, layout),
-              },
-            );
-          },
-        );
+  // ---------------------------------------------------------------- pager
+
+  Widget _pager(BibleData data, ScriptureText texts) {
+    final book = data.books[_bookIndex];
+    return PageView.builder(
+      controller: _pageCtl,
+      itemCount: book.chapters,
+      onPageChanged: _onPageChanged,
+      itemBuilder: (context, index) {
+        final global = book.start + index;
+        return _chapterPage(data, texts, global);
       },
     );
   }
 
-  Widget _headingBlock(
-    BibleData data,
-    ReaderStreamLayout layout,
-    ReaderItem item,
-  ) {
-    final ch = item.chapter;
-    final book = data.chapters[ch].b;
-    final isFirst = ch == data.books[book].start;
-    final isLast = ch == data.books[book].start + data.books[book].chapters - 1;
-    final c = data.chapters[ch];
-    return GestureDetector(
-      onTap: _dismissToolbar,
-      child: Container(
-        key: _keyForHeading(ch),
-        color: WwColors.paper,
-        padding: EdgeInsets.fromLTRB(16, isFirst ? 16 : 24, 16, 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(data.chapterName(ch), style: WwType.readerTitle),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${c.v} verses · ${data.chapterConnCount[ch]} connections',
-                    style: WwType.captionOnPaper,
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              tooltip: 'Previous chapter',
-              onPressed: isFirst
-                  ? null
-                  : () => _scrollToHeading(layout, ch - 1),
-              icon: Icon(
-                Icons.expand_less,
-                size: 20,
-                color: isFirst ? WwColors.mutedOnPaper : WwColors.ink,
-              ),
-              constraints: const BoxConstraints(
-                minWidth: WwSpace.minTarget,
-                minHeight: WwSpace.minTarget,
-              ),
-            ),
-            IconButton(
-              tooltip: 'Next chapter',
-              onPressed: isLast ? null : () => _scrollToHeading(layout, ch + 1),
-              icon: Icon(
-                Icons.expand_more,
-                size: 20,
-                color: isLast ? WwColors.mutedOnPaper : WwColors.ink,
-              ),
-              constraints: const BoxConstraints(
-                minWidth: WwSpace.minTarget,
-                minHeight: WwSpace.minTarget,
-              ),
-            ),
-          ],
-        ),
+  /// One chapter page (§4.1): the label block, then ALL of the
+  /// chapter's verses built eagerly in a Column inside an in-page
+  /// vertical scroll view whose extent ends at the chapter's end.
+  Widget _chapterPage(BibleData data, ScriptureText texts, int global) {
+    final verses = texts.chapterVerses(_translation, data, global);
+    final book = data.books[data.chapters[global].b];
+    final isLast = global == book.start + book.chapters - 1;
+    return SingleChildScrollView(
+      key: ValueKey('chapterPage-$global'),
+      controller: _controllerFor(global),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _labelBlock(data, global),
+          for (var vi = 0; vi < verses.length; vi++)
+            _verseBlock(data, global, vi + 1, verses[vi]),
+          if (isLast) _endBlock(data, global),
+          const SizedBox(height: 24),
+        ],
       ),
     );
   }
 
-  void _scrollToHeading(ReaderStreamLayout layout, int ch) {
-    // §4.6: a scroll aid — no history, no selection, no flash.
-    if (!_scrollCtl.hasClients) return;
-    setState(() => _chromeVisible = true);
-    final target = layout.chapterLandingOffset(
-      ch,
-      _scrollCtl.position.viewportDimension,
+  /// The chapter label block (§4.1): page furniture only — a plain
+  /// label, data counts, and the §4.6 prev/next page-turn pair.
+  /// No summaries, no prose, no placeholder.
+  Widget _labelBlock(BibleData data, int ch) {
+    final book = data.chapters[ch].b;
+    final isFirst = ch == data.books[book].start;
+    final isLast = ch == data.books[book].start + data.books[book].chapters - 1;
+    final c = data.chapters[ch];
+    return Container(
+      color: WwColors.paper,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(data.chapterName(ch), style: WwType.readerTitle),
+                const SizedBox(height: 4),
+                Text(
+                  '${c.v} verses · ${data.chapterConnCount[ch]} connections',
+                  style: WwType.captionOnPaper,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Previous chapter',
+            onPressed: isFirst ? null : () => _turnTo(ch - 1),
+            icon: Icon(
+              Icons.chevron_left,
+              size: 20,
+              color: isFirst ? WwColors.mutedOnPaper : WwColors.ink,
+            ),
+            constraints: const BoxConstraints(
+              minWidth: WwSpace.minTarget,
+              minHeight: WwSpace.minTarget,
+            ),
+          ),
+          IconButton(
+            tooltip: 'Next chapter',
+            onPressed: isLast ? null : () => _turnTo(ch + 1),
+            icon: Icon(
+              Icons.chevron_right,
+              size: 20,
+              color: isLast ? WwColors.mutedOnPaper : WwColors.ink,
+            ),
+            constraints: const BoxConstraints(
+              minWidth: WwSpace.minTarget,
+              minHeight: WwSpace.minTarget,
+            ),
+          ),
+        ],
+      ),
     );
-    if (WwMotion.reduced(context)) {
-      _scrollCtl.jumpTo(target);
-    } else {
-      _scrollCtl.animateTo(target, duration: WwMotion.push, curve: WwMotion.curve);
-    }
   }
 
-  Widget _endBlock(BibleData data, ReaderStreamLayout layout) {
-    final book = layout.book;
+  /// The end-of-book block (§4.1): inside the last chapter's page,
+  /// after its last verse. Forward crossing is deliberate only.
+  Widget _endBlock(BibleData data, int lastChapter) {
+    final bookIndex = data.chapters[lastChapter].b;
+    final book = data.books[bookIndex];
+    final hasNext = bookIndex + 1 < data.books.length;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
       child: Column(
@@ -1151,11 +1163,11 @@ class ReaderScreenState extends State<ReaderScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           Text('End of ${book.name}', style: WwType.sheetRefTitle),
-          if (layout.hasNextBook) ...[
+          if (hasNext) ...[
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: () {
-                final next = data.books[layout.bookIndex + 1];
+                final next = data.books[bookIndex + 1];
                 widget.host.openChapter(next.start);
               },
               style: ElevatedButton.styleFrom(
@@ -1167,7 +1179,7 @@ class ReaderScreenState extends State<ReaderScreen>
                 ),
               ),
               child: Text(
-                'Open ${data.books[layout.bookIndex + 1].name} 1',
+                'Open ${data.books[bookIndex + 1].name} 1',
                 style: WwType.goldButtonLabel,
               ),
             ),
@@ -1206,7 +1218,6 @@ class ReaderScreenState extends State<ReaderScreen>
           borderRadius: BorderRadius.circular(WwRadius.row),
           onTap: () => _onVerseTap(ch, v),
           child: Container(
-            height: double.infinity,
             constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             decoration: BoxDecoration(

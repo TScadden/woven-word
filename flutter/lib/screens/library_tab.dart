@@ -4,7 +4,34 @@ import 'package:flutter/material.dart';
 
 import '../data/bible_data.dart';
 import '../theme/ww_theme.dart';
-import '../widgets/reader_layout.dart' show TextMetrics;
+
+/// Text measurements derived from the framework's own text layout
+/// (lesson 21): a `Text` renders its style MERGED with the ambient
+/// [DefaultTextStyle], so this painter merges the same ambient
+/// style. Its one consumer is the §3.2.1 book-tile height
+/// derivation below. (It lived in the retired reader offset model
+/// until Amendment A deleted that file; the tile derivation is
+/// reader-model-independent and keeps the helper.)
+class TextMetrics {
+  TextMetrics(this.textScaler, this.ambientStyle);
+
+  final TextScaler textScaler;
+  final TextStyle ambientStyle;
+
+  TextPainter _painter(String text, TextStyle style) => TextPainter(
+    text: TextSpan(text: text, style: ambientStyle.merge(style)),
+    textDirection: TextDirection.ltr,
+    textScaler: textScaler,
+  );
+
+  double height(String text, TextStyle style, {double? maxWidth}) {
+    final painter = _painter(text, style)
+      ..layout(minWidth: 0, maxWidth: maxWidth ?? double.infinity);
+    final result = painter.height;
+    painter.dispose();
+    return result;
+  }
+}
 
 /// Library tab (board run 7 part B, §3): drill-down —
 /// root (search + testament tiles) → book tile grid → chapter

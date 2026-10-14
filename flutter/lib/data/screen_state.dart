@@ -2,11 +2,16 @@ import 'dart:convert';
 
 import 'bible_data.dart';
 
-/// Board run 7 part B, Petra spec §6: a screen is one held reading
-/// place — a bound book stream (or unbound), its chapter-at-top,
-/// an optional verse anchor, a scroll offset with the geometry
-/// signature it was measured under, and its own in-stream history
-/// (session-only, never persisted).
+/// Board run 7 part B, Petra spec §6 as amended by Amendment A:
+/// a screen is one held reading place — a bound book (or unbound),
+/// its current chapter page, an optional verse anchor, and its own
+/// in-reader history (session-only, never persisted).
+///
+/// A place is a chapter page + verse anchor ONLY. There is no
+/// scroll-offset field and no geometry signature: both existed to
+/// restore a position inside a continuous stream, and the paged
+/// reader (§4) has no stream. In-page scroll position is
+/// session-only and is never persisted (§6.4 as amended).
 ///
 /// Screens are navigation state in shared_preferences under
 /// `ww_screens_v1`. They are never part of [UserData] and never
@@ -21,8 +26,6 @@ class ReadingScreen {
     this.bookIndex,
     this.globalChapter = 0,
     this.anchorVerse,
-    this.offset = 0,
-    this.geometrySig,
   });
 
   final int id;
@@ -30,18 +33,16 @@ class ReadingScreen {
   /// The bound book's index, or null when unbound.
   int? bookIndex;
 
-  /// Chapter-at-top (global chapter index) of the held place.
+  /// Global chapter index of the held place — its chapter PAGE
+  /// (§4.3: the pager's reported current page, never derived from
+  /// a scroll offset).
   int globalChapter;
 
-  /// The last verse explicitly landed on or tapped, or null.
+  /// The last verse explicitly landed on or tapped, or null when
+  /// the place is a whole chapter (§4.3).
   int? anchorVerse;
 
-  /// Scroll offset in the bound book's stream, valid only under
-  /// [geometrySig] (§6.4).
-  double offset;
-  String? geometrySig;
-
-  /// In-stream history of places left, (globalChapter, verse?)
+  /// In-reader history of places left, (globalChapter, verse?)
   /// (§7.2). Session-only.
   final List<(int, int?)> history = [];
 
@@ -54,12 +55,11 @@ class ReadingScreen {
     'book': bookIndex,
     'chapter': globalChapter,
     'anchor': anchorVerse,
-    'offset': offset,
-    'sig': geometrySig,
   };
 }
 
-/// Serializes the screen set (§6.4).
+/// Serializes the screen set (§6.4 as amended: chapter page +
+/// verse anchor only — no offset, no geometry signature).
 String serializeWwScreens(List<ReadingScreen> screens, int activeIndex) =>
     jsonEncode({
       'active': activeIndex,
@@ -72,6 +72,11 @@ String serializeWwScreens(List<ReadingScreen> screens, int activeIndex) =>
 /// empty parse yields the default set — one screen bound to
 /// [fallbackChapter] (the persisted Home selection's chapter) when
 /// one exists, else Genesis 1 (global chapter 0).
+///
+/// Documents written by the retired stream shape may carry
+/// `offset` / `sig` fields: they are ignored, never applied — an
+/// offset from the stream shape landing in the paged reader is a
+/// Blocker (§6.4 as amended; STORE-3's legacy-shape case).
 (List<ReadingScreen>, int) parseWwScreens(
   String? raw,
   BibleData data, {
@@ -113,8 +118,8 @@ String serializeWwScreens(List<ReadingScreen> screens, int activeIndex) =>
     final book = entry['book'];
     final chapter = entry['chapter'];
     final anchor = entry['anchor'];
-    final offset = entry['offset'];
-    final sig = entry['sig'];
+    // NOTE: any 'offset' / 'sig' keys in a legacy stream-shaped
+    // entry are deliberately not read (§6.4 as amended).
     if (book != null && book is! int) continue;
     if (chapter is! int) continue;
     if (chapter < 0 || chapter >= data.totalChapters) continue;
@@ -131,8 +136,6 @@ String serializeWwScreens(List<ReadingScreen> screens, int activeIndex) =>
         bookIndex: book,
         globalChapter: chapter,
         anchorVerse: anchor,
-        offset: offset is num ? offset.toDouble() : 0,
-        geometrySig: sig is String ? sig : null,
       ),
     );
   }

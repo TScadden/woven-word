@@ -225,8 +225,6 @@ class ShellController extends ChangeNotifier implements ReaderHost {
       screen.bookIndex = book;
       screen.globalChapter = ch;
       screen.anchorVerse = verse;
-      screen.offset = 0;
-      screen.geometrySig = null;
     } else {
       final current = screen.place;
       final target = (ch, verse);
@@ -236,8 +234,6 @@ class ShellController extends ChangeNotifier implements ReaderHost {
         }
         if (book != screen.bookIndex) {
           screen.bookIndex = book;
-          screen.offset = 0;
-          screen.geometrySig = null;
         }
         screen.globalChapter = ch;
         screen.anchorVerse = verse;

@@ -76,14 +76,21 @@ Future<void> openViaSearch(WidgetTester tester, String query) async {
   await tester.pump();
 }
 
-/// The reader's stream list (the only list with an extent builder).
-Finder readerList() => find.byWidgetPredicate(
-  (w) => w is ListView && w.itemExtentBuilder != null,
-);
+/// The reader's pager (Amendment A: one PageView per screen,
+/// bounded to one book). Kept under the parked helpers' name —
+/// every call site asserts the reader is open / not open.
+Finder readerList() => find.byType(PageView);
 
-/// The reader stream's scroll controller.
-ScrollController readerController(WidgetTester tester) =>
-    tester.widget<ListView>(readerList()).controller!;
+/// The reader's pager.
+Finder readerPager() => find.byType(PageView);
+
+/// The PageController of the open reader.
+PageController readerPageController(WidgetTester tester) =>
+    tester.widget<PageView>(readerPager()).controller!;
+
+/// The in-page scroll view of one chapter page, by its key.
+Finder chapterPage(int globalChapter) =>
+    find.byKey(ValueKey('chapterPage-$globalChapter'));
 
 /// Opens a chapter in the reader through the Library drill-down:
 /// Library tab → testament tile → book tile → chapter cell.

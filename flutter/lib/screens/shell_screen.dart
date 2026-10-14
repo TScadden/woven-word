@@ -859,12 +859,22 @@ class _WwShellState extends State<WwShell> {
                     ),
                   ),
                 ),
+              // The content spans the full slot width and centers
+              // its column in the slot (run-8 fix round, Defect 1):
+              // the Stack sizes to the full slot (the indicator's
+              // Positioned left/right prove it), but a shrink-wrapped
+              // container hugged the slot's left edge under the
+              // Stack's default topStart alignment, so the icon and
+              // label sat at the column's left while the indicator
+              // centered on the column — the founder's screenshot.
               Container(
+                width: double.infinity,
                 constraints: const BoxConstraints(
                   minHeight: WwSpace.topBarHeight,
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Stack(
                       clipBehavior: Clip.none,

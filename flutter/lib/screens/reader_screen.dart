@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/bible_data.dart';
 import '../data/scripture_text.dart';
+import '../data/user_data.dart';
 import '../theme/ww_theme.dart';
 
 /// Reader screen: one chapter on cream paper, in KJV or WEB.
@@ -15,7 +16,10 @@ import '../theme/ww_theme.dart';
 /// text first, then each connection as a reference label plus the
 /// referenced verse's text in the active translation), and tapping a
 /// connection jumps to that chapter and flashes the target verse.
-/// No highlight or note UI here — those are later packages.
+/// Verses can also carry a per-profile highlight and a plain-text
+/// note (board run 4), applied from the connections sheet and
+/// persisted on-device through [UserDataStore]; the verse block
+/// renders the highlight tint, and a notes icon marks noted verses.
 class ReaderScreen extends StatefulWidget {
   const ReaderScreen({
     super.key,
@@ -46,6 +50,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   ScriptureText? _texts;
   Object? _error;
+
+  /// Per-profile highlights and notes for this session. The active
+  /// profile is [UserData.defaultProfileId] until profiles land
+  /// (board run 5). A failed store load leaves an empty in-memory
+  /// model, so persistence never blocks reading.
+  UserDataStore? _userStore;
+  UserData _userData = UserData();
 
   final _scrollCtl = ScrollController();
   final _verseKeys = <int, GlobalKey>{};
@@ -117,6 +128,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
       } catch (_) {
         // Persistence is a convenience; the default stands.
       }
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        _userStore = await UserDataStore.load(prefs);
+        _userData = _userStore!.data;
+      } catch (_) {
+        // Persistence failure never blocks reading: the session
+        // keeps an empty in-memory model.
+        _userStore = null;
+        _userData = UserData();
+      }
       final texts = await ScriptureText.load();
       if (!mounted) return;
       setState(() {
@@ -148,6 +169,54 @@ class _ReaderScreenState extends State<ReaderScreen> {
     } catch (_) {
       // A failed write only loses the preference, never the session.
     }
+  }
+
+  /// Canonical verse key for (chapter, verse) in the active
+  /// profile's data: the chapter's book index and chapter-in-book
+  /// from [BibleData], never the global chapter index.
+  String _verseKeyFor(int ch, int v) {
+    final chapter = widget.data.chapters[ch];
+    return verseKey(chapter.b, chapter.c, v);
+  }
+
+  HlColor? _highlightFor(int ch, int v) =>
+      _userData.highlight(UserData.defaultProfileId, _verseKeyFor(ch, v));
+
+  String? _noteFor(int ch, int v) =>
+      _userData.note(UserData.defaultProfileId, _verseKeyFor(ch, v));
+
+  /// The theme tint a highlight color renders in (full opacity).
+  Color _tintFor(HlColor color) => switch (color) {
+    HlColor.gold => WwColors.hlGold,
+    HlColor.green => WwColors.hlGreen,
+    HlColor.blue => WwColors.hlBlue,
+    HlColor.pink => WwColors.hlPink,
+    HlColor.purple => WwColors.hlPurple,
+  };
+
+  /// Persists the user-data model after a mutation. Fire-and-forget
+  /// with a catch: the session state is already updated, so a failed
+  /// write only loses persistence, never the visible change.
+  Future<void> _persistUserData() async {
+    final store = _userStore;
+    if (store == null) return;
+    try {
+      await store.save();
+    } catch (_) {
+      // Session state already carries the change.
+    }
+  }
+
+  void _applyHighlight(String key, HlColor? color) {
+    setState(
+      () => _userData.setHighlight(UserData.defaultProfileId, key, color),
+    );
+    _persistUserData();
+  }
+
+  void _applyNote(String key, String text) {
+    setState(() => _userData.setNote(UserData.defaultProfileId, key, text));
+    _persistUserData();
   }
 
   GlobalKey _keyForVerse(int v) => _verseKeys.putIfAbsent(v, () => GlobalKey());
@@ -219,6 +288,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final translation = _translation;
     final ch = _chapter;
     final conns = data.verseConnections(ch, v);
+    final key = _verseKeyFor(ch, v);
+    var editingNote = false;
+    final noteController = TextEditingController();
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: WwColors.paper,
@@ -229,84 +301,307 @@ class _ReaderScreenState extends State<ReaderScreen> {
         ),
       ),
       builder: (sheetContext) {
-        return ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(sheetContext).size.height * 0.75,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(WwSpace.screenMargin),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(data.refName(ch, v), style: WwType.sheetRefTitle),
-                const SizedBox(height: 8),
-                Text(
-                  texts.verseText(translation, data, ch, v),
-                  style: WwType.readerSheetVerse,
-                ),
-                const SizedBox(height: 12),
-                // Names what a verse tap means, so first-time users
-                // learn it instantly (research desk, board run 3).
-                const Text('Connections', style: WwType.refLabel),
-                const SizedBox(height: 8),
-                if (conns.isEmpty)
-                  const Text(
-                    'No cross references are recorded for this verse.',
-                    style: WwType.captionOnPaper,
-                  )
-                else
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: conns.length,
-                      separatorBuilder: (_, _) =>
-                          const Divider(height: 1, color: WwColors.line),
-                      itemBuilder: (_, i) {
-                        final tc = conns[i][0];
-                        final tv = conns[i][1];
-                        return InkWell(
-                          onTap: () {
-                            Navigator.of(sheetContext).pop();
-                            _navigateTo(tc, tv);
-                          },
-                          child: Container(
-                            constraints: const BoxConstraints(
-                              minHeight: WwSpace.minTarget,
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  data.refName(tc, tv),
-                                  style: WwType.refLabel,
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  // Snippet resolution: the entry's
-                                  // target chapter + verse, read in
-                                  // the ACTIVE translation through
-                                  // ScriptureText (which clamps to
-                                  // that text's own chapter length).
-                                  texts.verseText(translation, data, tc, tv),
-                                  style: WwType.snippet,
-                                  maxLines: 3,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final currentHighlight = _userData.highlight(
+              UserData.defaultProfileId,
+              key,
+            );
+            final currentNote = _userData.note(UserData.defaultProfileId, key);
+            final Widget sheetBody;
+            if (editingNote) {
+              // Note editor: an in-sheet swap (instant, no fade) of
+              // the sheet's main view. A single body field, no title,
+              // an explicit Save; saving empty removes the note
+              // (UserData.setNote semantics).
+              sheetBody = Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(data.refName(ch, v), style: WwType.sheetRefTitle),
+                  const SizedBox(height: 8),
+                  const Text('Note', style: WwType.refLabel),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: noteController,
+                    style: WwType.bodyOnPaper,
+                    minLines: 3,
+                    maxLines: 8,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: WwColors.paper,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                      // Local to this sheet (Petra Flag C): the app
+                      // theme's focused border is goldBright, which
+                      // is prohibited on paper (1.89:1), so the field
+                      // carries its own borders — line idle,
+                      // goldTextOnPaper focused — and never inherits
+                      // the theme's InputDecorationTheme here.
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(WwRadius.input),
+                        borderSide: const BorderSide(color: WwColors.line),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(WwRadius.input),
+                        borderSide: const BorderSide(color: WwColors.line),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(WwRadius.input),
+                        borderSide: const BorderSide(
+                          color: WwColors.goldTextOnPaper,
+                        ),
+                      ),
                     ),
                   ),
-              ],
-            ),
-          ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Saving an empty note removes it.',
+                    style: WwType.captionOnPaper,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () =>
+                            setSheetState(() => editingNote = false),
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(64, WwSpace.minTarget),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: WwType.paperButtonLabel,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () {
+                          _applyNote(key, noteController.text);
+                          setSheetState(() => editingNote = false);
+                        },
+                        style: TextButton.styleFrom(
+                          backgroundColor: WwColors.goldBright,
+                          minimumSize: const Size(64, WwSpace.minTarget),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(WwRadius.chip),
+                          ),
+                        ),
+                        child: const Text(
+                          'Save',
+                          style: WwType.goldButtonLabel,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            } else {
+              sheetBody = Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(data.refName(ch, v), style: WwType.sheetRefTitle),
+                  const SizedBox(height: 8),
+                  Text(
+                    texts.verseText(translation, data, ch, v),
+                    style: WwType.readerSheetVerse,
+                  ),
+                  const SizedBox(height: 12),
+                  // Names what a verse tap means, so first-time users
+                  // learn it instantly (research desk, board run 3).
+                  const Text('Connections', style: WwType.refLabel),
+                  const SizedBox(height: 8),
+                  if (conns.isEmpty)
+                    const Text(
+                      'No cross references are recorded for this verse.',
+                      style: WwType.captionOnPaper,
+                    )
+                  else
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: conns.length,
+                        separatorBuilder: (_, _) =>
+                            const Divider(height: 1, color: WwColors.line),
+                        itemBuilder: (_, i) {
+                          final tc = conns[i][0];
+                          final tv = conns[i][1];
+                          return InkWell(
+                            onTap: () {
+                              Navigator.of(sheetContext).pop();
+                              _navigateTo(tc, tv);
+                            },
+                            child: Container(
+                              constraints: const BoxConstraints(
+                                minHeight: WwSpace.minTarget,
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    data.refName(tc, tv),
+                                    style: WwType.refLabel,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    // Snippet resolution: the entry's
+                                    // target chapter + verse, read in
+                                    // the ACTIVE translation through
+                                    // ScriptureText (which clamps to
+                                    // that text's own chapter length).
+                                    texts.verseText(translation, data, tc, tv),
+                                    style: WwType.snippet,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  const Text('Highlight', style: WwType.refLabel),
+                  const SizedBox(height: 8),
+                  // Filled-circle palette row: one tap applies
+                  // instantly (no Save for highlights); tapping the
+                  // active swatch again removes the highlight.
+                  Row(
+                    children: [
+                      for (final color in HlColor.values)
+                        _highlightSwatch(
+                          color: color,
+                          active: color == currentHighlight,
+                          onTap: () {
+                            _applyHighlight(
+                              key,
+                              color == currentHighlight ? null : color,
+                            );
+                            setSheetState(() {});
+                          },
+                        ),
+                    ],
+                  ),
+                  if (currentHighlight != null)
+                    TextButton(
+                      onPressed: () {
+                        _applyHighlight(key, null);
+                        setSheetState(() {});
+                      },
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(64, WwSpace.minTarget),
+                      ),
+                      child: const Text(
+                        'Remove highlight',
+                        style: WwType.paperButtonLabel,
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  const Text('Note', style: WwType.refLabel),
+                  const SizedBox(height: 8),
+                  if (currentNote != null) ...[
+                    Text(currentNote, style: WwType.snippet),
+                    const SizedBox(height: 4),
+                    TextButton(
+                      onPressed: () {
+                        noteController.text = currentNote;
+                        setSheetState(() => editingNote = true);
+                      },
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(64, WwSpace.minTarget),
+                      ),
+                      child: const Text(
+                        'Edit note',
+                        style: WwType.paperButtonLabelGold,
+                      ),
+                    ),
+                  ] else
+                    TextButton(
+                      onPressed: () {
+                        noteController.text = '';
+                        setSheetState(() => editingNote = true);
+                      },
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(64, WwSpace.minTarget),
+                      ),
+                      child: const Text(
+                        'Add note',
+                        style: WwType.paperButtonLabelGold,
+                      ),
+                    ),
+                ],
+              );
+            }
+            return ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(sheetContext).size.height * 0.75,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(WwSpace.screenMargin),
+                child: sheetBody,
+              ),
+            );
+          },
         );
       },
+    ).whenComplete(noteController.dispose);
+  }
+
+  /// One highlight swatch in the verse sheet: a 48dp target holding
+  /// a filled circle in the exact tint the verse renders in, with a
+  /// line border. The active swatch carries an ink checkmark
+  /// centered on it and a 2dp goldTextOnPaper ring around it.
+  Widget _highlightSwatch({
+    required HlColor color,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    final name = switch (color) {
+      HlColor.gold => 'Gold',
+      HlColor.green => 'Green',
+      HlColor.blue => 'Blue',
+      HlColor.pink => 'Pink',
+      HlColor.purple => 'Purple',
+    };
+    return Semantics(
+      label: '$name highlight',
+      button: true,
+      selected: active,
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            width: WwSpace.minTarget,
+            height: WwSpace.minTarget,
+            child: Center(
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: _tintFor(color),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: active ? WwColors.goldTextOnPaper : WwColors.line,
+                    width: active ? 2 : 1,
+                  ),
+                ),
+                child: active
+                    ? const Icon(Icons.check, size: 20, color: WwColors.ink)
+                    : null,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -510,14 +805,26 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Widget _verseBlock(BibleData data, int v, String text) {
     final selected = v == _selectedVerse;
     final hasConns = data.verseHasConnections(_chapter, v);
+    final highlight = _highlightFor(_chapter, v);
+    final tint = highlight == null ? null : _tintFor(highlight);
+    final hasNote = _noteFor(_chapter, v) != null;
+    // Effective background (Petra, board run 4 — lesson 16: every
+    // element, every state): resting is the verse's highlight tint
+    // at FULL opacity, or transparent when unhighlighted; selected
+    // composites hlGold at 45% alpha over the tint (or over paper
+    // when unhighlighted, which still computes #FBF0C6), opaque.
+    final background = selected
+        ? Color.alphaBlend(
+            WwColors.hlGold.withValues(alpha: 0.45),
+            tint ?? WwColors.paper,
+          )
+        : (tint ?? Colors.transparent);
+    // The resting plain state is the only one where the number and
+    // the dot keep their paper roles; selected or highlighted, both
+    // switch (see the number role and the dot comment below).
+    final restingPlain = !selected && highlight == null;
     return Material(
-      // Selected highlight: hlGold at ~45% over paper (#FBF0C6
-      // composited). On it, goldTextOnPaper fails contrast (4.11:1),
-      // so the verse number switches to the ink role when selected —
-      // see WwType.verseNumberSelected.
-      color: selected
-          ? WwColors.hlGold.withValues(alpha: 0.45)
-          : Colors.transparent,
+      color: background,
       borderRadius: BorderRadius.circular(WwRadius.row),
       child: InkWell(
         key: _keyForVerse(v),
@@ -526,6 +833,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
         child: Container(
           constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(WwRadius.row),
+            // Selected outline (producer decision resolving Petra
+            // Flag A, board run 4): the selection delta on an
+            // hlGold-highlighted verse is 1.000 — chromatically
+            // invisible — so EVERY selected block carries this 2dp
+            // border in goldTextOnPaper at the row radius.
+            // goldTextOnPaper computes 3.35–4.11 on all selected
+            // composites and 4.62 against the surrounding paper.
+            border: selected
+                ? Border.all(color: WwColors.goldTextOnPaper, width: 2)
+                : null,
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -536,32 +856,54 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     Text(
                       '$v',
                       textAlign: TextAlign.center,
-                      style: selected
-                          ? WwType.verseNumberSelected
-                          : WwType.verseNumber,
+                      // Verse number: goldTextOnPaper (WwType
+                      // .verseNumber) ONLY when not selected AND
+                      // no highlight; otherwise the ink role —
+                      // goldTextOnPaper computes 3.22–4.11 on the
+                      // non-paper surfaces, under the 4.5 floor,
+                      // while ink computes 11.92–17.12 there
+                      // (Petra's run-4 audit, WwType.verseNumberInk).
+                      style: restingPlain
+                          ? WwType.verseNumber
+                          : WwType.verseNumberInk,
                     ),
                     if (hasConns) ...[
                       const SizedBox(height: 4),
-                      // The dot's contrast in both states: on
-                      // paper the DARK gold token passes at 3.20:1,
-                      // but on the selected-verse background
-                      // (hlGold at 45% over paper = #FBF0C6) it
-                      // falls to 2.85:1, below the 3:1
-                      // meaningful-icon threshold — so when
-                      // selected the dot switches to
-                      // goldTextOnPaper (4.11:1 on #FBF0C6),
-                      // mirroring the verse-number pattern.
-                      // Never goldBright on cream (research desk
-                      // note, board run 3; Petra High-1).
+                      // The dot's three-condition rule (Petra,
+                      // board run 4): gold ONLY when not selected
+                      // AND no highlight — gold passes at 3.20 on
+                      // rest/paper only and falls to 2.23–2.85 on
+                      // every other surface (selected composites
+                      // and highlight tints), below the 3.0
+                      // meaningful-icon floor. In every other
+                      // state the dot is goldTextOnPaper, which
+                      // computes 3.22–4.11 on all non-paper
+                      // surfaces. Never goldBright on cream.
                       Container(
                         width: 6,
                         height: 6,
                         decoration: BoxDecoration(
-                          color: selected
-                              ? WwColors.goldTextOnPaper
-                              : WwColors.gold,
+                          color: restingPlain
+                              ? WwColors.gold
+                              : WwColors.goldTextOnPaper,
                           shape: BoxShape.circle,
                         ),
+                      ),
+                    ],
+                    if (hasNote) ...[
+                      const SizedBox(height: 4),
+                      // Note indicator: goldTextOnPaper on ALL
+                      // surfaces, no state switch (Petra, board
+                      // run 4) — its minimum computed ratio is
+                      // 3.22 on rest/hlPurple, over the 3.0 icon
+                      // floor; ink was rejected because it would
+                      // collapse into the body content beside it.
+                      // No alpha on this audited element (Petra
+                      // Flag B).
+                      const Icon(
+                        Icons.notes,
+                        size: 16,
+                        color: WwColors.goldTextOnPaper,
                       ),
                     ],
                   ],

@@ -207,12 +207,13 @@ class WwType {
     color: WwColors.goldTextOnPaper,
   );
 
-  /// Verse number on the selected-verse highlight (hlGold at 45%
-  /// over paper = #FBF0C6): goldTextOnPaper fails there at 4.11:1,
-  /// under the 4.5 normal-text floor; ink passes at 15.23:1 (Petra
-  /// contrast finding, board run 3). Any goldTextOnPaper element
-  /// that can sit on the selected background uses this role instead.
-  static const verseNumberSelected = TextStyle(
+  /// Verse number in ink, for every verse block that is selected
+  /// or carries a highlight tint (Petra's run-4 audit): on those
+  /// non-paper surfaces goldTextOnPaper computes 3.22–4.11, under
+  /// the 4.5 normal-text floor, while ink computes 11.92–17.12.
+  /// The resting, unhighlighted verse number keeps [verseNumber]
+  /// (goldTextOnPaper, 4.62:1 on paper).
+  static const verseNumberInk = TextStyle(
     fontSize: 12,
     fontWeight: FontWeight.w700,
     color: WwColors.ink,

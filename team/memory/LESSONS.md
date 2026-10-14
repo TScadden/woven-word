@@ -239,3 +239,28 @@ rounds Rusty ran before the studio was founded).
     that mutates no state (a same-chapter jump) schedules no
     frame — it must `scheduleFrame()` itself or it hangs until an
     unrelated invalidation (7b277bc).
+
+## Handoffs, briefs & gates (board run 8)
+27. **A child agent's report is a claim, not an artifact — verify
+    it against the repo before dispatching dependent work.** Run 8
+    received a detailed "build complete" report (commit hashes,
+    test counts, file paths) for UI that was never built; the
+    builder had in fact stopped, correctly, on a spec conflict.
+    Petra's gate caught it by checking `git cat-file` and file
+    existence. Rule: hashes resolve, files exist, and the suite
+    count is re-derivable — or the report is unverified and
+    nothing downstream ships on it.
+28. **A brief that paraphrases a spec loses to the filed spec.**
+    The first UI dispatch brief summarized Petra's spec from a
+    handoff summary and invented tokens, heights, surfaces, and
+    an API that do not exist; the builder stopped rather than
+    improvise (lesson 23 discipline working as designed). Briefs
+    quote the spec's own names and strings or point at the file —
+    a summary of a summary is where fidelity goes to die.
+29. **Deviation reports are written from `git diff`, not from
+    memory of building.** At the re-gate, three declared
+    deviations (D1/D4/D7) described code that was not the code —
+    in each case the code conformed and the declaration did not.
+    Petra ruled the code (lesson 24), but a declaration that
+    misdescribes the diff costs the gate a verification pass it
+    should not need.

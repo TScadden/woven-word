@@ -1,4 +1,9 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/user_data.dart';
@@ -16,7 +21,16 @@ import '../theme/ww_theme.dart';
 /// board run 5 — the category pattern is an identity entry at the top
 /// of home: YouVersion's profile, the avatar entry in newer apps).
 class ProfilesScreen extends StatefulWidget {
-  const ProfilesScreen({super.key});
+  const ProfilesScreen({super.key, this.pickBackupFile, this.shareBackup});
+
+  /// Picks a backup file and returns its bytes; a null return is a
+  /// cancelled pick. Defaults to the system file picker. Tests
+  /// inject a fake picker through this seam.
+  final Future<Uint8List?> Function()? pickBackupFile;
+
+  /// Shares the exported backup JSON. Defaults to the system share
+  /// sheet. Tests inject a fake through this seam.
+  final Future<void> Function(String json)? shareBackup;
 
   @override
   State<ProfilesScreen> createState() => _ProfilesScreenState();
@@ -218,6 +232,195 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     ).whenComplete(controller.dispose);
   }
 
+  /// Export (board run 6): the full backup document goes to the
+  /// system share sheet as one JSON file. The share sheet opening
+  /// is the feedback — nothing is shown after it, and export
+  /// mutates nothing.
+  Future<void> _exportBackup() async {
+    final json = _data.exportJson();
+    final share = widget.shareBackup;
+    if (share != null) {
+      await share(json);
+      return;
+    }
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [
+          XFile.fromData(
+            utf8.encode(json),
+            name: 'woven-word-backup.json',
+            mimeType: 'application/json',
+          ),
+        ],
+        subject: 'Woven Word backup',
+      ),
+    );
+  }
+
+  /// The default import file pick: the system picker, JSON files.
+  /// An empty result is a cancelled pick.
+  Future<Uint8List?> _pickBackupFile() async {
+    final files = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+    if (files.isEmpty) return null;
+    return files.first.xFile.readAsBytes();
+  }
+
+  /// Import (board run 6): pick → validate → confirm → replace
+  /// wholesale → persist → success snackbar. A cancelled pick is a
+  /// silent no-op; a malformed file opens the error dialog and
+  /// changes nothing.
+  Future<void> _importBackup() async {
+    final bytes = await (widget.pickBackupFile ?? _pickBackupFile)();
+    if (bytes == null || !mounted) return;
+    final String source;
+    try {
+      source = utf8.decode(bytes);
+    } catch (_) {
+      await _showImportError(BackupImportError.notJson);
+      return;
+    }
+    final result = UserDataStore.validateImport(source);
+    if (!mounted) return;
+    final error = result.error;
+    if (error != null) {
+      await _showImportError(error);
+      return;
+    }
+    final incoming = result.data!;
+    final confirmed = await _confirmImport(incoming);
+    if (confirmed != true || !mounted) return;
+    final store = _store;
+    if (store == null) return;
+    await store.replaceData(incoming);
+    if (!mounted) return;
+    setState(() => _data = store.data);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: WwColors.surfaceHigh,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(WwRadius.chip),
+        ),
+        content: const Text(
+          'Data replaced from backup.',
+          style: WwType.bodyOnDark,
+        ),
+      ),
+    );
+  }
+
+  static String _counted(int n, String singular, String plural) =>
+      '$n ${n == 1 ? singular : plural}';
+
+  /// The import confirm dialog: both sides' counts named (current
+  /// data and the exact [UserData] instance to be installed, each
+  /// counted by the same model getters), the destructive action
+  /// last, in danger text only.
+  Future<bool?> _confirmImport(UserData incoming) {
+    final currentProfiles = _counted(
+      _data.profileIds.length,
+      'profile',
+      'profiles',
+    );
+    final currentHighlights = _counted(
+      _data.totalHighlights,
+      'highlight',
+      'highlights',
+    );
+    final currentNotes = _counted(_data.totalNotes, 'note', 'notes');
+    final fileProfiles = _counted(
+      incoming.profileIds.length,
+      'profile',
+      'profiles',
+    );
+    final fileHighlights = _counted(
+      incoming.totalHighlights,
+      'highlight',
+      'highlights',
+    );
+    final fileNotes = _counted(incoming.totalNotes, 'note', 'notes');
+    return wwShowDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: WwColors.surfaceHigh,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(WwRadius.sheet),
+        ),
+        title: const Text('Replace all data?', style: WwType.selectionTitle),
+        content: Text(
+          'Importing this backup will replace all current data. '
+          'The $currentProfiles, $currentHighlights, and $currentNotes '
+          'now on this device will be removed, and $fileProfiles, '
+          '$fileHighlights, and $fileNotes from the file will take '
+          'their place. This cannot be undone.',
+          style: WwType.bodyOnDark,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            style: TextButton.styleFrom(
+              minimumSize: const Size(64, WwSpace.minTarget),
+            ),
+            child: const Text('Cancel', style: WwType.buttonLabel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: TextButton.styleFrom(
+              minimumSize: const Size(64, WwSpace.minTarget),
+            ),
+            child: const Text('Replace', style: WwType.dangerActionLabel),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The import error dialog: nothing was changed, plus the
+  /// specific reason the validator detected.
+  Future<void> _showImportError(BackupImportError error) {
+    final reason = switch (error) {
+      BackupImportError.notJson =>
+        'The file is not readable as a backup (it is not valid JSON).',
+      BackupImportError.notBackup =>
+        'The file is not a Woven Word backup document.',
+      BackupImportError.newerVersion =>
+        'This backup was made by a newer version of Woven Word.',
+      BackupImportError.emptyDocument =>
+        'This backup contains no profiles, highlights, or notes.',
+    };
+    return wwShowDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: WwColors.surfaceHigh,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(WwRadius.sheet),
+        ),
+        title: const Text(
+          'This file could not be imported',
+          style: WwType.selectionTitle,
+        ),
+        content: Text(
+          'Nothing was changed. $reason',
+          style: WwType.bodyOnDark,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            style: TextButton.styleFrom(
+              minimumSize: const Size(64, WwSpace.minTarget),
+            ),
+            child: const Text('OK', style: WwType.dialogActionLabel),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -294,7 +497,81 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
           ),
           child: const Text('New profile', style: WwType.goldButtonLabel),
         ),
+        const SizedBox(height: 24),
+        const Text('Backup', style: WwType.selectionTitle),
+        const SizedBox(height: 4),
+        const Text(
+          'Export saves every profile, highlight, and note on this '
+          'device as one JSON file. Import replaces everything here '
+          'with the contents of a backup file. Nothing leaves this '
+          'device unless you export it.',
+          style: WwType.captionOnDark,
+        ),
+        const SizedBox(height: 16),
+        _backupRow(
+          icon: Icons.share,
+          title: 'Export backup',
+          subtitle: 'Share a JSON file of all your profiles',
+          onTap: _exportBackup,
+        ),
+        const SizedBox(height: 8),
+        _backupRow(
+          icon: Icons.folder_open,
+          title: 'Import backup',
+          subtitle: 'Replace current data from a backup file',
+          onTap: _importBackup,
+        ),
       ],
+    );
+  }
+
+  /// One Backup action row, built exactly like a profile row: the
+  /// whole row is the tap target, icon + title + subtitle, with a
+  /// disclosure chevron (board run 6, Petra spec §2.3).
+  Widget _backupRow({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: WwColors.surface,
+      borderRadius: BorderRadius.circular(WwRadius.row),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(WwRadius.row),
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              Icon(icon, size: 20, color: WwColors.goldBright),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: WwType.controlLabel.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: WwType.captionOnDark),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: WwColors.mutedOnDark,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

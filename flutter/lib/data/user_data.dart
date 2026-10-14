@@ -239,6 +239,20 @@ class UserData {
     return entries;
   }
 
+  /// Total highlights across ALL profiles (backup counts, board
+  /// run 6): the sum over every profile bucket in the document.
+  int get totalHighlights =>
+      profiles.values.fold(0, (sum, p) => sum + p.highlights.length);
+
+  /// Total notes across ALL profiles (backup counts, board run 6).
+  int get totalNotes =>
+      profiles.values.fold(0, (sum, p) => sum + p.notes.length);
+
+  /// This document as a pretty-printed JSON string — the backup
+  /// file's contents (board run 6). Exactly the [toJson] shape.
+  String exportJson() =>
+      const JsonEncoder.withIndent('  ').convert(toJson());
+
   ProfileData _bucketForWrite(String profileId) =>
       profiles.putIfAbsent(profileId, () => ProfileData());
 
@@ -316,6 +330,42 @@ class UserData {
   }
 }
 
+/// Why a candidate backup document was rejected (board run 6,
+/// Petra spec §2.7). Each class maps to one specific reason
+/// sentence in the import error dialog.
+enum BackupImportError {
+  /// The file's bytes do not decode as JSON at all.
+  notJson,
+
+  /// Valid JSON, but not a Woven Word backup document: a
+  /// non-object root, a missing or non-object `profiles` member,
+  /// a profile bucket that is not an object, or a non-numeric
+  /// `version`.
+  notBackup,
+
+  /// A backup document whose numeric `version` is newer than
+  /// this build's [UserData.version].
+  newerVersion,
+
+  /// A backup-shaped document that parses to zero profile
+  /// buckets, zero highlights, and zero notes.
+  emptyDocument,
+}
+
+/// The outcome of validating a candidate backup document: either
+/// the parsed [UserData] that would be installed, or the
+/// [BackupImportError] that rejected it. Validation is pure — it
+/// never writes anything.
+class BackupImportResult {
+  const BackupImportResult.valid(this.data) : error = null;
+  const BackupImportResult.invalid(this.error) : data = null;
+
+  final UserData? data;
+  final BackupImportError? error;
+
+  bool get isValid => error == null;
+}
+
 /// Persists a [UserData] model to SharedPreferences under the single
 /// key `ww_user_data`, as its JSON string. On-device only, no network.
 class UserDataStore {
@@ -325,8 +375,63 @@ class UserDataStore {
 
   final SharedPreferences _prefs;
 
-  /// The live model. Mutate it through its API, then call [save].
-  final UserData data;
+  /// The live model. Mutate it through its API, then call [save];
+  /// import replaces it wholesale through [replaceData].
+  UserData data;
+
+  /// The live model's backup document (see [UserData.exportJson]).
+  String exportJson() => data.exportJson();
+
+  /// Validates [source] as a backup document (board run 6, Petra
+  /// spec §2.7). Acceptance by [UserData.fromJson] alone is NOT
+  /// validation — that parser is defensive and silently drops
+  /// malformed entries — so the document's shape is checked first:
+  /// undecodable JSON, a non-object root, a missing/non-object
+  /// `profiles` member, a non-object profile bucket, and a
+  /// non-numeric `version` are all rejected as not-a-backup; a
+  /// numeric version newer than [UserData.version] is rejected as
+  /// newerVersion; a document that then parses to zero profile
+  /// buckets AND zero highlights AND zero notes (bucket count from
+  /// the parsed model's raw profiles map) is rejected as
+  /// emptyDocument.
+  static BackupImportResult validateImport(String source) {
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(source);
+    } catch (_) {
+      return const BackupImportResult.invalid(BackupImportError.notJson);
+    }
+    if (decoded is! Map<String, dynamic>) {
+      return const BackupImportResult.invalid(BackupImportError.notBackup);
+    }
+    final rawProfiles = decoded['profiles'];
+    if (rawProfiles is! Map) {
+      return const BackupImportResult.invalid(BackupImportError.notBackup);
+    }
+    for (final bucket in rawProfiles.values) {
+      if (bucket is! Map) {
+        return const BackupImportResult.invalid(BackupImportError.notBackup);
+      }
+    }
+    final rawVersion = decoded['version'];
+    if (rawVersion != null && rawVersion is! num) {
+      return const BackupImportResult.invalid(BackupImportError.notBackup);
+    }
+    if (rawVersion is num && rawVersion > UserData.version) {
+      return const BackupImportResult.invalid(
+        BackupImportError.newerVersion,
+      );
+    }
+    final parsed = UserData.fromJson(decoded);
+    if (parsed.profiles.isEmpty &&
+        parsed.totalHighlights == 0 &&
+        parsed.totalNotes == 0) {
+      return const BackupImportResult.invalid(
+        BackupImportError.emptyDocument,
+      );
+    }
+    return BackupImportResult.valid(parsed);
+  }
 
   /// Loads the stored model; a missing or corrupt document loads as
   /// an empty model, never a throw.
@@ -349,5 +454,14 @@ class UserDataStore {
   /// Writes the model's JSON string to SharedPreferences.
   Future<void> save() async {
     await _prefs.setString(storageKey, jsonEncode(data.toJson()));
+  }
+
+  /// Replaces the live model with [replacement] wholesale and
+  /// persists it (backup import, board run 6). The returned future
+  /// completes only after the save has completed, so success
+  /// feedback shown after it is a true receipt.
+  Future<void> replaceData(UserData replacement) async {
+    data = replacement;
+    await save();
   }
 }

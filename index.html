@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Woven Word — Every connection in the Bible, woven into one web</title>
+<meta name="description" content="An interactive map of 344,799 cross references in the Bible. Tap any chapter, read it in a clean scripture view, follow its connections, highlight, and keep notes.">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0b0b10">
+<link rel="icon" href="icon-512.png">
+<style>
+  :root{
+    --ink:#1a1a1a; --paper:#fffdf8; --gold:#b8860b; --gold-bright:#e8b33c;
+    --nav:#0b0b10; --nav-ink:#f2ead8; --line:#e4ddcb; --muted:#7a7466;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;height:100%}
+  body{font-family:var(--sans); background:var(--nav); color:var(--nav-ink); overflow:hidden}
+  button{font-family:var(--sans)}
+  /* ---------- top bar ---------- */
+  #topbar{position:fixed; inset:0 0 auto 0; height:54px; display:flex; align-items:center; gap:8px;
+    padding:0 10px; background:rgba(11,11,16,.96); border-bottom:1px solid #26262f; z-index:40}
+  #topbar .title{font-family:var(--serif); font-size:20px; letter-spacing:.4px; color:var(--gold-bright); white-space:nowrap}
+  #topbar .title small{display:block; font-size:9.5px; color:#9a947f; letter-spacing:1.6px; text-transform:uppercase; font-family:var(--sans)}
+  #topbar .spacer{flex:1}
+  .tbtn{background:#1b1b24; color:var(--nav-ink); border:1px solid #33333f; border-radius:9px;
+    padding:8px 11px; font-size:13px; cursor:pointer; white-space:nowrap}
+  .tbtn:active{background:#2a2a36}
+  .tbtn.primary{background:var(--gold); border-color:var(--gold); color:#161300; font-weight:600}
+  #profileBtn{max-width:130px; overflow:hidden; text-overflow:ellipsis}
+  /* ---------- views ---------- */
+  .view{position:fixed; inset:54px 0 0 0; display:none}
+  .view.active{display:block}
+  /* web view */
+  #webView{background:#000}
+  #arcCanvas{position:absolute; inset:0; width:100%; height:100%; touch-action:manipulation}
+  #webTools{position:absolute; left:0; right:0; top:0; display:flex; gap:6px; padding:8px; flex-wrap:wrap; z-index:5}
+  #webTools select, #webTools input{background:rgba(20,20,28,.92); color:var(--nav-ink);
+    border:1px solid #3a3a46; border-radius:8px; padding:8px; font-size:13px}
+  #webTools input{flex:1; min-width:120px}
+  #webHint{position:absolute; left:0; right:0; bottom:6px; text-align:center; color:#8f8a76; font-size:12px; z-index:4; pointer-events:none}
+  /* chapter sheet */
+  #sheet{position:fixed; left:0; right:0; bottom:0; background:#14141c; border-top:1px solid #34343f;
+    border-radius:16px 16px 0 0; padding:14px 16px calc(14px + env(safe-area-inset-bottom)); z-index:50;
+    transform:translateY(105%); transition:transform .25s ease; max-height:62vh; overflow:auto}
+  #sheet.open{transform:translateY(0)}
+  #sheet h2{font-family:var(--serif); margin:0 0 2px; font-size:22px; color:var(--gold-bright)}
+  #sheet .sub{color:#a49e88; font-size:13px; margin-bottom:10px}
+  #sheet .conn{padding:9px 10px; border:1px solid #2c2c36; border-radius:10px; margin:6px 0; cursor:pointer; background:#1a1a22}
+  #sheet .conn b{color:#efe9d6}
+  #sheet .conn span{color:#98917a; font-size:12.5px; display:block; margin-top:2px}
+  #sheet .row{display:flex; gap:8px; margin-top:10px}
+  #sheet .row button{flex:1; padding:12px; border-radius:10px; border:1px solid #3a3a46; background:#22222c; color:var(--nav-ink); font-size:14px; cursor:pointer}
+  #sheet .row button.primary{background:var(--gold); color:#161300; border-color:var(--gold); font-weight:700}
+  /* read view */
+  #readView{background:var(--paper); color:var(--ink); overflow-y:auto; -webkit-overflow-scrolling:touch}
+  #readInner{max-width:680px; margin:0 auto; padding:18px 20px 120px}
+  #readHead{text-align:center; padding:16px 0 6px; border-bottom:1px solid var(--line); margin-bottom:14px}
+  #readHead .book{font-family:var(--serif); font-size:15px; letter-spacing:2.5px; text-transform:uppercase; color:var(--gold)}
+  #readHead .chap{font-family:var(--serif); font-size:46px; line-height:1.05; margin:2px 0}
+  #readHead .chap small{font-size:19px; color:var(--muted); display:block; letter-spacing:1px}
+  #readBody{font-family:var(--serif); font-size:19.5px; line-height:1.62; text-align:left}
+  #readBody .v{cursor:pointer; border-radius:4px; padding:1px 0}
+  #readBody .vnum{font-size:11.5px; vertical-align:super; color:var(--gold); font-weight:700; margin:0 2px 0 4px; font-family:var(--sans)}
+  #readBody .v.sel{background:#f3e3ae; outline:1px solid var(--gold)}
+  #readBody .v .cdot{color:#b9ac7d; font-size:10px; vertical-align:super}
+  #readBody .v.hasnote{box-shadow:inset 0 -2px 0 #7aa05a}
+  .hl-gold{background:#f7e08a !important} .hl-green{background:#cfe6b8 !important}
+  .hl-blue{background:#c3d9f2 !important} .hl-pink{background:#f6cfdd !important} .hl-purple{background:#ddd0f2 !important}
+  #readNav{position:fixed; bottom:0; left:0; right:0; display:flex; gap:8px; padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+    background:rgba(255,253,248,.97); border-top:1px solid var(--line); z-index:30}
+  #readNav button{flex:1; padding:12px; border-radius:10px; border:1px solid var(--line); background:#fff; font-size:14px; cursor:pointer; color:var(--ink)}
+  /* verse action bar */
+  #verseBar{position:fixed; left:8px; right:8px; bottom:86px; background:#17171f; color:var(--nav-ink);
+    border:1px solid #383844; border-radius:14px; padding:10px; z-index:55; display:none; box-shadow:0 10px 34px rgba(0,0,0,.45)}
+  #verseBar.open{display:block}
+  #verseBar .vref{font-family:var(--serif); font-size:15px; color:var(--gold-bright); margin:2px 2px 8px}
+  #verseBar .acts{display:flex; gap:6px; flex-wrap:wrap}
+  #verseBar .acts button{flex:1; min-width:70px; padding:10px 4px; border-radius:9px; border:1px solid #3a3a46; background:#22222c; color:var(--nav-ink); font-size:12.5px; cursor:pointer}
+  #verseBar .swatches{display:flex; gap:8px; padding:8px 2px 2px}
+  #verseBar .sw{width:30px; height:30px; border-radius:50%; border:2px solid #55555f; cursor:pointer}
+  /* connections + notes lists */
+  #listView{background:var(--paper); color:var(--ink); overflow-y:auto}
+  #listInner{max-width:680px; margin:0 auto; padding:16px 18px 90px}
+  #listInner h2{font-family:var(--serif); font-size:24px; margin:6px 0 4px}
+  #listInner .sub{color:var(--muted); font-size:13px; margin-bottom:12px}
+  .item{border:1px solid var(--line); border-radius:12px; padding:11px 12px; margin:8px 0; cursor:pointer; background:#fff}
+  .item b{font-family:var(--serif); font-size:16px}
+  .item p{margin:5px 0 0; font-family:var(--serif); font-size:15.5px; line-height:1.45; color:#333}
+  .item .meta{color:var(--muted); font-size:12px; margin-top:5px; font-family:var(--sans)}
+  .empty{color:var(--muted); text-align:center; padding:38px 10px; font-size:14.5px; line-height:1.6}
+  /* modal */
+  #modalWrap{position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:80; display:none; align-items:flex-end; justify-content:center}
+  #modalWrap.open{display:flex}
+  #modal{background:#17171f; color:var(--nav-ink); width:100%; max-width:560px; border-radius:18px 18px 0 0;
+    padding:18px 18px calc(18px + env(safe-area-inset-bottom)); max-height:84vh; overflow:auto}
+  #modal h3{font-family:var(--serif); margin:0 0 10px; font-size:20px; color:var(--gold-bright)}
+  #modal textarea, #modal input[type=text]{width:100%; background:#101016; color:var(--nav-ink); border:1px solid #3a3a46;
+    border-radius:10px; padding:11px; font-size:15px; font-family:var(--sans)}
+  #modal textarea{min-height:110px; font-family:var(--serif); line-height:1.5}
+  #modal .row{display:flex; gap:8px; margin-top:12px}
+  #modal .row button{flex:1; padding:12px; border-radius:10px; border:1px solid #3a3a46; background:#22222c; color:var(--nav-ink); font-size:14px; cursor:pointer}
+  #modal .row button.primary{background:var(--gold); color:#161300; border-color:var(--gold); font-weight:700}
+  #modal .row button.danger{background:#4a1f24; border-color:#6e2c33; color:#ffb9c0}
+  #modal .connitem{border:1px solid #2c2c36; background:#1a1a22; border-radius:10px; padding:10px; margin:7px 0; cursor:pointer}
+  #modal .connitem b{color:#efe9d6; font-family:var(--serif)}
+  #modal .connitem p{margin:4px 0 0; font-family:var(--serif); font-size:14.5px; color:#c9c2ab; line-height:1.45}
+  #modal .profrow{display:flex; gap:8px; align-items:center; border:1px solid #2c2c36; background:#1a1a22; border-radius:10px; padding:11px; margin:7px 0}
+  #modal .profrow .nm{flex:1; font-size:15px}
+  #modal .profrow button{padding:8px 12px; border-radius:8px; border:1px solid #3a3a46; background:#22222c; color:var(--nav-ink); cursor:pointer}
+  #loading{position:fixed; inset:0; background:#000; z-index:100; display:flex; flex-direction:column; gap:12px;
+    align-items:center; justify-content:center; color:#cfc7a8; font-family:var(--serif); font-size:19px; text-align:center; padding:20px}
+  #loading .n{font-size:13px; color:#8f8a76; font-family:var(--sans)}
+</style>
+</head>
+<body>
+<div id="loading"><div>Woven Word</div><div class="n" id="loadMsg">Weaving 344,799 connections…</div></div>
+
+<header id="topbar">
+  <div class="title">Woven Word<small>Bible Cross References</small></div>
+  <div class="spacer"></div>
+  <button class="tbtn" id="notesBtn">My Notes</button>
+  <button class="tbtn" id="profileBtn">Guest</button>
+</header>
+
+<section id="webView" class="view active">
+  <canvas id="arcCanvas"></canvas>
+  <div id="webTools">
+    <select id="scopeSel">
+      <option value="all">Whole Bible</option>
+      <option value="ot">Old Testament</option>
+      <option value="nt">New Testament</option>
+    </select>
+    <input id="searchBox" type="text" placeholder="Jump to a book or chapter: John 3, Psalms 23…" autocomplete="off">
+  </div>
+  <div id="webHint">Tap any chapter bar to see its connections. Tap Read to open it like Gospel Library.</div>
+</section>
+
+<div id="sheet"></div>
+
+<section id="readView" class="view">
+  <div id="readInner">
+    <div id="readHead"><div class="book" id="rhBook"></div><div class="chap" id="rhChap"></div></div>
+    <div id="readBody"></div>
+  </div>
+  <div id="readNav" style="display:none">
+    <button id="prevCh">← Previous</button>
+    <button id="toWeb">Web</button>
+    <button id="nextCh">Next →</button>
+  </div>
+</section>
+
+<section id="listView" class="view">
+  <div id="listInner"></div>
+</section>
+
+<div id="verseBar"></div>
+<div id="modalWrap"><div id="modal"></div></div>
+
+<script src="app.js"></script>
+</body>
+</html>

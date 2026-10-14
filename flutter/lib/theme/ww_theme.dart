@@ -26,12 +26,17 @@ class WwColors {
 
   // Text on dark.
   static const navInk = Color(0xFFF2EAD8); // primary text on dark
-  static const mutedOnDark = Color(0xFF9A947F); // ~5.6:1 on nav — captions
-  static const hintOnDark = Color(0xFF8F8A76); // ~4.7:1 on black — hints
+  static const mutedOnDark = Color(0xFF9A947F); // 6.47:1 on nav · 5.63:1 on surfaceHigh — captions
+  static const hintOnDark = Color(0xFF8F8A76); // 6.06:1 on stage — hints
 
   // Gold.
-  static const gold = Color(0xFFB8860B); // accent on paper, fills
-  static const goldBright = Color(0xFFE8B33C); // titles/selection on dark
+  // gold: fills, borders, large text, meaningful icons on paper ONLY —
+  // 3.20:1 on paper fails normal text (Petra token audit, board run 2).
+  static const gold = Color(0xFFB8860B);
+  // goldTextOnPaper: the only gold for small text on paper — 4.62:1.
+  static const goldTextOnPaper = Color(0xFF956D09);
+  // goldBright: dark surfaces only (1.89:1 on paper) — titles/selection.
+  static const goldBright = Color(0xFFE8B33C);
   static const onGold = Color(0xFF161300); // text on a gold fill
 
   // Arc web (measured from the web canvas).
@@ -207,6 +212,9 @@ ThemeData wwTheme() {
         borderRadius: BorderRadius.circular(WwRadius.input),
         borderSide: const BorderSide(color: WwColors.goldBright),
       ),
+      // Input hints intentionally match the input text size (13sp) in
+      // mutedOnDark; WwType.hint (12sp hintOnDark) is for standalone
+      // hint text, not field placeholders (Petra Low-1, board run 2).
       hintStyle: const TextStyle(fontSize: 13, color: WwColors.mutedOnDark),
     ),
   );

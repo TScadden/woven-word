@@ -58,6 +58,20 @@ class BibleData {
     this.chapterPartners,
   );
 
+  /// The chapter's partners sorted by connection count descending,
+  /// ties broken by chapter index ascending.
+  List<MapEntry<int, int>> partnersSorted(int ch) {
+    final partners = chapterPartners[ch];
+    if (partners == null) return const [];
+    final entries = partners.entries.toList();
+    entries.sort((a, b) {
+      final byCount = b.value.compareTo(a.value);
+      if (byCount != 0) return byCount;
+      return a.key.compareTo(b.key);
+    });
+    return entries;
+  }
+
   int get totalChapters => chapters.length;
 
   String chapterName(int ch) => '${books[chapters[ch].b].name} ${chapters[ch].c}';

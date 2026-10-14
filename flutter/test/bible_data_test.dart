@@ -55,6 +55,35 @@ String fakeBibleJson() {
   });
 }
 
+/// Small self-contained dataset for partner ordering: one book, six
+/// chapters, and refs crafted so chapter 0's partners have counts
+/// 3 (ch 2), 2 (ch 3), 2 (ch 4), and 1 (ch 1).
+String craftedPartnersJson() {
+  return jsonEncode({
+    'books': [
+      {'abbr': 'Bk', 'name': 'Book', 'chapters': 6, 'start': 0},
+    ],
+    'chapters': [
+      for (var c = 1; c <= 6; c++) {'b': 0, 'c': c, 'v': 10},
+    ],
+    'chapterArcs': <List<int>>[],
+    'refs': [
+      // Chapter 0 <-> chapter 2, three times (highest count).
+      [0, 1, 2, 1, 0],
+      [0, 2, 2, 2, 0],
+      [2, 3, 0, 3, 0],
+      // Chapter 0 <-> chapter 3, twice.
+      [0, 1, 3, 1, 0],
+      [3, 2, 0, 2, 0],
+      // Chapter 0 <-> chapter 4, twice (tie with chapter 3).
+      [0, 1, 4, 1, 0],
+      [4, 2, 0, 2, 0],
+      // Chapter 0 <-> chapter 1, once.
+      [1, 1, 0, 1, 0],
+    ],
+  });
+}
+
 void main() {
   final data = BibleData.fromJsonString(fakeBibleJson());
 
@@ -100,5 +129,27 @@ void main() {
     expect(data.chapterConnCount[5], 2);
     expect(data.chapterPartners[0], {5: 2});
     expect(data.chapterPartners[5], {0: 2});
+  });
+
+  group('partnersSorted', () {
+    test('fake data: Genesis 1 has exactly the Joshua 1 partner', () {
+      final sorted = data.partnersSorted(0);
+      expect(sorted.length, 1);
+      expect(sorted.single.key, 5);
+      expect(sorted.single.value, 2);
+      expect(sorted.map((e) => (e.key, e.value)).toList(), [(5, 2)]);
+    });
+
+    test('orders by count descending, ties by chapter index ascending', () {
+      final small = BibleData.fromJsonString(craftedPartnersJson());
+      expect(small.partnersSorted(0).map((e) => (e.key, e.value)).toList(), [
+        (2, 3),
+        (3, 2),
+        (4, 2),
+        (1, 1),
+      ]);
+      // A chapter with no refs has no partners.
+      expect(small.partnersSorted(5), isEmpty);
+    });
   });
 }

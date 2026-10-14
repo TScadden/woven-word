@@ -82,6 +82,8 @@ Future<ui.Image> renderArcImage({
   required Size stage,
   required double density,
   required bool faint,
+  bool includeArcs = true,
+  bool includeLabels = true,
 }) async {
   final g = ArcGeometry(
     stage,
@@ -95,31 +97,33 @@ Future<ui.Image> renderArcImage({
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1.6
     ..blendMode = BlendMode.plus;
-  if (faint) {
-    arcPaint.color = const Color.fromRGBO(70, 66, 60, 0.05);
-    for (final arc in data.chapterArcs) {
-      final a = arc[0], b = arc[1];
-      if (a < lo || a > hi || b < lo || b > hi) continue;
-      _drawArc(
-        canvas,
-        g,
-        data.versePos(a, (data.chapters[a].v / 2).ceil()),
-        data.versePos(b, (data.chapters[b].v / 2).ceil()),
-        arcPaint,
-      );
-    }
-  } else {
-    for (final arc in data.chapterArcs) {
-      final a = arc[0], b = arc[1], n = arc[2];
-      if (a < lo || a > hi || b < lo || b > hi) continue;
-      final pa = data.versePos(a, (data.chapters[a].v / 2).ceil());
-      final pb = data.versePos(b, (data.chapters[b].v / 2).ceil());
-      final alpha = math.min(0.30, 0.028 + log10(n) * 0.055) * density;
-      arcPaint.color = _arcColor(
-        (pb - pa).abs() / (g.hiV - g.loV),
-        alpha,
-      );
-      _drawArc(canvas, g, pa, pb, arcPaint);
+  if (includeArcs) {
+    if (faint) {
+      arcPaint.color = const Color.fromRGBO(70, 66, 60, 0.05);
+      for (final arc in data.chapterArcs) {
+        final a = arc[0], b = arc[1];
+        if (a < lo || a > hi || b < lo || b > hi) continue;
+        _drawArc(
+          canvas,
+          g,
+          data.versePos(a, (data.chapters[a].v / 2).ceil()),
+          data.versePos(b, (data.chapters[b].v / 2).ceil()),
+          arcPaint,
+        );
+      }
+    } else {
+      for (final arc in data.chapterArcs) {
+        final a = arc[0], b = arc[1], n = arc[2];
+        if (a < lo || a > hi || b < lo || b > hi) continue;
+        final pa = data.versePos(a, (data.chapters[a].v / 2).ceil());
+        final pb = data.versePos(b, (data.chapters[b].v / 2).ceil());
+        final alpha = math.min(0.30, 0.028 + log10(n) * 0.055) * density;
+        arcPaint.color = _arcColor(
+          (pb - pa).abs() / (g.hiV - g.loV),
+          alpha,
+        );
+        _drawArc(canvas, g, pa, pb, arcPaint);
+      }
     }
   }
 
@@ -139,36 +143,38 @@ Future<ui.Image> renderArcImage({
   }
 
   // Book labels, centered under each book that is wide enough on stage.
-  for (final book in data.books) {
-    final first = book.start, last = book.start + book.chapters - 1;
-    if (last < lo || first > hi) continue;
-    final w =
-        (data.chapterStart[math.min(data.totalChapters - 1, last + 1)] -
-            data.chapterStart[first]) /
-        (g.hiV - g.loV) *
-        stage.width;
-    if (w < 130) continue;
-    final tp = TextPainter(
-      text: TextSpan(
-        text: book.abbr,
-        style: const TextStyle(
-          fontSize: 34,
-          color: WwColors.bookLabel,
-          fontFamilyFallback: WwType.serifFallback,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-      textAlign: TextAlign.center,
-    )..layout();
-    final midCh = book.start + (book.chapters - 1) / 2;
-    final midPos =
-        data.chapterStart[midCh.floor()] +
-        (data.chapters[midCh.floor()].v * (midCh - midCh.floor() + 0.5))
-            .round();
-    tp.paint(
-      canvas,
-      Offset(g.xForPos(midPos) - tp.width / 2, g.axisY + 88),
-    );
+  if (includeLabels) {
+    for (final book in data.books) {
+        final first = book.start, last = book.start + book.chapters - 1;
+        if (last < lo || first > hi) continue;
+        final w =
+            (data.chapterStart[math.min(data.totalChapters - 1, last + 1)] -
+                data.chapterStart[first]) /
+            (g.hiV - g.loV) *
+            stage.width;
+        if (w < 130) continue;
+        final tp = TextPainter(
+          text: TextSpan(
+            text: book.abbr,
+            style: const TextStyle(
+              fontSize: 34,
+              color: WwColors.bookLabel,
+              fontFamilyFallback: WwType.serifFallback,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.center,
+        )..layout();
+        final midCh = book.start + (book.chapters - 1) / 2;
+        final midPos =
+            data.chapterStart[midCh.floor()] +
+            (data.chapters[midCh.floor()].v * (midCh - midCh.floor() + 0.5))
+                .round();
+        tp.paint(
+          canvas,
+          Offset(g.xForPos(midPos) - tp.width / 2, g.axisY + 88),
+        );
+    }
   }
 
   final picture = recorder.endRecording();
@@ -240,5 +246,68 @@ class ArcOverlayPainter extends CustomPainter {
       old.lo != lo ||
       old.hi != hi ||
       old.density != density ||
+      old.stage != stage;
+}
+
+/// Mini-map selection layer for the home screen: the selected chapter's
+/// partner arcs only, drawn with normal blending in a single pass per
+/// partner (no additive accumulation — that saturation was the
+/// founder's core complaint about the old selected mode), plus the
+/// gold selection bar.
+class MiniSelectionPainter extends CustomPainter {
+  final BibleData data;
+  final int lo;
+  final int hi;
+  final Size stage;
+  final int? selected;
+
+  const MiniSelectionPainter({
+    required this.data,
+    required this.lo,
+    required this.hi,
+    required this.stage,
+    required this.selected,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final sel = selected;
+    if (sel == null || sel < lo || sel > hi) return;
+    final g = ArcGeometry(
+      stage,
+      data.chapterStart[lo],
+      data.chapterStart[hi] + data.chapters[hi].v,
+    );
+    // One arc per partner, single pass, normal blending.
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6;
+    final partners = data.chapterPartners[sel] ?? const {};
+    final pa = data.versePos(sel, (data.chapters[sel].v / 2).ceil());
+    partners.forEach((p, n) {
+      if (p < lo || p > hi) return;
+      final pb = data.versePos(p, (data.chapters[p].v / 2).ceil());
+      paint.color = _arcColor(
+        (pb - pa).abs() / (g.hiV - g.loV),
+        0.30 + math.min(0.45, log10(n) * 0.18),
+      );
+      _drawArc(canvas, g, pa, pb, paint);
+    });
+    // Gold selection bar over the base bar.
+    final c = data.chapters[sel];
+    final x0 = g.xForPos(data.chapterStart[sel]);
+    final x1 = g.xForPos(data.chapterStart[sel] + c.v);
+    final h = 14 + math.sqrt(c.v) * 4.4;
+    canvas.drawRect(
+      Rect.fromLTWH(x0, g.axisY, math.max(2.0, x1 - x0 - 0.6), h),
+      Paint()..color = WwColors.goldBright,
+    );
+  }
+
+  @override
+  bool shouldRepaint(MiniSelectionPainter old) =>
+      old.selected != selected ||
+      old.lo != lo ||
+      old.hi != hi ||
       old.stage != stage;
 }

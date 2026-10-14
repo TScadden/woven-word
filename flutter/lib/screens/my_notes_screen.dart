@@ -39,9 +39,15 @@ bool notePositionInCanon(
 /// notes inside a profile or "saved" area is the discoverability
 /// failure YouVersion's own redesign case study documents).
 class MyNotesScreen extends StatefulWidget {
-  const MyNotesScreen({super.key, required this.data});
+  const MyNotesScreen({super.key, required this.data, this.onOpenVerse});
 
   final BibleData data;
+
+  /// Opens a note's verse through the shell's one open-chapter
+  /// procedure (board run 7 part B, §7.4): (bookIndex,
+  /// chapterInBook, verse). When null (standalone test pumps), row
+  /// taps do nothing — in the app the shell always provides it.
+  final void Function(int book, int chapterInBook, int verse)? onOpenVerse;
 
   @override
   State<MyNotesScreen> createState() => _MyNotesScreenState();
@@ -122,15 +128,9 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
       widget.data.books[book].start + chapterInBook - 1;
 
   Future<void> _openInReader(int book, int chapterInBook, int verse) async {
-    await Navigator.of(context).push(
-      WwPageRoute(
-        builder: (_) => ReaderScreen(
-          data: widget.data,
-          chapter: _globalChapter(book, chapterInBook),
-          verse: verse,
-        ),
-      ),
-    );
+    // §7.4: My Notes rows open through the shell's one procedure;
+    // this screen's stack is left exactly as it was.
+    widget.onOpenVerse?.call(book, chapterInBook, verse);
     _reloadUserData();
   }
 

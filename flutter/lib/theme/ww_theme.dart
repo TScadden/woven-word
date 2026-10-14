@@ -254,6 +254,40 @@ class WwType {
     fontWeight: FontWeight.w600,
     color: WwColors.goldTextOnPaper,
   );
+  // Board run 7 part B roles (§11 closed list — the only roles
+  // this package adds).
+  /// Tab bar label, selected: 12sp w600 goldBright (10.23:1 on nav).
+  static const tabLabelSelected = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+    color: WwColors.goldBright,
+  );
+
+  /// Tab bar label, unselected: 12sp w600 mutedOnDark (6.47:1 on nav).
+  static const tabLabelUnselected = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+    color: WwColors.mutedOnDark,
+  );
+
+  /// Screens count badge numeral: 10sp w700 onGold (9.71:1 on
+  /// goldBright).
+  static const badgeCount = TextStyle(
+    fontSize: 10,
+    fontWeight: FontWeight.w700,
+    color: WwColors.onGold,
+  );
+
+  /// Library book tile name: Georgia serif 17sp w600 navInk
+  /// (15.29:1 on surface).
+  static const bookTileTitle = TextStyle(
+    fontFamily: serif,
+    fontFamilyFallback: serifFallback,
+    fontSize: 17,
+    fontWeight: FontWeight.w600,
+    color: WwColors.navInk,
+  );
+
   static const verseNumber = TextStyle(
     fontSize: 12,
     fontWeight: FontWeight.w700,

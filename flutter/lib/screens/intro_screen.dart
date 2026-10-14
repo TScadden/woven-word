@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme/ww_theme.dart';
-import 'home_screen.dart';
+import 'shell_screen.dart';
 
 /// First-run gate (ratified decision, Oct 14, 2026 — option c).
 ///
-/// Every launch after the first goes straight to [HomeScreen]; only the
+/// Every launch after the first goes straight to the shell
+/// ([WwShell], board run 7 part B §1: "Begin reading" enters the
+/// shell at the Home tab); only the
 /// first run sees the static [IntroScreen]. While the persisted flag is
 /// still loading, a plain black stage renders — visually continuous with
 /// the system splash, no spinner, no chrome.
@@ -43,7 +45,7 @@ class _IntroGateState extends State<IntroGate> {
         body: SizedBox.expand(),
       );
     }
-    if (seen) return const HomeScreen();
+    if (seen) return const WwShell();
     return const IntroScreen();
   }
 }
@@ -59,7 +61,7 @@ class IntroScreen extends StatelessWidget {
     await prefs.setBool(IntroGate.introSeenKey, true);
     if (!context.mounted) return;
     await Navigator.of(context)
-        .pushReplacement(WwPageRoute(builder: (_) => const HomeScreen()));
+        .pushReplacement(WwPageRoute(builder: (_) => const WwShell()));
   }
 
   @override

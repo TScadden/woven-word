@@ -14,8 +14,10 @@ import 'fake_canon.dart';
 
 /// Board run 8, spec §4 / §7: the Library conference browse —
 /// root tile (ON-only, dataset-non-empty, counts counted at
-/// render), conferences list, talks list, and the talk view in
-/// its three Gospel Library forms. All semantics labels are
+/// render), conferences list, talks list, and the talk view's
+/// routed read action in its forms (Gospel Library per-talk /
+/// Citation Index / residual conference fallback / neither —
+/// §4.4.1 as amended Oct 14, 2026). All semantics labels are
 /// asserted against the semantics tree (lesson 25).
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -356,6 +358,9 @@ void main() {
       expect(find.text('Takashi Wada'), findsOneWidget);
       expect(find.text('October 2024 General Conference'), findsOneWidget);
       expect(find.text('Read in Gospel Library'), findsOneWidget);
+      // Wada's row also carries an Index page: the per-talk Gospel
+      // Library link wins the routing (precedence is data-driven).
+      expect(find.text('Read in Citation Index'), findsNothing);
       expect(
         find.bySemanticsLabel(
           'Read ${wada.title} in Gospel Library, opens external '
@@ -427,9 +432,10 @@ void main() {
       semantics.dispose();
     });
 
-    testWidgets('Form B: conference-fallback label, mandatory '
-        'C-18 caption, Form B semantics, launch uses the '
-        'conference link', (tester) async {
+    testWidgets('Form C: a c:1 talk with an Index page routes to '
+        'the Citation Index (amended §4.4.1) — Index label and '
+        'semantics naming the Index, no Form B caption, launch '
+        'uses the talk’s own Index page', (tester) async {
       final semantics = tester.ensureSemantics();
       final cook = conf.talkById(4)!;
       Uri? launched;
@@ -441,11 +447,82 @@ void main() {
           return true;
         },
       );
+      expect(find.text('Read in Citation Index'), findsOneWidget);
+      expect(find.text('Read in Gospel Library'), findsNothing);
+      expect(
+        find.text('Open this conference in Gospel Library'),
+        findsNothing,
+      );
+      expect(
+        find.text(
+          'This talk has no direct link, so this opens its '
+          'conference in Gospel Library.',
+        ),
+        findsNothing,
+      );
+      expect(
+        find.bySemanticsLabel(
+          'Read ${cook.title} in the Scripture Citation Index, '
+          'opens external app or website',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Read in Citation Index'));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        launched.toString(),
+        'https://scriptures.byu.edu/content/talks_ajax/8500/',
+      );
+      expect(find.byType(SnackBar), findsNothing);
+      semantics.dispose();
+    });
+
+    testWidgets('Form C launch failure lands in the C-26 snackbar '
+        'naming the Citation Index', (tester) async {
+      final cook = conf.talkById(4)!;
+      await pumpTalk(tester, cook, launcher: (uri) async => false);
+      await tester.tap(find.text('Read in Citation Index'));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.text('Could not open the Citation Index.'),
+        findsOneWidget,
+      );
+      expect(find.text('Could not open Gospel Library.'), findsNothing);
+    });
+
+    testWidgets('Form B (residual): a conference-level link with '
+        'NO Index page keeps the conference form — label, '
+        'mandatory C-18 caption, Form B semantics, launch uses '
+        'the conference link', (tester) async {
+      final semantics = tester.ensureSemantics();
+      const residual = ConferenceTalk(
+        id: 998,
+        title: 'Residual Talk',
+        speaker: 'No Index Page',
+        year: 2020,
+        session: 'A',
+        sessionName: 'Saturday Morning',
+        url: 'https://www.churchofjesuschrist.org/study/'
+            'general-conference/2020/04?lang=eng',
+        urlIsConference: true,
+      );
+      Uri? launched;
+      await pumpTalk(
+        tester,
+        residual,
+        launcher: (uri) async {
+          launched = uri;
+          return true;
+        },
+      );
       expect(
         find.text('Open this conference in Gospel Library'),
         findsOneWidget,
       );
       expect(find.text('Read in Gospel Library'), findsNothing);
+      expect(find.text('Read in Citation Index'), findsNothing);
       expect(
         find.text(
           'This talk has no direct link, so this opens its '
@@ -455,7 +532,7 @@ void main() {
       );
       expect(
         find.bySemanticsLabel(
-          'Open the October 2023 conference in Gospel Library, '
+          'Open the April 2020 conference in Gospel Library, '
           'opens external app or website',
         ),
         findsOneWidget,
@@ -463,7 +540,7 @@ void main() {
       await tester.tap(find.text('Open this conference in Gospel Library'));
       await tester.pump();
       await tester.pump();
-      expect(launched.toString(), contains('/general-conference/2023/10'));
+      expect(launched.toString(), contains('/general-conference/2020/04'));
       expect(find.byType(SnackBar), findsNothing);
       semantics.dispose();
     });
@@ -500,6 +577,7 @@ void main() {
       final freeman = conf.talkById(3)!;
       await pumpTalk(tester, freeman);
       expect(find.byType(ElevatedButton), findsNothing);
+      expect(find.text('Read in Citation Index'), findsNothing);
       expect(
         find.text('This talk is not linked in Gospel Library.'),
         findsOneWidget,

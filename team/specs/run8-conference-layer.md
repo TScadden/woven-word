@@ -232,7 +232,7 @@ Section header (verbatim):
 
 Explanatory copy (verbatim, one Text, `captionOnDark`):
 
-> Conference talks are not stored in this app. When this is on, you can see which talks cite a verse, browse talks in the Library, and open each talk in Gospel Library.
+> Conference talks are not stored in this app. When this is on, you can see which talks cite a verse, browse talks in the Library, and open each talk in Gospel Library or the Citation Index.
 
 Toggle row title (verbatim):
 
@@ -775,6 +775,46 @@ content in `bodyOnDark` (`navInk` on `surfaceHigh` = **14.27:1**,
 pass), framework-default duration, no action. A silent failed tap
 is a dead control by another name.
 
+**Amendment — founder correction, Oct 14, 2026 (run-8 fix round;
+decision record
+`team/memory/decisions/2026-10-14-conference-talk-routing-citation-index.md`).**
+The founder's screenshot of Gospel Library's own conference
+archive shows it bottoming out at the "1971–1979" bucket — nothing
+before 1971 exists there — so Form B's conference-level Gospel
+Library landing cannot serve the pre-1971 talks the layer exists
+to surface. Founder, verbatim: "We should still have the talks
+that go all the way back in our app, you just can't open them in
+Gospel Library. You have to open them in the Citation Index."
+§4.4.1 is therefore amended:
+
+- **The dataset does not shrink.** All 4,964 talks back to April
+  1942 stay. This is a link-routing change only, and routing is
+  **data-driven per talk, never a hard-coded year cutoff**.
+- **Form C — no per-talk Gospel Library link, Index page
+  recorded.** The talk's own page in the Scripture Citation Index
+  (scriptures.byu.edu; the pipeline's new `x` field, recorded from
+  the index's conference pages) replaces Form B wherever an Index
+  talk URL exists. Label (verbatim, copy C-25):
+
+  > Read in Citation Index
+
+  Semantics label: `Read {Talk title} in the Scripture Citation
+  Index, opens external app or website` (button). No caption: the
+  label promises the talk at a named destination and delivers
+  exactly that. Launch failure uses the same snackbar
+  construction with copy C-26: `Could not open the Citation
+  Index.`
+- **Form B is residual only**: it renders solely when a talk has
+  a conference-level Gospel Library link and NO Index page. In
+  the shipped dataset that set is empty (routing counts:
+  per-talk Gospel Library 3,014 · Citation Index 1,950 · residual
+  Form B 0 · neither 0).
+- **Form A is unchanged**, and it wins over Form C when both
+  links exist. The no-link caption (C-19) still renders for a
+  talk with neither a Gospel Library link nor an Index page.
+- Construction, glyph, contrast, and ≥48dp rules of §4.4.1 apply
+  to Form C unchanged (same shipped gold primary action).
+
 #### 4.4.2 Scripture rows
 
 Each row is one distinct Bible verse the talk cites, built exactly
@@ -924,7 +964,7 @@ not a data surface; the toggle's copy is governed by §2.3).
 | # | Surface | Text |
 |---|---|---|
 | C-1 | Profiles section header | `General Conference` |
-| C-2 | Profiles explanatory copy | `Conference talks are not stored in this app. When this is on, you can see which talks cite a verse, browse talks in the Library, and open each talk in Gospel Library.` |
+| C-2 | Profiles explanatory copy | `Conference talks are not stored in this app. When this is on, you can see which talks cite a verse, browse talks in the Library, and open each talk in Gospel Library or the Citation Index.` |
 | C-3 | Toggle row title | `Show conference talks` |
 | C-4 | Toggle row subtitle | `Verse connections and the Library browse` |
 | C-5 | Sheet section header | `Conference talks` |
@@ -947,6 +987,8 @@ not a data surface; the toggle's copy is governed by §2.3).
 | C-22 | Attribution | `Citation facts are from the Scripture Citation Index (scriptures.byu.edu), compiled by Richard C. Galbraith and Stephen W. Liddle.` |
 | C-23 | Talks-list safety empty state | `No talks are listed for this conference.` |
 | C-24 | Talk-view safety empty state | `No Bible verses are listed for this talk.` |
+| C-25 | Citation Index button (Form C, amended §4.4.1) | `Read in Citation Index` |
+| C-26 | Citation Index launch-failure snackbar | `Could not open the Citation Index.` |
 
 Month names are the full `April` / `October`. No copy in this run
 uses "GC", claims complete coverage of any conference or of the
@@ -974,6 +1016,7 @@ fail its test.
 | Talk view scripture row | container, button | `Open {Reference}` (e.g. `Open John 3:16`; chapter-only: `Open {Book} {Chapter}`) |
 | Gospel Library button, Form A | button (the button's own label, extended) | `Read {Talk title} in Gospel Library, opens external app or website` |
 | Gospel Library button, Form B | button | `Open the {Month} {Year} conference in Gospel Library, opens external app or website` |
+| Citation Index button, Form C | button (the button's own label, extended) | `Read {Talk title} in the Scripture Citation Index, opens external app or website` |
 | Back buttons (all browse levels) | shipped pattern | Tooltip `Back` (unchanged) |
 | Breadcrumb title buttons | shipped pattern | Tooltip `Breadcrumb` (unchanged); current item is not a control |
 

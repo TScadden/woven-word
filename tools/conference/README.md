@@ -38,8 +38,9 @@ Conference talk citation facts for the app's LDS connections layer.
 
 - Conference talk facts: the index's public conference pages
   (`scriptures.byu.edu/citation_index/gc_ajax/<year>/<A|O>`,
-  1942–2026) — speaker, title, session name, and the Gospel Library
-  watch URL the index publishes per talk.
+  1942–2026) — speaker, title, session name, the Gospel Library
+  watch URL the index publishes per talk, and the talk's own
+  Index page URL (below).
 - Citation facts: the index's public citation pages
   (`/citation_index/citation_ajax/Any/1830/2026/all/s/f/<book>/<ch>`
   lists cited verse units per chapter; `?verses=<unit>` lists the
@@ -50,23 +51,42 @@ Conference talk citation facts for the app's LDS connections layer.
 - JST-marked cited units are included as citations of the same
   Bible verses and counted separately in the run stats.
 
-## Talk links ("Read in Gospel Library")
+## Talk links (the talk view's read action)
 
-Per the founder's addition (Oct 14, 2026), talk surfaces link OUT
-to Gospel Library; the app hosts no talk content.
+Per the founder's addition (Oct 14, 2026), talk surfaces link OUT;
+the app hosts no talk content. Routing is data-driven per talk —
+never a year cutoff — per the founder correction recorded in
+`team/memory/decisions/2026-10-14-conference-talk-routing-citation-index.md`:
 
-- When the index publishes a per-talk Church URL, it is recorded
+- **Per-talk Gospel Library link → "Read in Gospel Library."**
+  When the index publishes a per-talk Church URL, it is recorded
   and normalized to the canonical form
   `https://www.churchofjesuschrist.org/study/general-conference/<year>/<month>/<slug>?lang=eng`
   (legacy `lds.org/general-conference/…` links are rebuilt into the
   same shape; the slug always comes from the index's published
   link, never guessed). These URLs are universal links: they open
   Gospel Library when installed and the web study view otherwise.
-- Talks with no per-talk link (mostly pre-1971, before the Church
-  site carries per-talk pages) link to the conference itself:
-  `…/study/general-conference/<year>/<04|10>?lang=eng`, flagged
-  `"c":1` in the asset so the UI can stay truthful about where the
-  link lands.
+- **No per-talk Gospel Library link → "Read in Citation Index."**
+  Gospel Library's own archive bottoms out at 1971–1979, so the
+  conference-level fallback below cannot serve those talks. Each
+  talk's own page on the index is recorded as asset field `"x"`.
+  The URL form comes from the index's own published structure:
+  its conference pages link each talk only via
+  `getTalk('<sci id>')`, and the site's frontend code
+  (`static/homepage/scripts/base.js`, `decodeCenter`) resolves a
+  talk id to `/content/talks_ajax/<id>/` — the endpoint that
+  serves the talk's own page (verified live 2026-10-14 for the
+  1942 talk with sci id 1 and the 1965 talk with sci id 1383).
+  The id is the one the conference page's link carries; no slug
+  or pattern is guessed. `harvest_conferences.py` records it per
+  talk (`sci_talk_url`); `--backfill-index-urls` adds it to
+  checkpointed records whose sci ids were already harvested from
+  those same pages (no re-fetch).
+- Talks with no per-talk link still carry the conference-level
+  Gospel Library URL (`…/study/general-conference/<year>/<04|10>?lang=eng`,
+  flagged `"c":1`) in the asset; the UI uses it only as the
+  residual form when a talk has no Index page (none in the
+  shipped dataset).
 
 ## Pipeline
 
@@ -114,3 +134,18 @@ Harvest, as run (all counts from the pipeline's own logs):
   conferences are missing (index-side, above); citation facts are
   exactly as complete as the index's own coverage — talks the
   index has not processed do not appear.
+
+## Run log addendum — Citation Index talk URLs (2026-10-14, fix round)
+
+- `harvest_conferences.py` now records `indexUrl` per talk
+  (`sci_talk_url`, derived as above). The checkpointed harvest
+  was backfilled with `--backfill-index-urls` — **5,874 of 5,874
+  records** gained the field from their already-harvested sci
+  ids; no pages were re-fetched.
+- `build_dataset.py` rebuilt `flutter/assets/conference.json`
+  with the new `"x"` field: dataset unchanged in scope —
+  **4,964 talks, 68,999 edges, 905 of 1,189 chapters** — and the
+  read-action routing counts are: **3,014** per-talk Gospel
+  Library, **1,950** Citation Index, **0** residual
+  conference-level, **0** neither. Asset size: **2,284,735
+  bytes**.

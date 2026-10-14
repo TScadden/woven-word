@@ -44,7 +44,8 @@ void main() {
       find.text(
         'Conference talks are not stored in this app. When this is '
         'on, you can see which talks cite a verse, browse talks in '
-        'the Library, and open each talk in Gospel Library.',
+        'the Library, and open each talk in Gospel Library or the '
+        'Citation Index.',
       ),
       findsOneWidget,
     );

@@ -532,7 +532,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         const Text(
           'Conference talks are not stored in this app. When this is '
           'on, you can see which talks cite a verse, browse talks in '
-          'the Library, and open each talk in Gospel Library.',
+          'the Library, and open each talk in Gospel Library or the '
+          'Citation Index.',
           style: WwType.captionOnDark,
         ),
         const SizedBox(height: 16),

@@ -2,10 +2,11 @@
 
 For every conference 1942..present, A (April) and O (October), fetch
 the index's conference page (/citation_index/gc_ajax/<year>/<S>) and
-record per talk: SCI talk id, speaker, title, session name, and the
+record per talk: SCI talk id, speaker, title, session name, the
 Gospel Library (churchofjesuschrist.org) watch URL the index itself
-publishes for that talk, when it has one. Facts only — no talk text
-is fetched or stored. Checkpointed to work/talks.jsonl (one JSON
+publishes for that talk, when it has one, and the talk's own page
+URL on the index itself (see sci_talk_url). Facts only — no talk
+text is fetched or stored. Checkpointed to work/talks.jsonl (one JSON
 object per talk); reruns skip conferences already recorded in
 work/conferences_done.txt.
 """
@@ -30,6 +31,22 @@ TALK_RE = re.compile(
     re.S,
 )
 WATCH_RE = re.compile(r"watchTalk\('(\d+)',\s*'([^']+)'\)")
+
+
+def sci_talk_url(tid):
+    """The talk's own page on the Scripture Citation Index.
+
+    The conference pages link each talk only through
+    getTalk('<id>') — there is no href to copy. The URL form is
+    the index's own published resolution of that link: the site's
+    frontend code (static/homepage/scripts/base.js, decodeCenter)
+    maps a talk id to /content/talks_ajax/<id>/, and that endpoint
+    serves the talk's own page (verified live 2026-10-14: id 1 =
+    the 1942 Heber J. Grant talk recorded below it in this file's
+    harvest). The id comes from the conference page's link, never
+    from a guessed slug or pattern over titles.
+    """
+    return f"https://scriptures.byu.edu/content/talks_ajax/{tid}/"
 
 
 def clean(s):
@@ -82,12 +99,38 @@ def parse_conference(html, year, session):
                     "session": session,
                     "sessionName": session_name,
                     "url": watch.get(tid),
+                    "indexUrl": sci_talk_url(tid),
                 }
             )
     return talks
 
 
+def backfill_index_urls():
+    """Add indexUrl to checkpointed talks.jsonl records that predate
+    the field. No fetches: each record's sci id was itself recorded
+    from the conference page's getTalk link, so the URL derives
+    from data the harvest already took from those pages. Order and
+    all other fields are preserved byte-for-byte per record (the
+    JSON is re-serialized with the same separators json.dumps
+    produced originally)."""
+    path = os.path.join(WORK, "talks.jsonl")
+    lines = open(path, encoding="utf-8").read().splitlines()
+    out, added = [], 0
+    for line in lines:
+        t = json.loads(line)
+        if not t.get("indexUrl"):
+            t["indexUrl"] = sci_talk_url(t["sci"])
+            added += 1
+        out.append(json.dumps(t, ensure_ascii=False))
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(out) + "\n")
+    print(f"backfilled indexUrl on {added} of {len(out)} records")
+
+
 def main():
+    if "--backfill-index-urls" in sys.argv:
+        backfill_index_urls()
+        return
     os.makedirs(WORK, exist_ok=True)
     done_path = os.path.join(WORK, "conferences_done.txt")
     done = set()

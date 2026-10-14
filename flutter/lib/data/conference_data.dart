@@ -10,7 +10,7 @@ import 'bible_data.dart';
 ///
 /// Mirrors one row of the bundled `assets/conference.json` talks
 /// table, which the studio pipeline emits in the compact shape
-/// `{"i","t","s","y","e","n","u","c"}`; [ConferenceData.parse]
+/// `{"i","t","s","y","e","n","u","c","x"}`; [ConferenceData.parse]
 /// expands it to these named fields.
 class ConferenceTalk {
   const ConferenceTalk({
@@ -22,6 +22,7 @@ class ConferenceTalk {
     required this.sessionName,
     required this.url,
     required this.urlIsConference,
+    this.indexUrl,
   });
 
   /// Stable id: the talk's index in the bundled talks table, and
@@ -50,6 +51,14 @@ class ConferenceTalk {
   /// the pipeline's `c: 1` flag. A reader action can use this to
   /// label the link honestly.
   final bool urlIsConference;
+
+  /// The talk's own page on the Scripture Citation Index
+  /// (scriptures.byu.edu) — the pipeline's `x` field, recorded
+  /// from the index's conference pages (founder correction,
+  /// Oct 14, 2026: Gospel Library's archive bottoms out at
+  /// 1971–1979, so a talk with no per-talk Gospel Library link
+  /// opens here instead). Null when the pipeline recorded none.
+  final String? indexUrl;
 
   /// 'April 2024' / 'October 2024'.
   String get conferenceLabel => '${session == 'O' ? 'October' : 'April'} $year';
@@ -93,10 +102,12 @@ ConferenceData _parsePayload((String, List<List<int>>) args) {
 /// ```
 /// {"v":1,
 ///  "talks":[{"i":0,"t":"title","s":"speaker","y":2024,"e":"O",
-///            "n":"Sunday Morning","u":"https://… or null","c":0}],
+///            "n":"Sunday Morning","u":"https://… or null","c":0,
+///            "x":"https://scriptures.byu.edu/… or null"}],
 ///  "edges":[[talkId, globalChapterZeroBased, verse], …]}
 /// ```
-/// `c` is 1 when `u` is a conference-level fallback link. Edges
+/// `c` is 1 when `u` is a conference-level fallback link; `x` is
+/// the talk's own Scripture Citation Index page, or null. Edges
 /// are verse-level and may contain duplicates (overlapping cited
 /// ranges emit the same verse twice) — [parse] dedupes them.
 ///
@@ -269,6 +280,7 @@ class ConferenceData {
       for (final raw in rawTalks) {
         if (raw is! Map) continue;
         final urlRaw = raw['u'];
+        final indexRaw = raw['x'];
         final talk = ConferenceTalk(
           id: (raw['i'] as num).toInt(),
           title: raw['t'] as String,
@@ -278,6 +290,7 @@ class ConferenceData {
           sessionName: raw['n'] as String,
           url: urlRaw is String ? urlRaw : null,
           urlIsConference: (raw['c'] as num? ?? 0).toInt() == 1,
+          indexUrl: indexRaw is String ? indexRaw : null,
         );
         talks.add(talk);
         byId[talk.id] = talk;

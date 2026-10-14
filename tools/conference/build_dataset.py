@@ -10,13 +10,19 @@ Inputs (tools/conference/work/):
 Output asset shape (fixed contract with the app):
   {"v":1,
    "talks":[{"i":int,"t":title,"s":speaker,"y":year,"e":"A"|"O",
-             "n":sessionName,"u":url-or-fallback,"c":0|1}],
+             "n":sessionName,"u":url-or-fallback,"c":0|1,
+             "x":index-talk-url-or-null}],
    "edges":[[talkId, globalChapterZeroBased, verse], ...]}
 "c" is 1 when "u" is the conference-level fallback link (talks with
-no per-talk link, mostly pre-1971). Only talks citing at least one
-Bible verse appear — this is a Bible app's dataset. Cited units are
-expanded to verse-level edges and deduplicated; verses are clamped
-to the KJV/WEB canon in flutter/assets/data.json.
+no per-talk link, mostly pre-1971). "x" is the talk's own page on
+the Scripture Citation Index (scriptures.byu.edu), recorded by
+harvest_conferences.py from the index's conference pages — the
+founder's Oct 14, 2026 routing correction: talks with no per-talk
+Gospel Library link open in the Citation Index, because Gospel
+Library's own archive bottoms out at 1971–1979. Only talks citing
+at least one Bible verse appear — this is a Bible app's dataset.
+Cited units are expanded to verse-level edges and deduplicated;
+verses are clamped to the KJV/WEB canon in flutter/assets/data.json.
 """
 import json
 import os
@@ -88,6 +94,10 @@ def main():
                 "sci": sci, "speaker": r["speaker"], "title": r["title"],
                 "year": r["year"], "session": r["session"],
                 "sessionName": "", "url": None,
+                # Same published form harvest_conferences.sci_talk_url
+                # records from the conference pages' getTalk links.
+                "indexUrl": ("https://scriptures.byu.edu/content/"
+                             f"talks_ajax/{sci}/"),
             }
             synthesized += 1
         b, ch = r["book"], r["ch"]
@@ -131,6 +141,7 @@ def main():
             "i": app_id[sci], "t": t["title"], "s": t["speaker"],
             "y": t["year"], "e": t["session"],
             "n": t.get("sessionName", ""), "u": url, "c": c,
+            "x": t.get("indexUrl"),
         })
     edges_out = sorted([app_id[s], g, v] for s, g, v in edge_set)
     asset = {"v": 1, "talks": talks_out, "edges": edges_out}
@@ -141,11 +152,24 @@ def main():
     confs = {(t["y"], t["e"]) for t in talks_out}
     chapters_hit = {g for _s, g, _v in edge_set}
     with_url = sum(1 for t in talks_out if t["c"] == 0)
+    # Read-action routing (founder correction, Oct 14, 2026), counted
+    # in the app's own precedence: per-talk Gospel Library first,
+    # then the talk's Citation Index page, then the residual
+    # conference-level Gospel Library link, then neither.
+    route_gl = sum(1 for t in talks_out if t["c"] == 0)
+    route_ci = sum(1 for t in talks_out if t["c"] == 1 and t["x"])
+    route_conf = sum(1 for t in talks_out if t["c"] == 1 and not t["x"]
+                     and t["u"])
+    route_none = sum(1 for t in talks_out if t["c"] == 1 and not t["x"]
+                     and not t["u"])
     print(f"talks in dataset: {len(talks_out)} across {len(confs)} "
           f"conferences ({min(t['y'] for t in talks_out)}–"
           f"{max(t['y'] for t in talks_out)})")
     print(f"talks with per-talk Gospel Library link: {with_url}; "
           f"conference-level fallback: {len(talks_out) - with_url}")
+    print(f"read-action routing: Gospel Library per-talk {route_gl}; "
+          f"Citation Index {route_ci}; conference-level residual "
+          f"{route_conf}; neither {route_none}")
     print(f"chapters with >=1 edge: {len(chapters_hit)}/{total_chapters}")
     print(f"asset bytes: {os.path.getsize(out_path)} -> {out_path}")
     json.dump({
@@ -153,6 +177,8 @@ def main():
         "jstEdges": jst_edges, "conferences": len(confs),
         "chaptersHit": len(chapters_hit), "totalChapters": total_chapters,
         "withTalkUrl": with_url, "fallbackUrl": len(talks_out) - with_url,
+        "routeGospelLibrary": route_gl, "routeCitationIndex": route_ci,
+        "routeConferenceResidual": route_conf, "routeNeither": route_none,
         "synthesizedTalks": synthesized,
         "bytes": os.path.getsize(out_path),
     }, open(os.path.join(WORK, "dataset_stats.json"), "w"), indent=2)

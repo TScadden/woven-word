@@ -16,7 +16,8 @@ import 'reader_screen.dart';
 /// the profile/My Notes list rows, the gold primary action — and
 /// hosts citation FACTS only: talk title, speaker, conference,
 /// and the Bible references it cites. Talk text is never hosted;
-/// the one way out is the talk view's Gospel Library action.
+/// the one way out is the talk view's routed read action
+/// (Gospel Library per-talk, else the talk's Citation Index page).
 
 /// Attribution (spec §5, copy C-22): plain text, in exactly two
 /// placements — the conferences list footer and the talk view
@@ -289,7 +290,8 @@ class ConferenceTalksScreen extends StatelessWidget {
 
 /// The talk view (spec §4.4): facts about one talk and the Bible
 /// verses it cites, in the spec's exact body order, with the
-/// Gospel Library action (§4.4.1) above the scripture list.
+/// routed read action (§4.4.1, as amended Oct 14, 2026) above the
+/// scripture list.
 class TalkViewScreen extends StatefulWidget {
   const TalkViewScreen({
     super.key,
@@ -362,12 +364,11 @@ class _TalkViewScreenState extends State<TalkViewScreen> {
   Future<bool> _defaultLaunch(Uri uri) =>
       launchUrl(uri, mode: LaunchMode.externalApplication);
 
-  /// The Gospel Library action (§4.4.1): a failed open is never
-  /// silent — it lands in the run-6 snackbar construction with
-  /// copy C-20.
-  Future<void> _openInGospelLibrary() async {
-    final url = widget.talk.url;
-    if (url == null) return;
+  /// Opens the read action's target (§4.4.1 as amended): a failed
+  /// open is never silent — it lands in the run-6 snackbar
+  /// construction with the destination's own failure copy (C-20
+  /// for Gospel Library, C-26 for the Citation Index).
+  Future<void> _openExternal(String url, String failureCopy) async {
     var ok = false;
     try {
       ok = await (widget.externalLauncher ?? _defaultLaunch)(
@@ -384,10 +385,7 @@ class _TalkViewScreenState extends State<TalkViewScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(WwRadius.chip),
         ),
-        content: const Text(
-          'Could not open Gospel Library.',
-          style: WwType.bodyOnDark,
-        ),
+        content: Text(failureCopy, style: WwType.bodyOnDark),
       ),
     );
   }
@@ -441,7 +439,7 @@ class _TalkViewScreenState extends State<TalkViewScreen> {
           style: WwType.captionOnDark,
         ),
         const SizedBox(height: 16),
-        ..._gospelAction(),
+        ..._readAction(),
         const SizedBox(height: 24),
         const Text('Scriptures cited', style: WwType.refLabelOnDark),
         const SizedBox(height: 8),
@@ -460,28 +458,57 @@ class _TalkViewScreenState extends State<TalkViewScreen> {
     );
   }
 
-  /// The Gospel Library action in its three ruled forms
-  /// (§4.4.1): Form A (per-talk link), Form B (conference-level
-  /// fallback, with its mandatory caption), and the no-link
-  /// caption in the button's place. No disabled form exists.
-  List<Widget> _gospelAction() {
+  /// The read action in its ruled forms (§4.4.1 as amended by
+  /// the founder correction, Oct 14, 2026). Routing is data-driven
+  /// per talk — never a year cutoff:
+  ///  * Form A — a per-talk Gospel Library link: "Read in Gospel
+  ///    Library".
+  ///  * Form C — no per-talk Gospel Library link, but the talk's
+  ///    own Scripture Citation Index page is recorded: "Read in
+  ///    Citation Index". This replaces Form B for that set
+  ///    (Gospel Library's own archive bottoms out at 1971–1979;
+  ///    the Index carries the talks back to 1942).
+  ///  * Form B (residual) — a conference-level Gospel Library
+  ///    link only, with its mandatory caption.
+  ///  * Neither link — the no-link caption in the button's place.
+  /// No disabled form exists.
+  List<Widget> _readAction() {
     final talk = widget.talk;
     final url = talk.url;
-    if (url == null) {
-      return const [
-        Text(
-          'This talk is not linked in Gospel Library.',
-          style: WwType.captionOnDark,
+    if (url != null && !talk.urlIsConference) {
+      return [
+        _readButton(
+          label: 'Read in Gospel Library',
+          semanticsLabel:
+              'Read ${talk.title} in Gospel Library, opens external '
+              'app or website',
+          target: url,
+          failureCopy: 'Could not open Gospel Library.',
         ),
       ];
     }
-    if (talk.urlIsConference) {
+    final indexUrl = talk.indexUrl;
+    if (indexUrl != null) {
       return [
-        _gospelButton(
+        _readButton(
+          label: 'Read in Citation Index',
+          semanticsLabel:
+              'Read ${talk.title} in the Scripture Citation Index, '
+              'opens external app or website',
+          target: indexUrl,
+          failureCopy: 'Could not open the Citation Index.',
+        ),
+      ];
+    }
+    if (url != null) {
+      return [
+        _readButton(
           label: 'Open this conference in Gospel Library',
           semanticsLabel:
               'Open the ${talk.conferenceLabel} conference in Gospel '
               'Library, opens external app or website',
+          target: url,
+          failureCopy: 'Could not open Gospel Library.',
         ),
         const SizedBox(height: 8),
         const Text(
@@ -491,19 +518,19 @@ class _TalkViewScreenState extends State<TalkViewScreen> {
         ),
       ];
     }
-    return [
-      _gospelButton(
-        label: 'Read in Gospel Library',
-        semanticsLabel:
-            'Read ${talk.title} in Gospel Library, opens external '
-            'app or website',
+    return const [
+      Text(
+        'This talk is not linked in Gospel Library.',
+        style: WwType.captionOnDark,
       ),
     ];
   }
 
-  Widget _gospelButton({
+  Widget _readButton({
     required String label,
     required String semanticsLabel,
+    required String target,
+    required String failureCopy,
   }) {
     return Semantics(
       container: true,
@@ -511,7 +538,7 @@ class _TalkViewScreenState extends State<TalkViewScreen> {
       label: semanticsLabel,
       child: ExcludeSemantics(
         child: ElevatedButton(
-          onPressed: _openInGospelLibrary,
+          onPressed: () => _openExternal(target, failureCopy),
           style: ElevatedButton.styleFrom(
             backgroundColor: WwColors.goldBright,
             foregroundColor: WwColors.onGold,

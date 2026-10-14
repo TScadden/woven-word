@@ -44,6 +44,11 @@ void main() {
       expect(wada.sessionName, 'Sunday Afternoon');
       expect(wada.url, startsWith('https://www.churchofjesuschrist.org/'));
       expect(wada.urlIsConference, isFalse);
+      // The pipeline's x field: the talk's own Citation Index page.
+      expect(
+        wada.indexUrl,
+        'https://scriptures.byu.edu/content/talks_ajax/8801/',
+      );
       expect(wada.conferenceLabel, 'October 2024');
 
       final uchtdorf = data.talkById(2)!;
@@ -55,12 +60,21 @@ void main() {
       final freeman = data.talkById(3)!;
       expect(freeman.url, isNull);
       expect(freeman.urlIsConference, isFalse);
+      // No x field in the fixture row: the Index page stays null
+      // (Freeman is the fixture's neither-link talk).
+      expect(freeman.indexUrl, isNull);
     });
 
     test('c:1 marks the conference-level fallback link', () {
       final cook = data.talkById(4)!;
       expect(cook.url, contains('/general-conference/2023/10'));
       expect(cook.urlIsConference, isTrue);
+      // …and his x field carries his own Citation Index page, the
+      // amended routing's target for the c:1 set.
+      expect(
+        cook.indexUrl,
+        'https://scriptures.byu.edu/content/talks_ajax/8500/',
+      );
     });
 
     test('unknown talk id resolves to null', () {
@@ -251,6 +265,64 @@ void main() {
       expect(data.edgeCount, 23);
       expect(data.firstYear, 1990);
       expect(data.lastYear, 2024);
+    });
+
+    test('the shipped dataset: routing counts under the amended '
+        'rule (founder correction, Oct 14 2026)', () {
+      final realCanon = BibleData.fromJsonString(
+        File('assets/data.json').readAsStringSync(),
+      );
+      final shipped = ConferenceData.fromCanon(
+        File('assets/conference.json').readAsStringSync(),
+        realCanon,
+      );
+      // The dataset does not shrink: every talk back to April
+      // 1942 stays, and every talk carries its Citation Index
+      // page (the harvest records one per conference-page link).
+      expect(shipped.talkCount, 4964);
+      expect(shipped.firstYear, 1942);
+      expect(shipped.edgeCount, 68999);
+      expect(shipped.talks.where((t) => t.indexUrl != null).length, 4964);
+      expect(
+        shipped.talks.every(
+          (t) => t.indexUrl!.startsWith(
+            'https://scriptures.byu.edu/content/talks_ajax/',
+          ),
+        ),
+        isTrue,
+      );
+      // Routing, in the app's precedence (data-driven, no year
+      // cutoff): per-talk Gospel Library / Citation Index /
+      // residual conference link / neither.
+      bool perTalkGl(ConferenceTalk t) => t.url != null && !t.urlIsConference;
+      expect(shipped.talks.where(perTalkGl).length, 3014);
+      expect(
+        shipped.talks.where((t) => !perTalkGl(t) && t.indexUrl != null).length,
+        1950,
+      );
+      expect(
+        shipped.talks
+            .where((t) => !perTalkGl(t) && t.indexUrl == null && t.url != null)
+            .length,
+        0,
+      );
+      expect(
+        shipped.talks.where((t) => !perTalkGl(t) && t.indexUrl == null).length,
+        0,
+      );
+      // The dataset's first talk (April 1942, dataset order)
+      // routes to its own Index page: its only Gospel Library
+      // link is the conference-level fallback (c:1), which the
+      // amended routing no longer uses when an Index page exists.
+      final first = shipped.talks.first;
+      expect(first.year, 1942);
+      expect(first.title, 'Upholding the Hands of Our Leaders');
+      expect(first.urlIsConference, isTrue);
+      expect(first.url, contains('/general-conference/1942/04'));
+      expect(
+        first.indexUrl,
+        'https://scriptures.byu.edu/content/talks_ajax/3/',
+      );
     });
 
     test('the empty placeholder dataset parses to empty coverage', () {

@@ -529,7 +529,13 @@ class _TalkViewScreenState extends State<TalkViewScreen> {
                 color: WwColors.onGold,
               ),
               const SizedBox(width: 8),
-              Text(label, style: WwType.goldButtonLabel),
+              Flexible(
+                child: Text(
+                  label,
+                  style: WwType.goldButtonLabel,
+                  textAlign: TextAlign.center,
+                ),
+              ),
             ],
           ),
         ),

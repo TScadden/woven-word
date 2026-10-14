@@ -54,6 +54,10 @@
   #sheet .row{display:flex; gap:8px; margin-top:10px}
   #sheet .row button{flex:1; padding:12px; border-radius:10px; border:1px solid #3a3a46; background:#22222c; color:var(--nav-ink); font-size:14px; cursor:pointer}
   #sheet .row button.primary{background:var(--gold); color:#161300; border-color:var(--gold); font-weight:700}
+  /* translation bar */
+  #transBar{display:flex; gap:6px; justify-content:center; margin:4px 0 2px}
+  #transBar button{padding:7px 14px; border-radius:999px; border:1px solid var(--line); background:#fff; color:var(--muted); font-size:12.5px; cursor:pointer}
+  #transBar button.on{background:var(--gold); border-color:var(--gold); color:#fff; font-weight:700}
   /* read view */
   #readView{background:var(--paper); color:var(--ink); overflow-y:auto; -webkit-overflow-scrolling:touch}
   #readInner{max-width:680px; margin:0 auto; padding:18px 20px 120px}
@@ -142,6 +146,10 @@
 
 <section id="readView" class="view">
   <div id="readInner">
+    <div id="transBar">
+      <button data-t="kjv" class="on">King James</button>
+      <button data-t="web">World English</button>
+    </div>
     <div id="readHead"><div class="book" id="rhBook"></div><div class="chap" id="rhChap"></div></div>
     <div id="readBody"></div>
   </div>

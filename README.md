@@ -22,7 +22,9 @@ something you can explore and read:
 
 - Cross references: [OpenBible.info](https://www.openbible.info/labs/cross-references/)
   (CC BY), built on the Treasury of Scripture Knowledge (public domain).
-- Scripture text: King James Version (public domain).
+- Scripture texts, both public domain: King James Version, and the World
+  English Bible (via [ebible.org](https://ebible.org)). Woven Word ships
+  only copyright-free texts; switch translations at the top of any chapter.
 - Inspiration: Chris Harrison and Christoph Römhild's Bible cross-reference
   visualization.
 

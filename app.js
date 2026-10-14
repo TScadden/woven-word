@@ -5,6 +5,8 @@ const $ = s => document.querySelector(s);
 const loadMsg = t => { const el = $('#loadMsg'); if (el) el.textContent = t; };
 
 let DATA = null, KJV = null;
+let TEXTS = { kjv: null, web: null };
+let trans = localStorage.getItem('ww_trans') || 'kjv';
 let chapterStart = [];   // global verse offset per chapter
 let totalVerses = 0;
 let refsByVerse = new Map();   // "ch:v" -> [[ch2,v2,votes],...]
@@ -53,7 +55,10 @@ async function loadData(){
   loadMsg('Loading the web of connections…');
   DATA = await (await fetch('data.json')).json();
   loadMsg('Loading the King James text…');
-  KJV = await (await fetch('kjv.json')).json();
+  TEXTS.kjv = await (await fetch('kjv.json')).json();
+  KJV = TEXTS.kjv;
+  loadMsg('Loading the World English Bible…');
+  TEXTS.web = await (await fetch('web.json')).json();
   let acc = 0;
   chapterStart = DATA.chapters.map(c => { const s = acc; acc += c.v; return s; });
   totalVerses = acc;
@@ -192,7 +197,8 @@ function openChapter(ch, flashVerse){
   const c = DATA.chapters[ch], book = DATA.books[c.b];
   $('#rhBook').textContent = 'The Book of ' + book.name.replace(/^\d /, '');
   $('#rhChap').innerHTML = `${book.name} <small>CHAPTER ${c.c}</small>`;
-  const verses = KJV[c.b][c.c - 1];
+  const verses = (TEXTS[trans] || TEXTS.kjv)[c.b][c.c - 1];
+  document.querySelectorAll('#transBar button').forEach(b => b.classList.toggle('on', b.dataset.t === trans));
   $('#readBody').innerHTML = verses.map((t, i) => {
     const v = i + 1, key = ch + ':' + v;
     const hl = pdata.hl[key], note = pdata.notes[key];
@@ -243,7 +249,7 @@ function selectVerse(ch, v){
 function hideVerseBar(){ $('#verseBar').classList.remove('open'); selVerse = null; }
 function verseText(ch, v){
   const c = DATA.chapters[ch];
-  return (KJV[c.b][c.c - 1][v - 1] || '');
+  return ((TEXTS[trans] || TEXTS.kjv)[c.b][c.c - 1][v - 1] || '');
 }
 function showConnections(ch, v){
   const list = [...(refsByVerse.get(ch + ':' + v) || [])].sort((a, b) => b[2] - a[2]);
@@ -351,6 +357,10 @@ $('#prevCh').onclick = () => { if (readChapter > 0) openChapter(readChapter - 1)
 $('#nextCh').onclick = () => { if (readChapter < 1188) openChapter(readChapter + 1); };
 $('#toWeb').onclick = () => showView('webView');
 $('#notesBtn').onclick = showNotes;
+document.querySelectorAll('#transBar button').forEach(b => b.onclick = () => {
+  trans = b.dataset.t; localStorage.setItem('ww_trans', trans);
+  if (readChapter !== null) openChapter(readChapter);
+});
 $('#profileBtn').onclick = showProfiles;
 window.addEventListener('resize', () => { if ($('#webView').classList.contains('active')) drawWeb(); });
 

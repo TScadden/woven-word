@@ -145,3 +145,31 @@ rounds Rusty ran before the studio was founded).
     is carried by a 2dp outline in an audited color, checked against
     BOTH adjacencies (the composite inside, 3.35–4.11; the paper
     outside, 4.62). Compute the matrix before assigning any role.
+
+## Profiles, notes list & presentation defaults (board run 5)
+18. **A defensive filter needs BOTH bounds; parse-acceptance is not
+    validity.** `parseVerseKey`'s `\d+` accepts 0, so a corrupt-store
+    key `b0c0v1` passed an upper-bounds-only canon filter and computed
+    global chapter −1 — a RangeError in the reference label, the exact
+    crash the filter existed to prevent (Maren's catch at verify).
+    Any code turning a parsed key back into an index checks chapter
+    ≥ 1 and verse ≥ 1 as well, and the regression case for the input
+    that motivated the guard ships in the same package.
+19. **Profiles are a store concern, not a screen concern.** Run 5
+    extended `UserData` (names map, sequence-allocated ids, resolved
+    active id) and the reader changed exactly one field; home stayed
+    read-only. The active id RESOLVES in the model — stored choice,
+    else default, else first profile — so a stale stored id can
+    never strand a screen, and the resolved value self-heals on the
+    next save. Document v2 defaulted its new fields on load, so run
+    4's shipped data carried over with no destructive migration.
+20. **Presentation defaults are traps; set every surface explicitly.**
+    Petra's run-5 gate: the theme's input fill is dark-tuned
+    (surfaceHigh — wrong on paper sheets AND wrong level inside
+    surfaceHigh dialogs), the Material dialog default surface is the
+    wrong elevation and its 28dp corner is off the closed radius
+    scale, and stock dialog/sheet entrances ignore
+    `MediaQuery.disableAnimations`. Every new dialog or sheet sets
+    its background, tint, radius, field decoration, and
+    reduced-motion behavior explicitly — each guarded default fails
+    silently in code review and only surfaces on the phone.

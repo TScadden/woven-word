@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'screens/splash_screen.dart';
+import 'screens/intro_screen.dart';
 import 'theme/ww_theme.dart';
 
 void main() {
@@ -16,7 +16,7 @@ class WovenWordApp extends StatelessWidget {
       title: 'Woven Word',
       debugShowCheckedModeBanner: false,
       theme: wwTheme(),
-      home: const SplashGate(),
+      home: const IntroGate(),
     );
   }
 }

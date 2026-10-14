@@ -65,6 +65,15 @@ class WwType {
     letterSpacing: 0.4,
     color: WwColors.goldBright,
   );
+  /// Splash wordmark: the app name typed out on the opening stage.
+  static const wordmark = TextStyle(
+    fontFamily: serif,
+    fontFamilyFallback: serifFallback,
+    fontSize: 56,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 1.2,
+    color: WwColors.navInk,
+  );
   static const appSubtitle = TextStyle(
     fontSize: 10,
     fontWeight: FontWeight.w600,

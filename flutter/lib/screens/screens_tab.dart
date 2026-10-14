@@ -161,17 +161,22 @@ class ScreensTab extends StatelessWidget {
                   color: WwColors.goldBright,
                 ),
               if (screens.length > 1)
-                IconButton(
-                  tooltip: 'Close screen',
-                  onPressed: () => onClose(i),
-                  icon: const Icon(
-                    Icons.close,
-                    size: 20,
-                    color: WwColors.navInk,
-                  ),
-                  constraints: const BoxConstraints(
-                    minWidth: WwSpace.minTarget,
-                    minHeight: WwSpace.minTarget,
+                Semantics(
+                  container: true,
+                  button: true,
+                  label: 'Close screen: $title',
+                  child: IconButton(
+                    tooltip: 'Close screen',
+                    onPressed: () => onClose(i),
+                    icon: const Icon(
+                      Icons.close,
+                      size: 20,
+                      color: WwColors.navInk,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: WwSpace.minTarget,
+                      minHeight: WwSpace.minTarget,
+                    ),
                   ),
                 ),
             ],

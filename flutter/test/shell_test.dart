@@ -266,6 +266,40 @@ void main() {
     });
   });
 
+  group('SCREENS — §6.3 close semantics', () {
+    testWidgets('close button semantics label names the bound place',
+        (tester) async {
+      addTearDown(tester.view.reset);
+      final semantics = tester.ensureSemantics();
+      final psalms119 = data.books[18].start + 118;
+      final screensDoc = jsonEncode({
+        'active': 0,
+        'screens': [
+          {'book': 18, 'chapter': psalms119, 'anchor': 84},
+          {'book': 0, 'chapter': data.books[0].start, 'anchor': null},
+        ],
+      });
+      await pump(
+        tester,
+        prefs: {'ww_shell_tab': 'screens', 'ww_screens_v1': screensDoc},
+      );
+      expect(find.text('Psalms 119'), findsWidgets);
+      // §6.3: the close button's semantics label names the place it
+      // closes — not the bare tooltip label alone.
+      expect(
+        find.bySemanticsLabel('Close screen: Psalms 119'),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsLabel('Close screen: Genesis 1'),
+        findsOneWidget,
+      );
+      // §6.1: the tooltip itself stays 'Close screen'.
+      expect(find.byTooltip('Close screen'), findsNWidgets(2));
+      semantics.dispose();
+    });
+  });
+
   group('STORE — persistence and search', () {
     testWidgets('STORE-3 relaunch restores tab, screens, selection, '
         'translation; scope key removed', (tester) async {

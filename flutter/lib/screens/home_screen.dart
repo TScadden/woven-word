@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import '../data/bible_data.dart';
 import '../data/user_data.dart';
 import '../theme/ww_theme.dart';
 import '../widgets/arc_stage.dart';
+import '../widgets/home_layout.dart';
 import 'my_notes_screen.dart';
 import 'profiles_screen.dart';
 import 'reader_screen.dart';
@@ -21,7 +23,11 @@ import 'reader_screen.dart';
 /// Oct 13, 2026). Scope and jump search carry over from the retired
 /// arc explorer screen.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.dataLoader});
+
+  /// Loads the Bible dataset; defaults to [BibleData.load]. Tests
+  /// inject a fake canon through this seam.
+  final Future<BibleData> Function()? dataLoader;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -69,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _load() async {
     try {
-      final data = await BibleData.load();
+      final data = await (widget.dataLoader ?? BibleData.load)();
       if (!mounted) return;
       await _reloadUserData();
       if (!mounted) return;
@@ -243,17 +249,47 @@ class _HomeScreenState extends State<HomeScreen> {
     _persistState();
   }
 
+  /// Scrolls the list so [bookIndex]'s section sits at the top of
+  /// the scroll viewport. The list is lazy — a never-built section
+  /// has no context to `ensureVisible` — so the target offset comes
+  /// from the exact layout model (`home_layout.dart`), computed
+  /// against the CURRENT (post-jump) state: this runs in a
+  /// post-frame callback after the jump's own `setState`, so the
+  /// scope and selection panel it measures are the ones the jump
+  /// produced (board run 6, Petra spec §1.2).
   void _scrollToBook(int bookIndex) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final ctx = _bookKeys[bookIndex]?.currentContext;
-      if (ctx == null) return;
-      Scrollable.ensureVisible(
-        ctx,
-        duration: WwMotion.reduced(ctx) ? Duration.zero : WwMotion.push,
-        curve: Curves.easeOut,
-        alignment: 0.0,
+      final data = _data;
+      if (data == null || !_scrollCtl.hasClients) return;
+      final selected = _selected;
+      // The model's text metrics must be the ones the list's texts
+      // actually render with: the ambient DefaultTextStyle inside
+      // the Scaffold (this State's own context sits above it and
+      // sees a different default), so measure from the scrollable's
+      // context.
+      final scrollContext = _scrollCtl.position.context.storageContext;
+      final model = HomeLayout(
+        data: data,
+        scope: _scope,
+        viewportWidth: MediaQuery.sizeOf(scrollContext).width,
+        textScaler: MediaQuery.textScalerOf(scrollContext),
+        ambientStyle: DefaultTextStyle.of(scrollContext).style,
+        panel: selected == null ? null : homePanelData(data, selected),
       );
+      final target = math.min(
+        model.offsetOfBook(bookIndex),
+        _scrollCtl.position.maxScrollExtent,
+      );
+      if (WwMotion.reduced(context)) {
+        _scrollCtl.jumpTo(target);
+      } else {
+        _scrollCtl.animateTo(
+          target,
+          duration: WwMotion.push,
+          curve: WwMotion.curve,
+        );
+      }
     });
   }
 

@@ -570,7 +570,7 @@ class _TalkViewScreenState extends State<TalkViewScreen> {
               constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(
                     child: Column(

@@ -264,8 +264,19 @@ void main() {
 
     Future<SharedPreferences> prefs() => SharedPreferences.getInstance();
 
+    /// Board run 8 (§2.1) put the General Conference section
+    /// above Backup, so Profiles is now taller than this suite's
+    /// default viewport and the Backup rows build only once
+    /// scrolled into view — as a user reaches them. Scroll first;
+    /// every assertion in this group is unchanged.
+    Future<void> scrollToRow(WidgetTester tester, String label) async {
+      await tester.scrollUntilVisible(find.text(label), 100);
+      await tester.pump();
+    }
+
     testWidgets('section renders with verbatim copy', (tester) async {
       await pumpProfiles(tester);
+      await scrollToRow(tester, 'Import backup');
       expect(find.text('Backup'), findsOneWidget);
       expect(
         find.text(
@@ -292,6 +303,7 @@ void main() {
         (tester) async {
       String? shared;
       await pumpProfiles(tester, share: (json) async => shared = json);
+      await scrollToRow(tester, 'Export backup');
       await tester.tap(find.text('Export backup'));
       await tester.pump();
       await tester.pump();
@@ -303,6 +315,7 @@ void main() {
 
     testWidgets('picker cancellation is silent', (tester) async {
       await pumpProfiles(tester, picker: () async => null);
+      await scrollToRow(tester, 'Import backup');
       await tester.tap(find.text('Import backup'));
       await tester.pump();
       await tester.pump();
@@ -320,6 +333,7 @@ void main() {
         tester,
         picker: () async => Uint8List.fromList(utf8.encode('not json')),
       );
+      await scrollToRow(tester, 'Import backup');
       await tester.tap(find.text('Import backup'));
       await tester.pump();
       await tester.pump();
@@ -339,6 +353,9 @@ void main() {
         (await prefs()).getString(UserDataStore.storageKey),
         _currentJson,
       );
+      // Back to the top of the list, where the profile rows are.
+      await tester.scrollUntilVisible(find.text('Mine'), -100);
+      await tester.pump();
       expect(find.text('Mine'), findsOneWidget);
       expect(find.text('Family'), findsOneWidget);
     });
@@ -350,6 +367,7 @@ void main() {
         disableAnimations: true,
         picker: () async => Uint8List.fromList(utf8.encode('{"version":2}')),
       );
+      await scrollToRow(tester, 'Import backup');
       await tester.tap(find.text('Import backup'));
       await tester.pump();
       expect(find.text('This file could not be imported'), findsOneWidget);
@@ -368,6 +386,7 @@ void main() {
         tester,
         picker: () async => Uint8List.fromList(utf8.encode(_fileJson)),
       );
+      await scrollToRow(tester, 'Import backup');
       await tester.tap(find.text('Import backup'));
       await tester.pump();
       await tester.pump();
@@ -399,6 +418,7 @@ void main() {
         tester,
         picker: () async => Uint8List.fromList(utf8.encode(_fileJson)),
       );
+      await scrollToRow(tester, 'Import backup');
       await tester.tap(find.text('Import backup'));
       await tester.pump();
       await tester.pump();

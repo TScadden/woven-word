@@ -11,9 +11,11 @@ independently; agreement and one sharpening are noted per defect.
 Verification of the final tree: `flutter analyze` — no issues.
 Full `flutter test` — **192 tests, all passed** (includes the new
 geometry and routing suites). `flutter build web --release` —
-green. CI run id and commit hashes are reported to Silas with
-this report (they postdate the report file's own commit for the
-records commit).
+green. **CI: "Build Flutter app" run 38655650765 — completed,
+success**, on head 508b037. Commits: Defect 1 `69e0d07`,
+Defect 2 `bd3e458`, Fix Item 3 `9e0fd7d`, records `508b037`
+(this sentence's own amendment is a docs-only follow-up that the
+workflow's path filter does not rebuild).
 
 ---
 

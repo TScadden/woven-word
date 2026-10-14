@@ -21,12 +21,30 @@ import '../theme/ww_theme.dart';
 /// board run 5 — the category pattern is an identity entry at the top
 /// of home: YouVersion's profile, the avatar entry in newer apps).
 class ProfilesScreen extends StatefulWidget {
-  const ProfilesScreen({super.key, this.pickBackupFile, this.shareBackup});
+  const ProfilesScreen({
+    super.key,
+    this.pickBackupFile,
+    this.shareBackup,
+    this.conferenceEnabled = false,
+    this.onConferenceChanged,
+  });
 
   /// Picks a backup file and returns its bytes; a null return is a
   /// cancelled pick. Defaults to the system file picker. Tests
   /// inject a fake picker through this seam.
   final Future<Uint8List?> Function()? pickBackupFile;
+
+  /// The General Conference layer's state when this screen opens
+  /// (board run 8, spec §2). The shell owns the preference; this
+  /// screen shows the value it was opened with and reports flips
+  /// through [onConferenceChanged]. A standalone pump (tests) gets
+  /// the default OFF state and may flip the row locally.
+  final bool conferenceEnabled;
+
+  /// Called with the new value the moment the toggle row is
+  /// tapped — visible state first, persistence fire-and-forget at
+  /// the owner (spec §1.1 / §2.4).
+  final ValueChanged<bool>? onConferenceChanged;
 
   /// Shares the exported backup JSON. Defaults to the system share
   /// sheet. Tests inject a fake through this seam.
@@ -40,11 +58,22 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   UserDataStore? _store;
   UserData _data = UserData();
   bool _loaded = false;
+  late bool _conferenceEnabled;
 
   @override
   void initState() {
     super.initState();
+    _conferenceEnabled = widget.conferenceEnabled;
     _load();
+  }
+
+  /// The conference toggle (spec §2.4): one action for the whole
+  /// row and for the switch inside it. The visible state flips
+  /// first; the owner persists at tap time (§1.1).
+  void _toggleConference(bool value) {
+    if (value == _conferenceEnabled) return;
+    setState(() => _conferenceEnabled = value);
+    widget.onConferenceChanged?.call(value);
   }
 
   Future<void> _load() async {
@@ -498,6 +527,17 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
           child: const Text('New profile', style: WwType.goldButtonLabel),
         ),
         const SizedBox(height: 24),
+        const Text('General Conference', style: WwType.selectionTitle),
+        const SizedBox(height: 4),
+        const Text(
+          'Conference talks are not stored in this app. When this is '
+          'on, you can see which talks cite a verse, browse talks in '
+          'the Library, and open each talk in Gospel Library.',
+          style: WwType.captionOnDark,
+        ),
+        const SizedBox(height: 16),
+        _conferenceRow(),
+        const SizedBox(height: 24),
         const Text('Backup', style: WwType.selectionTitle),
         const SizedBox(height: 4),
         const Text(
@@ -569,6 +609,93 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                 color: WwColors.mutedOnDark,
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The General Conference toggle row (board run 8, spec §2.4):
+  /// the Backup-row construction, the whole row the tap target,
+  /// and a switch whose every color is set on the widget (§2.4.1 —
+  /// `wwTheme()` defines no switchTheme, so a stock switch would
+  /// be an unexamined default). The row and the switch are ONE
+  /// semantics node: container + toggled flag, label exactly
+  /// 'Show conference talks', the state carried by the flag only
+  /// (§2.5). The switch's own semantics are excluded so the tree
+  /// holds that single node for this one action.
+  Widget _conferenceRow() {
+    return Semantics(
+      container: true,
+      button: true,
+      toggled: _conferenceEnabled,
+      label: 'Show conference talks',
+      child: Material(
+        color: WwColors.surface,
+        borderRadius: BorderRadius.circular(WwRadius.row),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(WwRadius.row),
+          onTap: () => _toggleConference(!_conferenceEnabled),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.menu_book,
+                  size: 20,
+                  color: WwColors.goldBright,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Show conference talks',
+                        style: WwType.controlLabel.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Verse connections and the Library browse',
+                        style: WwType.captionOnDark,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ExcludeSemantics(
+                  child: Switch(
+                    value: _conferenceEnabled,
+                    onChanged: _toggleConference,
+                    activeTrackColor: WwColors.goldBright,
+                    inactiveTrackColor: WwColors.surfaceHigh,
+                    activeThumbColor: WwColors.onGold,
+                    inactiveThumbColor: WwColors.mutedOnDark,
+                    trackOutlineColor: WidgetStateProperty.resolveWith(
+                      (states) => states.contains(WidgetState.selected)
+                          ? Colors.transparent
+                          : WwColors.borderDark,
+                    ),
+                    trackOutlineWidth: WidgetStateProperty.resolveWith(
+                      (states) =>
+                          states.contains(WidgetState.selected) ? 0.0 : 1.0,
+                    ),
+                    thumbIcon: WidgetStateProperty.resolveWith(
+                      (states) => states.contains(WidgetState.selected)
+                          ? const Icon(
+                              Icons.check,
+                              color: WwColors.goldBright,
+                            )
+                          : null,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

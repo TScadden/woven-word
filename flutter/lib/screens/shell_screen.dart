@@ -438,7 +438,14 @@ class ShellController extends ChangeNotifier implements ReaderHost {
   Future<void> _openProfiles() async {
     final nav = homeNavKey.currentState;
     if (nav == null) return;
-    await nav.push(WwPageRoute(builder: (_) => const ProfilesScreen()));
+    await nav.push(
+      WwPageRoute(
+        builder: (_) => ProfilesScreen(
+          conferenceEnabled: conferenceEnabled,
+          onConferenceChanged: setConferenceEnabled,
+        ),
+      ),
+    );
     _loadUserData();
   }
 

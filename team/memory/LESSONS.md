@@ -100,6 +100,11 @@ rounds Rusty ran before the studio was founded).
     the audit in the package BEFORE the one that depends on the tokens
     (here: the reader), and correct contrast comments to computed
     values — two annotations in ww_theme.dart were stale.
+    *Addendum (board run 3):* one narrowed exception — `goldBright` as
+    a selected-state/primary-action FILL on paper behind an `onGold`
+    label (9.71:1) is ratified in
+    `decisions/2026-10-14-goldbright-fill-exception.md`; as text, icon,
+    or border on paper it stays prohibited.
 14. **A lazy list cannot scroll to an item it has not built.** The
     home list's GlobalKey + `ensureVisible` jumps (search, partner,
     restore) silently no-op when the target book's section is outside
@@ -115,3 +120,13 @@ rounds Rusty ran before the studio was founded).
     a reference graph that cannot answer it honestly, and per-chapter
     count badges were rejected inside the 48dp picker grid on
     legibility. Research that changes nothing was decoration.
+16. **Audit every meaningful element in every state it renders in.**
+    Board run 3's gate: the verse number got a selected-state role
+    proactively (ink on the hlGold highlight, 15.23:1), but the
+    connection dot beside it stayed state-blind `gold` — 3.20:1 on
+    paper (pass) and 2.85:1 on the selected background (fail, below
+    the 3.0 icon band). A token is not audited when its resting-state
+    ratio passes; it is audited when every surface it can actually
+    sit on passes — selected, flashed, and reduced-motion-persistent
+    states included. Petra caught it by computing the selected chain;
+    the fix made the dot conditional exactly like the number.

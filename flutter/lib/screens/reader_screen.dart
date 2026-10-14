@@ -759,6 +759,20 @@ class ReaderScreenState extends State<ReaderScreen>
     final texts = _texts!;
     final translation = _translation;
     final conns = data.verseConnections(ch, v);
+    // The conference layer (board run 8, §3): the section renders
+    // only when the host carries the layer and it is ON. A host
+    // without the layer, or the layer OFF, gets the shipped sheet
+    // byte-for-byte (§1.1). Talks are newest-first from the data
+    // layer (§3.3), one row per talk however often it cites the
+    // verse; an enabled-but-unloaded dataset reads as no talks.
+    final host = widget.host;
+    final ConferenceHost? confHost =
+        host is ConferenceHost ? host as ConferenceHost : null;
+    final confOn = confHost?.conferenceEnabled ?? false;
+    final talks = confOn
+        ? (confHost?.conferenceData?.talksForVerse(ch, v) ??
+              const <ConferenceTalk>[])
+        : const <ConferenceTalk>[];
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: WwColors.paper,
@@ -770,6 +784,197 @@ class ReaderScreenState extends State<ReaderScreen>
         ),
       ),
       builder: (sheetContext) {
+        // One shipped connection row, used by both sheet forms.
+        Widget connectionRow(int tc, int tv) {
+          return Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    widget.host.openChapter(tc, verse: tv);
+                  },
+                  child: Container(
+                    constraints: const BoxConstraints(
+                      minHeight: WwSpace.minTarget,
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(data.refName(tc, tv), style: WwType.refLabel),
+                        const SizedBox(height: 2),
+                        Text(
+                          texts.verseText(translation, data, tc, tv),
+                          style: WwType.snippet,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Open ${data.refName(tc, tv)} in new screen',
+                onPressed: () async {
+                  Navigator.of(sheetContext).pop();
+                  final created = widget.host.openChapter(
+                    tc,
+                    verse: tv,
+                    inNewScreen: true,
+                  );
+                  if (!created && mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        backgroundColor: WwColors.surfaceHigh,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(WwRadius.chip),
+                        ),
+                        content: const Text(
+                          'Screen limit reached — opened here instead.',
+                          style: WwType.bodyOnDark,
+                        ),
+                      ),
+                    );
+                  }
+                },
+                icon: const Icon(
+                  Icons.open_in_new,
+                  size: 18,
+                  color: WwColors.goldTextOnPaper,
+                ),
+                constraints: const BoxConstraints(
+                  minWidth: WwSpace.minTarget,
+                  minHeight: WwSpace.minTarget,
+                ),
+              ),
+            ],
+          );
+        }
+
+        // One conference talk row (§3.2): ≥48dp, title uncapped
+        // in bodyOnPaper w600, the speaker line beneath it, and
+        // NO trailing control — a talk has no screen in this app;
+        // the row itself opens its talk view in the Library (§3.3).
+        Widget talkRow(ConferenceTalk talk) {
+          return Semantics(
+            container: true,
+            button: true,
+            label:
+                'Open talk: ${talk.title}, by ${talk.speaker}, '
+                '${talk.conferenceLabel}',
+            child: InkWell(
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                confHost?.openConferenceTalk(talk);
+              },
+              child: Container(
+                constraints: const BoxConstraints(
+                  minHeight: WwSpace.minTarget,
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      talk.title,
+                      style: WwType.bodyOnPaper.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${talk.speaker} · ${talk.conferenceLabel}',
+                      style: WwType.captionOnPaper,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        final header = <Widget>[
+          Text(data.refName(ch, v), style: WwType.sheetRefTitle),
+          const SizedBox(height: 8),
+          Text(
+            texts.verseText(translation, data, ch, v),
+            style: WwType.readerSheetVerse,
+          ),
+          const SizedBox(height: 12),
+        ];
+
+        if (!confOn) {
+          // The shipped sheet, byte-for-byte (§1.1 OFF contract).
+          return ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(sheetContext).size.height * 0.75,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(WwSpace.screenMargin),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ...header,
+                  const Text('Connections', style: WwType.refLabel),
+                  const SizedBox(height: 8),
+                  if (conns.isEmpty)
+                    const Text(
+                      'No cross references are recorded for this verse.',
+                      style: WwType.captionOnPaper,
+                    )
+                  else
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: conns.length,
+                        separatorBuilder: (_, _) =>
+                            const Divider(height: 1, color: WwColors.line),
+                        itemBuilder: (_, i) =>
+                            connectionRow(conns[i][0], conns[i][1]),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // Layer ON (§3.1): ONE scroll region below the fixed
+        // header, holding Connections then Conference talks —
+        // never two independently scrolling lists in one sheet.
+        final scrollChildren = <Widget>[
+          const Text('Connections', style: WwType.refLabel),
+          const SizedBox(height: 8),
+          if (conns.isEmpty)
+            const Text(
+              'No cross references are recorded for this verse.',
+              style: WwType.captionOnPaper,
+            )
+          else
+            for (var i = 0; i < conns.length; i++) ...[
+              if (i > 0) const Divider(height: 1, color: WwColors.line),
+              connectionRow(conns[i][0], conns[i][1]),
+            ],
+          const SizedBox(height: 16),
+          const Text('Conference talks', style: WwType.refLabel),
+          const SizedBox(height: 8),
+          if (talks.isEmpty)
+            const Text(
+              'No conference talks are recorded for this verse.',
+              style: WwType.captionOnPaper,
+            )
+          else
+            for (var i = 0; i < talks.length; i++) ...[
+              if (i > 0) const Divider(height: 1, color: WwColors.line),
+              talkRow(talks[i]),
+            ],
+        ];
         return ConstrainedBox(
           constraints: BoxConstraints(
             maxHeight: MediaQuery.of(sheetContext).size.height * 0.75,
@@ -780,114 +985,13 @@ class ReaderScreenState extends State<ReaderScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(data.refName(ch, v), style: WwType.sheetRefTitle),
-                const SizedBox(height: 8),
-                Text(
-                  texts.verseText(translation, data, ch, v),
-                  style: WwType.readerSheetVerse,
-                ),
-                const SizedBox(height: 12),
-                const Text('Connections', style: WwType.refLabel),
-                const SizedBox(height: 8),
-                if (conns.isEmpty)
-                  const Text(
-                    'No cross references are recorded for this verse.',
-                    style: WwType.captionOnPaper,
-                  )
-                else
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: conns.length,
-                      separatorBuilder: (_, _) =>
-                          const Divider(height: 1, color: WwColors.line),
-                      itemBuilder: (_, i) {
-                        final tc = conns[i][0];
-                        final tv = conns[i][1];
-                        return Row(
-                          children: [
-                            Expanded(
-                              child: InkWell(
-                                onTap: () {
-                                  Navigator.of(sheetContext).pop();
-                                  widget.host.openChapter(tc, verse: tv);
-                                },
-                                child: Container(
-                                  constraints: const BoxConstraints(
-                                    minHeight: WwSpace.minTarget,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 8,
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        data.refName(tc, tv),
-                                        style: WwType.refLabel,
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        texts.verseText(
-                                          translation,
-                                          data,
-                                          tc,
-                                          tv,
-                                        ),
-                                        style: WwType.snippet,
-                                        maxLines: 3,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              tooltip:
-                                  'Open ${data.refName(tc, tv)} in new screen',
-                              onPressed: () async {
-                                Navigator.of(sheetContext).pop();
-                                final created = widget.host.openChapter(
-                                  tc,
-                                  verse: tv,
-                                  inNewScreen: true,
-                                );
-                                if (!created && mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      backgroundColor: WwColors.surfaceHigh,
-                                      behavior: SnackBarBehavior.floating,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(
-                                          WwRadius.chip,
-                                        ),
-                                      ),
-                                      content: const Text(
-                                        'Screen limit reached — opened here instead.',
-                                        style: WwType.bodyOnDark,
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                              icon: const Icon(
-                                Icons.open_in_new,
-                                size: 18,
-                                color: WwColors.goldTextOnPaper,
-                              ),
-                              constraints: const BoxConstraints(
-                                minWidth: WwSpace.minTarget,
-                                minHeight: WwSpace.minTarget,
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
+                ...header,
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: scrollChildren,
                   ),
+                ),
               ],
             ),
           ),

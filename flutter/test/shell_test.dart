@@ -301,8 +301,9 @@ void main() {
   });
 
   group('STORE — persistence and search', () {
-    testWidgets('STORE-3 relaunch restores tab, screens, selection, '
-        'translation; scope key removed', (tester) async {
+    testWidgets('STORE-3 relaunch restores tab, screens, '
+        'translation; scope and retired selection keys removed',
+        (tester) async {
       addTearDown(tester.view.reset);
       final psalms119 = data.books[18].start + 118;
       final screensDoc = jsonEncode({
@@ -327,9 +328,20 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('ww_home_scope'), isNull);
       expect(prefs.getString('ww_translation'), 'WEB');
-      // Home selection restored.
+      // HOME ARCH GOES AMBIENT translation (lesson 40): the
+      // shipped "Home selection restored" assertion landmarked
+      // the selection panel's exact chapter title — the panel
+      // and the ww_home_selected restore are RETIRED by the
+      // founder ruling. The landmark now asserts the retirement
+      // itself: the seeded key is removed on load, and Home
+      // shows no panel for the seeded place (Continue reading's
+      // subtitle is the longer 'Psalms 119 · verse 84' string,
+      // never the panel's exact title).
+      expect(prefs.getInt('ww_home_selected'), isNull);
       await tapTab(tester, 'Home');
-      expect(find.text('Psalms 119'), findsWidgets);
+      expect(find.text('Psalms 119'), findsNothing);
+      expect(find.text('Connected chapters'), findsNothing);
+      expect(find.text('Psalms 119 · verse 84'), findsOneWidget);
       // Translation restored in the reader (WEB verse text).
       await tapTab(tester, 'Screens');
       await tester.tap(find.text('Psalms 119').last);

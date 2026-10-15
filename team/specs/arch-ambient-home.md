@@ -234,8 +234,21 @@ same single-scroll construction as the layered form so both
 sections live in one scroll region; every shipped string and
 row of the verse section is preserved verbatim):
 
-- Position: directly under the sheet header, BEFORE the
-  `Connections` verse section.
+- Position: LAST in the sheet's single scroll region, after
+  the `Connections` verse section and after every tradition
+  section. Placement was originally specced first (under the
+  header); the build moved it last and this spec is amended
+  to the built position, with the evidence: first placement
+  pushed every shipped section ~190dp down the lazy scroll
+  list, and 12 shipped sheet landmarks across five suites
+  (conference, tradition, toolbar) failed because their rows
+  were no longer in the list's build range — the sections
+  themselves were unchanged. Last placement keeps every
+  shipped section at its exact baseline position and build
+  order; the chapter section is reached by scrolling the
+  sheet, the same way long verse lists already behave. The
+  founder's ruling requires partners reachable from inside
+  the reader; it does not rank the sections.
 - Heading: `<Chapter name> connects to` in the palette's
   `refLabelStyle` (e.g. `Genesis 1 connects to`).
 - Rows: the chapter's partners from the shipped
@@ -252,7 +265,7 @@ row of the verse section is preserved verbatim):
 - Empty: `No chapter connections are recorded for this
   chapter.` in `captionStyle` — the section exists for every
   chapter, so no chapter is a dead end, and the verse section
-  below is untouched.
+  above it is untouched.
 
 ## 9. Scope guard
 
@@ -271,7 +284,8 @@ row of the verse section is preserved verbatim):
 |---|---|
 | `home_study_sections_test.dart` — "order with selection: panel sits between resume and votd (I-1)" | TRANSLATED: the panel behavior it landmarked (a Home chapter surface that opens reading) is re-landmarked in `arch_ambient_home_test.dart` (stage order + stage tap opens the featured chapter; panel absent). The run-11 order test is replaced by the §1 order (stage pinned at top; resume < votd < plans < tools). |
 | `home_study_sections_test.dart` — `pumpHome` helper (`selection`, `onClearSelection` params) | UPDATED to the new HomeTab contract (adds `tradition`, defaults `ambientActive: false` so the run-11 suite never starts a rotation ticker). No assertion changes. |
-| `shell_test.dart` STORE-3 ("selection restored") | KEPT as-is: its Home assertion (`Psalms 119` visible on Home) is satisfied by Continue reading's subtitle from the restored screens doc — the §6 claim. The retirement itself is landmarked NEW in `arch_ambient_home_test.dart` (seeded `ww_home_selected` is removed on load and never rewritten). |
+| `shell_test.dart` STORE-3 ("selection restored") | TRANSLATED (corrected at build — the original register entry was WRONG, and the full suite proved it): its Home assertion (`find.text('Psalms 119')` on Home) was landmarking the PANEL's exact chapter title, not Continue reading (whose subtitle is the longer `Psalms 119 · verse 84`). The panel and the key restore are the retired behavior, so the test now asserts the retirement: the seeded key is removed on load, Home shows no panel and no exact panel title for the seeded place, and Continue reading carries the place as `Psalms 119 · verse 84`. Tab/screens/translation assertions are verbatim. The retirement is additionally landmarked NEW in `arch_ambient_home_test.dart` (seeded key removed, never rewritten after opening a chapter). |
+| `home_study_sections_test.dart` — "order: continue < votd < plans < tools" and "retirement: no STUDY header; My Notes appears exactly once" | TRANSLATED (build-cache shift): the caption band (§4) makes Home's scroll area 48dp taller, so at 360×800 Study Tools starts outside the ListView's build cache and the head sections leave it when scrolled to (both verified by running them). The retirement test scrolls My Notes into the built range, then asserts verbatim. The order test — a sequence claim — pumps a taller viewport (360×1400, a fixture choice; `pumpHome` gains an optional size whose default stays 360×800) where every section is built at once, then runs its shipped assertions verbatim in ONE snapshot. No assertion weakened. |
 | All other shipped suites | Unchanged; the panel had no other landmarks (grepped: `Connected chapters`, `Clear selection`, `Read …` appear in no other test). |
 
 ## 11. New tests (test/arch_ambient_home_test.dart)

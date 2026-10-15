@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:woven_word/data/plans.dart';
 import 'package:woven_word/data/scripture_text.dart';
+import 'package:woven_word/data/tradition.dart';
 import 'package:woven_word/data/user_data.dart';
 import 'package:woven_word/data/verse_of_day.dart';
 import 'package:woven_word/screens/home_tab.dart';
@@ -48,7 +49,6 @@ void main() {
 
   Future<void> pumpHome(
     WidgetTester tester, {
-    int? selection,
     int notesCount = 0,
     int highlightsCount = 0,
     VerseOfDayCardData? verseOfDay,
@@ -58,8 +58,9 @@ void main() {
     void Function(int, int)? onVotd,
     void Function(String)? onPlan,
     Map<String, int>? toolTaps,
+    Size size = const Size(360, 800),
   }) async {
-    tester.view.physicalSize = const Size(360, 800);
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
@@ -73,7 +74,11 @@ void main() {
         home: HomeTab(
           dataFuture: Future.value(data),
           userData: userData ?? UserData(),
-          selection: selection,
+          // Ambient rotation is landmarked in
+          // arch_ambient_home_test.dart; this suite keeps it
+          // paused so the run-11 sections render still.
+          tradition: WwTradition.none,
+          ambientActive: false,
           resumeBound: true,
           resumeSubtitle: 'Genesis 1',
           notesCount: notesCount,
@@ -81,7 +86,6 @@ void main() {
           plans: plans,
           highlightsCount: highlightsCount,
           onOpenChapter: (_) {},
-          onClearSelection: () {},
           onResume: () {},
           onOpenProfiles: () =>
               toolTaps?['profiles'] = (toolTaps['profiles'] ?? 0) + 1,
@@ -104,7 +108,21 @@ void main() {
   testWidgets('order: continue < votd < plans < tools (rendered positions)', (
     tester,
   ) async {
-    await pumpHome(tester, verseOfDay: votd(), plans: [card('gospels')]);
+    // HOME ARCH GOES AMBIENT translation (lesson 40): the
+    // ambient caption band makes the scroll area 48dp taller,
+    // so at 360×800 the later sections now start outside the
+    // ListView's build cache and the head sections leave it
+    // when scrolled to. The order landmark is a sequence
+    // claim, so this test pumps a taller viewport (360×1400)
+    // where every section is built at once, then takes ALL
+    // positions in one snapshot — the shipped assertions,
+    // verbatim.
+    await pumpHome(
+      tester,
+      verseOfDay: votd(),
+      plans: [card('gospels')],
+      size: const Size(360, 1400),
+    );
     double dy(Finder f) => tester.getTopLeft(f).dy;
     final resume = dy(find.text('Continue reading'));
     final votdDy = dy(find.byKey(const ValueKey('votd-card')));
@@ -127,23 +145,26 @@ void main() {
   });
 
   testWidgets(
-    'order with selection: panel sits between resume and votd (I-1)',
+    'panel retired (HOME ARCH GOES AMBIENT, lesson 40 translation): '
+    'no selection panel between resume and votd',
     (tester) async {
-      await pumpHome(
-        tester,
-        selection: 0,
-        verseOfDay: votd(),
-        plans: [card('gospels')],
-      );
+      // The shipped I-1 test landmarked the selection panel via
+      // its Read button. The panel is REMOVED by the founder
+      // ruling; the behavior it landmarked (a Home chapter
+      // surface that opens reading) is re-landmarked in
+      // arch_ambient_home_test.dart (ambient stage order, stage
+      // tap opens the featured chapter, panel absent). Here the
+      // run-11 order holds WITHOUT any panel: resume directly
+      // precedes the Verse of the Day card.
+      await pumpHome(tester, verseOfDay: votd(), plans: [card('gospels')]);
+      expect(find.text('Read Genesis 1'), findsNothing);
+      expect(find.text('Connected chapters'), findsNothing);
+      expect(find.byTooltip('Clear selection'), findsNothing);
       final resume = tester.getTopLeft(find.text('Continue reading')).dy;
-      // The selection panel is located via its Read button, which
-      // sits inside the panel below the resume card.
-      final readButton = tester.getTopLeft(find.text('Read Genesis 1')).dy;
       final votdDy = tester
           .getTopLeft(find.byKey(const ValueKey('votd-card')))
           .dy;
-      expect(resume < readButton, isTrue);
-      expect(readButton < votdDy, isTrue);
+      expect(resume < votdDy, isTrue);
     },
   );
 
@@ -152,6 +173,14 @@ void main() {
   ) async {
     await pumpHome(tester, verseOfDay: votd(), plans: [card('gospels')]);
     expect(find.text('STUDY'), findsNothing);
+    // Same build-cache translation as the order test above:
+    // scroll the tools section into the built range first.
+    await tester.scrollUntilVisible(
+      find.text('My Notes'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
     expect(find.text('My Notes'), findsOneWidget);
   });
 

@@ -315,3 +315,53 @@ rounds Rusty ran before the studio was founded).
     it in `dispose()`, when the subtree unmounts. Rewriting the
     ladder on suspicion would have churned correct code and
     missed the actual escape.
+
+34. **Verify a desk's summary numbers against the artifact on
+    disk before integration trusts them.** The run-9 Jewish desk's
+    summary report quoted link/work/byte counts that described no
+    artifact the pipeline produced; the pipeline README's own run
+    counts were the accurate record of the faithful output.
+    Summaries are narration; the file on disk and the pipeline's
+    recorded run stats are evidence. Integration re-derives every
+    headline count from the artifact itself before building on it.
+
+35. **Never write a placeholder over a path a pipeline owns.**
+    Coordinator placeholder assets (written so the tree would
+    analyze) overwrote the Catholic desk's real webc.json and
+    deuterocanon.json outputs. Both were recovered only because
+    the pipeline's cached sources were intact and the build was
+    deterministic. If a stub is unavoidable, put it on a path no
+    pipeline emits, or mark it so loudly that overwriting real
+    output is impossible to miss.
+
+36. **A dataset's faithful size can be unshippable — narrow at
+    the pipeline, and disclose the truncation in-product.** The
+    faithful Sefaria links output was 174 MB. It shipped at
+    4.8 MB gzipped only after pipeline-level narrowing with
+    recorded reasons (canonical work titles, the Reference
+    category excluded because lexicons link by word occurrence
+    rather than engagement, a per-verse cap of 25 works with each
+    capped verse's full total recorded). The cap is disclosed in
+    the product itself ("See all N links on Sefaria"), never
+    silent. Narrowing decided in app code or by dropping files
+    would have hidden the cut; narrowing in the pipeline keeps
+    it auditable and rebuildable.
+
+37. **Control counts are a layout budget at 360dp.** Four
+    segmented translation buttons (KJV/WEB/JPS/Hebrew) overflowed
+    the reader top bar by 48px — found by test, not by eye. The
+    rule now: three or fewer options keep the segmented toggle;
+    more than three switch to a chip showing the current choice
+    plus a popup menu. Every new option added to a fixed bar is
+    a layout cost that must be measured at the narrowest width,
+    not assumed.
+
+38. **A setter that kicks off loads must await them when its
+    callers read the loaded state.** Run 8's setConferenceEnabled
+    await contract carried into run 9's setTradition: returning
+    before the tradition layer loads land races every caller
+    that reads the layer immediately after the switch. The
+    failed-load retry test proved the race. Kick-and-forget is
+    for fire-and-forget call sites only; a state switch other
+    code observes is a future that completes when the state is
+    actually usable.

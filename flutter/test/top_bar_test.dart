@@ -102,10 +102,15 @@ void main() {
       await tester.pump(const Duration(milliseconds: 350));
       expectNoOverflow(collected);
       expect(tester.getSize(topBar('Profiles').first).height, 56.0);
-      // Back to Home root, then My Notes via the Study row.
+      // Back to Home root, then My Notes via the Study Tools entry.
+      // Run 11 lengthened Home (Verse of the Day + Study Plans sit
+      // above Study Tools), so scroll the entry into the built range
+      // first; the bar assertions below are unchanged.
       await tester.tap(find.byTooltip('Back'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
+      await tester.drag(find.byType(ListView).first, const Offset(0, -600));
+      await tester.pump();
       await tester.tap(find.text('My Notes'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));

@@ -200,7 +200,7 @@ void main() {
       await tester.binding.handlePopRoute();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
-      expect(find.text('STUDY'), findsOneWidget);
+      expect(find.text('Woven Word'), findsOneWidget);
     });
 
     testWidgets('BACK-4 roots switch to Home; BACK-5 Home root exits',
@@ -220,11 +220,11 @@ void main() {
       await tapTab(tester, 'Library');
       await tester.binding.handlePopRoute();
       await tester.pump();
-      expect(find.text('STUDY'), findsOneWidget, reason: 'Library root → Home');
+      expect(find.text('Woven Word'), findsOneWidget, reason: 'Library root → Home');
       await tapTab(tester, 'Screens');
       await tester.binding.handlePopRoute();
       await tester.pump();
-      expect(find.text('STUDY'), findsOneWidget, reason: 'Screens root → Home');
+      expect(find.text('Woven Word'), findsOneWidget, reason: 'Screens root → Home');
       // Home root: the shell does not intercept — it exits.
       await tester.binding.handlePopRoute();
       await tester.pump();

@@ -285,17 +285,17 @@ void main() {
       await pump(tester);
       await tapTab(tester, 'Library');
       await systemBack(tester);
-      expect(find.text('STUDY'), findsOneWidget, reason: 'rung 4');
+      expect(find.text('Woven Word'), findsOneWidget, reason: 'rung 4');
       expect(exitRequested, isFalse);
       await tapTab(tester, 'Screens');
       await systemBack(tester);
-      expect(find.text('STUDY'), findsOneWidget, reason: 'rung 4');
+      expect(find.text('Woven Word'), findsOneWidget, reason: 'rung 4');
       expect(exitRequested, isFalse);
       // Home root: nothing above applies — the guard releases by
       // requesting the platform exit, exactly once here.
       await systemBack(tester);
       expect(exitRequested, isTrue, reason: 'rung 5');
-      expect(find.text('STUDY'), findsOneWidget);
+      expect(find.text('Woven Word'), findsOneWidget);
     });
   });
 }

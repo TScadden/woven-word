@@ -1,0 +1,325 @@
+   Woah! You appear to be trying to run flutter as root.
+   We strongly recommend running the flutter tool without superuser privileges.
+  /
+📎
+Resolving dependencies...
+Downloading packages...
+  code_assets 1.2.1 (2.1.0 available)
+  cross_file 0.3.5+5 (0.4.0 available)
+  cupertino_icons 1.0.9 (2.0.0 available)
+  hooks 2.0.2 (2.2.0 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  meta 1.18.3 (1.19.0 available)
+  objective_c 9.5.0 (9.6.2 available)
+  petitparser 7.0.2 (7.1.0 available)
+  record_use 0.6.0 (1.1.1 available)
+  test_api 0.7.12 (0.7.15 available)
+  vector_math 2.4.0 (2.4.3 available)
+  xml 7.0.1 (7.1.0 available)
+Got dependencies!
+12 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+00:00 +0: loading /home/hatch/workspace/ww-gate-verify/flutter/test/arc_rendering_test.dart
+00:00 +0: /home/hatch/workspace/ww-gate-verify/flutter/test/arc_rendering_test.dart: ambient luminance clamp cap is the fix round measured max
+00:00 +1: /home/hatch/workspace/ww-gate-verify/flutter/test/arc_rendering_test.dart: ambient luminance clamp every sweep color lands at or under the cap
+00:00 +2: /home/hatch/workspace/ww-gate-verify/flutter/test/arc_rendering_test.dart: ambient luminance clamp over-cap colors are scaled to the clamp target, inside the raster guard under the cap
+00:00 +3: /home/hatch/workspace/ww-gate-verify/flutter/test/arc_rendering_test.dart: ambient luminance clamp a color between the target and the cap is still clamped
+00:00 +4: /home/hatch/workspace/ww-gate-verify/flutter/test/arc_rendering_test.dart: ambient luminance clamp scaling is proportional (hue preserved) and keeps alpha
+00:00 +5: /home/hatch/workspace/ww-gate-verify/flutter/test/arc_rendering_test.dart: ambient luminance clamp colors already under the clamp target pass through unchanged
+00:00 +6: /home/hatch/workspace/ww-gate-verify/flutter/test/arc_rendering_test.dart: ambient luminance clamp under-cap sweep colors pass through the ambient path unchanged in hue
+00:00 +7: loading /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart
+00:12 +7: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: backup counts totals sum highlights and notes across all profiles
+00:12 +8: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: backup validator accepts a well-formed v2 document
+00:12 +9: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: backup validator rejects undecodable JSON as notJson
+00:12 +10: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: backup validator rejects a non-object root as notBackup
+00:12 +11: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: backup validator rejects a missing or non-object profiles member as notBackup
+00:12 +12: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: backup validator rejects a non-object profile bucket as notBackup
+00:12 +13: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: backup validator rejects a non-numeric version as notBackup
+00:12 +14: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: backup validator rejects a newer version as newerVersion
+00:12 +15: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: backup validator rejects a document parsing to nothing as emptyDocument
+00:12 +16: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: backup validator accepts one empty profile bucket (bucket count is the test)
+00:12 +17: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: backup validator a v1 document imports and upgrades to v3 on replace
+00:12 +18: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: backup validator a v3 backup carries per-translation spans and imports them exactly (board run 10)
+00:12 +19: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: backup validator a legacy backup imports into the translation active at import (board run 10)
+00:12 +20: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: backup store round-trip export -> import reproduces the identical document
+00:12 +21: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: backup store round-trip malformed inputs are no-ops: stored string untouched
+00:12 +22: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: backup store round-trip replaceData swaps the model and persists it
+00:12 +23: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: Profiles Backup section (widget) section renders with verbatim copy
+00:14 +24: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: Profiles Backup section (widget) export shares the document and shows nothing after
+00:15 +25: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: Profiles Backup section (widget) picker cancellation is silent
+00:15 +26: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: Profiles Backup section (widget) malformed file: error dialog, state unchanged
+00:16 +27: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: Profiles Backup section (widget) error dialog under reduced motion renders instantly
+00:17 +28: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: Profiles Backup section (widget) confirm names both sides; Cancel changes nothing
+00:18 +29: /home/hatch/workspace/ww-gate-verify/flutter/test/backup_test.dart: Profiles Backup section (widget) Replace installs the validated model, persists, snackbars
+00:18 +30: loading /home/hatch/workspace/ww-gate-verify/flutter/test/bible_data_test.dart
+00:20 +30: /home/hatch/workspace/ww-gate-verify/flutter/test/bible_data_test.dart: canon shape: 66 books, 1189 chapters
+00:20 +31: /home/hatch/workspace/ww-gate-verify/flutter/test/bible_data_test.dart: chapter names and positions round-trip
+00:20 +32: /home/hatch/workspace/ww-gate-verify/flutter/test/bible_data_test.dart: scope ranges split at Malachi / Matthew
+00:20 +33: /home/hatch/workspace/ww-gate-verify/flutter/test/bible_data_test.dart: jump search parses book and chapter
+00:20 +34: /home/hatch/workspace/ww-gate-verify/flutter/test/bible_data_test.dart: connection counts come from verse refs, both directions
+00:20 +35: /home/hatch/workspace/ww-gate-verify/flutter/test/bible_data_test.dart: partnersSorted fake data: Genesis 1 has exactly the Joshua 1 partner
+00:20 +36: /home/hatch/workspace/ww-gate-verify/flutter/test/bible_data_test.dart: partnersSorted orders by count descending, ties by chapter index ascending
+00:20 +37: loading /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart
+00:22 +37: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Library root tile (§4.1) OFF: exactly the two shipped testament tiles
+00:24 +38: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Library root tile (§4.1) no state supplied: the shipped root, exactly
+00:24 +39: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Library root tile (§4.1) ON: tile with counts counted from the dataset, semantics label, tap fires
+00:24 +40: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Library root tile (§4.1) ON but dataset empty: the tile does not render
+00:25 +41: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Conferences list (§4.2) intro caption, newest-first rows with counted subtitles, attribution footer
+00:25 +42: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Conferences list (§4.2) row semantics exact, tap reports the conference
+00:26 +43: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Conferences list (§4.2) a conference with zero citing talks is absent as rendered
+00:26 +44: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Talks list (§4.3) dataset session order (never title order), subtitles count distinct cited verses, semantics exact
+00:26 +45: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Talks list (§4.3) a talk with no Bible citation is not listed
+00:27 +46: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Talks list (§4.3) safety empty state: C-23 verbatim
+00:27 +47: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Talk view (§4.4) Form A: header block, gold action with Form A semantics, one row per distinct verse in canon order, C-21 and C-22 verbatim
+00:28 +48: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Talk view (§4.4) Form C: a c:1 talk with an Index page routes to the Citation Index (amended §4.4.1) — Index label and semantics naming the Index, no Form B caption, launch uses the talk’s own Index page
+00:28 +49: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Talk view (§4.4) Form C launch failure lands in the C-26 snackbar naming the Citation Index
+00:29 +50: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Talk view (§4.4) Form B (residual): a conference-level link with NO Index page keeps the conference form — label, mandatory C-18 caption, Form B semantics, launch uses the conference link
+00:29 +51: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Talk view (§4.4) launch failure lands in the C-20 snackbar
+00:30 +52: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Talk view (§4.4) a throwing launcher also lands in the snackbar
+00:30 +53: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Talk view (§4.4) no-link talk: no button, C-19 in its place
+00:31 +54: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Talk view (§4.4) safety empty state: C-24 with C-21 and C-22 still below it
+00:31 +55: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_browse_test.dart: Reduced motion (§8) pushes present their content with animations disabled
+00:32 +56: loading /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart
+00:35 +56: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: parse + talk fields talks carry the pipeline fields verbatim
+00:35 +57: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: parse + talk fields a null url stays null and is not a conference fallback
+00:35 +58: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: parse + talk fields c:1 marks the conference-level fallback link
+00:35 +59: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: parse + talk fields unknown talk id resolves to null
+00:35 +60: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: dedupe + canon dropping edgeCount is post-dedupe and post-drop
+00:35 +61: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: dedupe + canon dropping duplicate rows do not duplicate a verse’s talks
+00:35 +62: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: dedupe + canon dropping out-of-canon edges name no verse
+00:35 +63: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: dedupe + canon dropping chapter at the canon end is dropped, not clamped
+00:35 +64: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: dedupe + canon dropping verse past the chapter length is dropped, not clamped
+00:35 +65: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: talksForVerse ordering newest first: year desc, October before April, dataset order within a conference
+00:35 +66: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: talksForVerse ordering October beats April within the same year at one verse
+00:35 +67: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: talksForVerse ordering an uncited verse and an unknown chapter return empty
+00:35 +68: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: refsForTalk groups by chapter in canon order with ascending verses
+00:35 +69: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: refsForTalk multiple verses in one chapter group together, sorted
+00:35 +70: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: refsForTalk an unknown talk has no references
+00:35 +71: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: conferences + coverage conferences aggregates newest first
+00:35 +72: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: conferences + coverage talksInConference keeps dataset order, not title order
+00:35 +73: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: conferences + coverage conferences counts only talks with a Bible citation
+00:35 +74: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: conferences + coverage a conference with zero citing talks is absent from conferences()
+00:35 +75: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: conferences + coverage coverage stats span the dataset
+00:35 +76: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: conferences + coverage the shipped dataset: routing counts under the amended rule (founder correction, Oct 14 2026)
+00:39 +77: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_data_test.dart: conferences + coverage the empty placeholder dataset parses to empty coverage
+00:39 +78: loading /home/hatch/workspace/ww-gate-verify/flutter/test/conference_reader_test.dart
+00:43 +78: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_reader_test.dart: OFF: the shipped sheet — no Conference talks text, no talk semantics nodes
+00:49 +79: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_reader_test.dart: ON: section below Connections, newest-first as rendered (October before April within 2024), C-6 speaker lines, row semantics exact
+00:52 +80: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_reader_test.dart: ON: no trailing control on talk rows — the only IconButtons in the sheet belong to connection rows
+00:53 +81: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_reader_test.dart: ON: a talk citing the verse twice renders once, at the bottom of the scroll region
+00:54 +82: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_reader_test.dart: ON: a talk citing the verse via duplicate and range edges renders ONE row
+00:55 +83: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_reader_test.dart: ON empty: header plus the C-7 line; the section never collapses to nothing
+00:56 +84: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_reader_test.dart: ON but dataset unloaded: header plus C-7 (the layer is on; this verse shows none)
+00:58 +85: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_reader_test.dart: row tap: sheet pops, the host opens that talk
+00:59 +86: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_reader_test.dart: reduced motion: the ON sheet presents its conference section with animations disabled
+01:00 +87: loading /home/hatch/workspace/ww-gate-verify/flutter/test/conference_shell_test.dart
+01:03 +87: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_shell_test.dart: default off: no load is attempted
+01:04 +88: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_shell_test.dart: persisted on: startup loads the dataset once
+01:04 +89: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_shell_test.dart: setConferenceEnabled persists and loads lazily
+01:04 +90: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_shell_test.dart: a failed load degrades: no throw, layer stays empty
+Woven Word: conference layer failed to load: Bad state: asset missing
+Woven Word: conference layer failed to load: Bad state: asset missing
+01:04 +91: loading /home/hatch/workspace/ww-gate-verify/flutter/test/conference_shell_ui_test.dart
+01:08 +91: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_shell_ui_test.dart: OFF root, enable in Profiles, browse chain, one-level Back at each level
+01:22 +92: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_shell_ui_test.dart: sheet talk row lands on the talk view with its talks list beneath (§3.3)
+01:26 +93: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_shell_ui_test.dart: ON with an empty dataset: no tile renders (§4.1 dataset-empty rule)
+01:27 +94: /home/hatch/workspace/ww-gate-verify/flutter/test/conference_shell_ui_test.dart: reduced motion: tile, pushes, and sheet all present content with animations disabled (§8)
+01:30 +95: loading /home/hatch/workspace/ww-gate-verify/flutter/test/deutero_reader_test.dart
+01:32 +95: /home/hatch/workspace/ww-gate-verify/flutter/test/deutero_reader_test.dart: renders the WEBC text with the honest coverage note on the first page
+01:35 +96: /home/hatch/workspace/ww-gate-verify/flutter/test/deutero_reader_test.dart: a verse tap raises the action bar; a swatch writes the highlight under the reserved key
+01:36 +97: /home/hatch/workspace/ww-gate-verify/flutter/test/deutero_reader_test.dart: the note editor saves through the shared store and dismisses cleanly on Cancel too
+01:37 +98: /home/hatch/workspace/ww-gate-verify/flutter/test/deutero_reader_test.dart: my notes: a deuterocanon note renders with its reference and text, and opens through the procedure
+01:38 +99: loading /home/hatch/workspace/ww-gate-verify/flutter/test/my_notes_filter_test.dart
+01:39 +99: /home/hatch/workspace/ww-gate-verify/flutter/test/my_notes_filter_test.dart: notePositionInCanon (My Notes corrupt-key filter) real positions pass
+01:39 +100: /home/hatch/workspace/ww-gate-verify/flutter/test/my_notes_filter_test.dart: notePositionInCanon (My Notes corrupt-key filter) chapter zero is rejected (regression: b0c0v1 computed global chapter -1 and crashed the reference label)
+01:39 +101: /home/hatch/workspace/ww-gate-verify/flutter/test/my_notes_filter_test.dart: notePositionInCanon (My Notes corrupt-key filter) verse zero is rejected
+01:39 +102: /home/hatch/workspace/ww-gate-verify/flutter/test/my_notes_filter_test.dart: notePositionInCanon (My Notes corrupt-key filter) out-of-canon book and chapter are rejected
+01:39 +103: /home/hatch/workspace/ww-gate-verify/flutter/test/my_notes_filter_test.dart: notePositionInCanon (My Notes corrupt-key filter) the filter drops a zero-chapter note from the list rows
+01:39 +104: loading /home/hatch/workspace/ww-gate-verify/flutter/test/reader_data_test.dart
+01:42 +104: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_data_test.dart: verseConnections bidirectional: one ref row counts both ways
+01:42 +105: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_data_test.dart: verseConnections dedupes by target, keeping the max votes
+01:42 +106: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_data_test.dart: verseConnections sorts votes desc, then target chapter asc, then verse asc
+01:42 +107: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_data_test.dart: verseConnections clamps source and target verses to their chapter lengths
+01:42 +108: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_data_test.dart: ScriptureText translation labels and asset paths
+01:42 +109: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_data_test.dart: ScriptureText chapterVerses returns the active translation chapter
+01:42 +110: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_data_test.dart: ScriptureText verseText clamps to the text chapter length, never throws
+01:42 +111: loading /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart
+01:45 +111: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: READ — paged reader (Amendment A) R-T1 page truth: Genesis, both translations
+01:50 +112: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: READ — paged reader (Amendment A) R-T1 page truth: Ruth (short book) and Psalms
+01:53 +113: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: READ — paged reader (Amendment A) R-T2 verse landing: rendered-rect post-condition; chapter landing at page top
+01:58 +114: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: READ — paged reader (Amendment A) R-T3 cold jump: Psalms 119 v1 and v176 as first actions
+02:03 +115: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: READ — paged reader (Amendment A) R-T4 mechanism cross-check: repeat ensureVisible moves the page by at most 0.5dp
+02:05 +116: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: READ — paged reader (Amendment A) R-T5 reduced motion: landing final after one pump; button turn instant
+02:08 +117: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: READ — paged reader (Amendment A) R-T6 motion is real: button turn animates; a commanded jump never renders an intermediate page
+02:08 +118: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: READ — paged reader (Amendment A) R-T7 second geometry: 400 wide, scale 1.3
+02:11 +119: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: READ — paged reader (Amendment A) R-T8 current-chapter truth: in-page scroll never renames the bar; turns do; a returned drag does not
+02:14 +120: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: READ — paged reader (Amendment A) R-T9 flash discipline
+02:16 +121: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: READ — paged reader (Amendment A) R-T10 turns and boundaries
+02:19 +122: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: READ — paged reader (Amendment A) R-T11 chrome: the top bar never hides
+02:21 +123: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: READ — paged reader (Amendment A) R-T11 chrome under reduced motion
+02:22 +124: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: READ — paged reader (Amendment A) R-T12 translation switch stays on the page
+02:24 +125: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: BACK — reader rungs (conformed) BACK-1 cross-book history entry swaps the page set
+02:25 +126: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: BACK — reader rungs (conformed) STORE-3 legacy shape: offset/sig fields restore by page + anchor and apply no offset
+02:26 +127: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: BACK — reader rungs (conformed) STORE-2 profile switching changes the reader marks for the same verse
+02:28 +128: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: RM — reduced motion surfaces connections sheet renders instantly under disableAnimations
+02:29 +129: /home/hatch/workspace/ww-gate-verify/flutter/test/reader_test.dart: RM — reduced motion surfaces a dialog renders instantly under disableAnimations
+02:32 +130: loading /home/hatch/workspace/ww-gate-verify/flutter/test/run10_selection_test.dart
+02:36 +130: /home/hatch/workspace/ww-gate-verify/flutter/test/run10_selection_test.dart: selection mode (core reader) SEL-1 long-press enters the mode; a selection drag does not turn the page; at rest a swipe from the text still turns it
+02:42 +131: /home/hatch/workspace/ww-gate-verify/flutter/test/run10_selection_test.dart: selection mode (core reader) SEL-2 a word selection colors exactly that span
+02:45 +132: /home/hatch/workspace/ww-gate-verify/flutter/test/run10_selection_test.dart: selection mode (core reader) SEL-3 a stored span renders its tint at rest and persists across relaunch
+02:46 +133: /home/hatch/workspace/ww-gate-verify/flutter/test/run10_selection_test.dart: selection mode (core reader) SEL-4 the verse toolbar writes a full-verse span
+02:47 +134: /home/hatch/workspace/ww-gate-verify/flutter/test/run10_selection_test.dart: selection mode (core reader) SEL-5 switching translations swaps the visible set; switching back restores it
+02:49 +135: /home/hatch/workspace/ww-gate-verify/flutter/test/run10_selection_test.dart: selection mode (core reader) SEL-6 Clear on a selection removes only that range from a full-verse span
+02:51 +136: /home/hatch/workspace/ww-gate-verify/flutter/test/run10_selection_test.dart: selection mode (deuterocanon reader) SEL-7 a word selection writes a webc span
+02:52 +137: /home/hatch/workspace/ww-gate-verify/flutter/test/run10_selection_test.dart: canon dormancy (My Notes) DORM-1 an NT note (KJV) is dormant under the Jewish tradition and returns unchanged
+02:52 +138: /home/hatch/workspace/ww-gate-verify/flutter/test/run10_selection_test.dart: canon dormancy (My Notes) DORM-2 a deuterocanon note (WEBC, Catholic) is dormant under Protestant and returns under Catholic
+02:54 +139: /home/hatch/workspace/ww-gate-verify/flutter/test/run10_selection_test.dart: canon dormancy (My Notes) DORM-3 dormancy composes: hidden by either condition, visible only when both clear
+02:55 +140: loading /home/hatch/workspace/ww-gate-verify/flutter/test/shell_test.dart
+02:59 +140: /home/hatch/workspace/ww-gate-verify/flutter/test/shell_test.dart: NAV — navigation model NAV-1 drill-down pushes and reader opens
+03:07 +141: /home/hatch/workspace/ww-gate-verify/flutter/test/shell_test.dart: NAV — navigation model NAV-2 tab state preservation
+03:09 +142: /home/hatch/workspace/ww-gate-verify/flutter/test/shell_test.dart: NAV — navigation model NAV-3 re-tap pops to root, never touches others
+03:12 +143: /home/hatch/workspace/ww-gate-verify/flutter/test/shell_test.dart: NAV — navigation model NAV-4 badge truth at 1, 2, and the cap
+03:14 +144: /home/hatch/workspace/ww-gate-verify/flutter/test/shell_test.dart: NAV — navigation model NAV-5 breadcrumb from reader to testament grid
+03:16 +145: /home/hatch/workspace/ww-gate-verify/flutter/test/shell_test.dart: BACK — the §7.1 ladder BACK-2/BACK-1 reader back: history then route pop
+03:18 +146: /home/hatch/workspace/ww-gate-verify/flutter/test/shell_test.dart: BACK — the §7.1 ladder BACK-3 library and Home-stack pops
+03:20 +147: /home/hatch/workspace/ww-gate-verify/flutter/test/shell_test.dart: BACK — the §7.1 ladder BACK-4 roots switch to Home; BACK-5 Home root exits
+03:21 +148: /home/hatch/workspace/ww-gate-verify/flutter/test/shell_test.dart: BACK — the §7.1 ladder BACK-6 dedupe: same-chapter open pushes nothing; A→B→A pushes exactly two
+03:25 +149: /home/hatch/workspace/ww-gate-verify/flutter/test/shell_test.dart: SCREENS — §6.3 close semantics close button semantics label names the bound place
+03:25 +150: /home/hatch/workspace/ww-gate-verify/flutter/test/shell_test.dart: STORE — persistence and search STORE-3 relaunch restores tab, screens, selection, translation; scope key removed
+03:27 +151: /home/hatch/workspace/ww-gate-verify/flutter/test/shell_test.dart: STORE — persistence and search STORE-3 corrupt screens doc yields the default set
+03:29 +152: /home/hatch/workspace/ww-gate-verify/flutter/test/shell_test.dart: STORE — persistence and search STORE-4 search: match, bare book, no-match line
+03:31 +153: loading /home/hatch/workspace/ww-gate-verify/flutter/test/system_back_test.dart
+03:34 +153: /home/hatch/workspace/ww-gate-verify/flutter/test/system_back_test.dart: rung 1 — dismissible state inside the reader toolbar open: back dismisses the toolbar only; history is NOT consumed until the next back
+03:43 +154: /home/hatch/workspace/ww-gate-verify/flutter/test/system_back_test.dart: rung 1 — dismissible state inside the reader connections sheet open: back closes the sheet only
+03:46 +155: /home/hatch/workspace/ww-gate-verify/flutter/test/system_back_test.dart: rung 1 — dismissible state inside the reader note editor open: back returns to the toolbar action view, unsaved
+03:48 +156: /home/hatch/workspace/ww-gate-verify/flutter/test/system_back_test.dart: rung 1 — modal dialogs dismiss cleanly system back dismisses the name dialog, stays on Profiles, and throws nothing (Item 4 regression)
+03:49 +157: /home/hatch/workspace/ww-gate-verify/flutter/test/system_back_test.dart: rung 1 — modal dialogs dismiss cleanly Cancel dismisses the name dialog and throws nothing (the bug was dismissal-path independent)
+03:52 +158: /home/hatch/workspace/ww-gate-verify/flutter/test/system_back_test.dart: rung 2 — reader jump history back steps to the previous chapter and the reader stays open
+03:56 +159: /home/hatch/workspace/ww-gate-verify/flutter/test/system_back_test.dart: rung 3 — the active tab stack pops one level Library book grid pops to the Library root
+03:57 +160: /home/hatch/workspace/ww-gate-verify/flutter/test/system_back_test.dart: rung 3 — the active tab stack pops one level reader with no history pops its route to the Screens list
+04:00 +161: /home/hatch/workspace/ww-gate-verify/flutter/test/system_back_test.dart: rung 3 — the active tab stack pops one level conference talk view pops one level at a time down the browse stack
+04:03 +162: /home/hatch/workspace/ww-gate-verify/flutter/test/system_back_test.dart: rungs 4 and 5 — tab roots and the exit Library and Screens roots switch to Home; the Home root finally requests the exit
+04:05 +163: loading /home/hatch/workspace/ww-gate-verify/flutter/test/tab_bar_geometry_test.dart
+04:08 +163: /home/hatch/workspace/ww-gate-verify/flutter/test/tab_bar_geometry_test.dart: tab bar geometry at phone size 390x844
+04:14 +164: /home/hatch/workspace/ww-gate-verify/flutter/test/tab_bar_geometry_test.dart: tab bar geometry at 390x844, text scale 1.3
+04:15 +165: loading /home/hatch/workspace/ww-gate-verify/flutter/test/toolbar_test.dart
+04:18 +165: /home/hatch/workspace/ww-gate-verify/flutter/test/toolbar_test.dart: TOOL — verse toolbar TOOL-1 one tap raises the toolbar for that verse
+04:24 +166: /home/hatch/workspace/ww-gate-verify/flutter/test/toolbar_test.dart: TOOL — verse toolbar TOOL-2 placement: card on screen, verse first line never covered
+04:29 +167: /home/hatch/workspace/ww-gate-verify/flutter/test/toolbar_test.dart: TOOL — verse toolbar TOOL-3 dismiss: outside tap and same-verse tap
+04:31 +168: /home/hatch/workspace/ww-gate-verify/flutter/test/toolbar_test.dart: TOOL — verse toolbar TOOL-3 dismiss: a different verse moves the toolbar
+04:33 +169: /home/hatch/workspace/ww-gate-verify/flutter/test/toolbar_test.dart: TOOL — verse toolbar TOOL-3 dismiss: in-page scroll beyond 8dp
+04:38 +170: /home/hatch/workspace/ww-gate-verify/flutter/test/toolbar_test.dart: TOOL — verse toolbar TOOL-3 dismiss: a page turn dismisses and completes
+04:40 +171: /home/hatch/workspace/ww-gate-verify/flutter/test/toolbar_test.dart: TOOL — verse toolbar TOOL-3 dismiss: back dismisses the toolbar only
+04:41 +172: /home/hatch/workspace/ww-gate-verify/flutter/test/toolbar_test.dart: TOOL — verse toolbar TOOL-4 colors: apply, persist, re-tap removes, None removes
+04:43 +173: /home/hatch/workspace/ww-gate-verify/flutter/test/toolbar_test.dart: TOOL — verse toolbar TOOL-6 note editor: labels, save, cancel, empty save
+04:47 +174: /home/hatch/workspace/ww-gate-verify/flutter/test/toolbar_test.dart: TOOL — verse toolbar TOOL-5 independence: highlight and note never cascade
+04:51 +175: /home/hatch/workspace/ww-gate-verify/flutter/test/toolbar_test.dart: TOOL — verse toolbar TOOL-7 connections sheet: connections only; row tap jumps same-screen with push and flash
+04:52 +176: /home/hatch/workspace/ww-gate-verify/flutter/test/toolbar_test.dart: TOOL — verse toolbar TOOL-7 new-screen button opens a new screen; at the cap it falls back with the verbatim snackbar
+04:56 +177: /home/hatch/workspace/ww-gate-verify/flutter/test/toolbar_test.dart: TOOL — verse toolbar TOOL-8 a verse with no connections
+04:58 +178: /home/hatch/workspace/ww-gate-verify/flutter/test/toolbar_test.dart: TOOL — verse toolbar BACK-0 rungs: editor, then sheet, then toolbar
+05:00 +179: loading /home/hatch/workspace/ww-gate-verify/flutter/test/top_bar_test.dart
+05:02 +179: /home/hatch/workspace/ww-gate-verify/flutter/test/top_bar_test.dart: T8 — top bar under text scale T8a — Home bar is exactly 56.0 at text scale 1.0
+05:06 +180: /home/hatch/workspace/ww-gate-verify/flutter/test/top_bar_test.dart: T8 — top bar under text scale T8b — Home bar: zero overflow at text scale 1.3
+05:07 +181: /home/hatch/workspace/ww-gate-verify/flutter/test/top_bar_test.dart: T8 — top bar under text scale T8c — Home bar: zero overflow at text scale 1.5
+05:07 +182: /home/hatch/workspace/ww-gate-verify/flutter/test/top_bar_test.dart: T8 — top bar under text scale T8d — Profiles and My Notes bars at text scale 1.3: no overflow, exactly 56.0
+05:09 +183: loading /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_data_test.dart
+05:11 +183: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_data_test.dart: WwTradition stored values round-trip; unknown reads as none
+05:11 +184: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_data_test.dart: WwTradition translation sets per tradition and testament
+05:11 +185: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_data_test.dart: WwTradition translation labels round-trip through fromStored
+05:11 +186: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_data_test.dart: CanonView.tanakh 39 books, each core index exactly once, JPS order
+05:11 +187: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_data_test.dart: CanonView.tanakh names come from the canon (one name per book, app-wide)
+05:12 +188: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_data_test.dart: SefariaData.parse keeps in-canon links, aggregates counts, drops the rest
+05:12 +189: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_data_test.dart: SefariaData.parse urlFor prefers the recorded source ref, else builds one
+05:12 +190: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_data_test.dart: SefariaData.parse capped totals read back; verseUrl is the verse page
+05:12 +191: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_data_test.dart: ConfessionData.parse a dropped section never shifts the surviving indices
+05:12 +192: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_data_test.dart: DeuterocanonData.parse bounds, labels, positions
+05:12 +193: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_data_test.dart: ScriptureText traditions JPS renders on the OT, falls back to KJV on the NT
+05:12 +194: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_data_test.dart: ScriptureText traditions WEBC extras read by slug; core chapters map by table
+05:12 +195: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_data_test.dart: bundled assets parse with the real classes confessions.json: two documents, sorted deduped edges
+05:13 +196: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_data_test.dart: bundled assets parse with the real classes sefaria.json.gz: the capped dataset parses whole
+05:22 +197: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_data_test.dart: bundled assets parse with the real classes webc.json + deuterocanon.json: the extra canon is whole
+05:22 +198: loading /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_library_test.dart
+05:28 +198: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_library_test.dart: none: the shipped testament pair, nothing else
+05:33 +199: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_library_test.dart: jewish: the Tanakh tile alone, counted from the canon; its tap routes to the grid
+05:34 +200: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_library_test.dart: catholic: the OT tile counts the union canon
+05:34 +201: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_library_test.dart: catholic without the table loaded: no OT tile until the union canon can render
+05:35 +202: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_library_test.dart: catholic: Greek Esther/Daniel add grid tiles but not canon counts
+05:35 +203: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_library_test.dart: protestant: confessions tile appears only with its dataset, counted from it
+05:35 +204: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_library_test.dart: protestant with data: the tile lands below the testaments and routes out
+05:35 +205: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_library_test.dart: switching tradition live re-scopes the tiles
+05:35 +206: loading /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_profiles_test.dart
+05:38 +206: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_profiles_test.dart: section renders verbatim copy, after New profile, before Backup
+05:43 +207: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_profiles_test.dart: semantics: one node per row, the selected flag carries the state
+05:44 +208: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_profiles_test.dart: a row tap emits exactly one change and moves the selection
+05:45 +209: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_profiles_test.dart: the old conference switch is gone
+05:45 +210: loading /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_reader_test.dart
+05:49 +210: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_reader_test.dart: jewish: the sheet gains an On Sefaria section; its row opens the work on Sefaria
+05:54 +211: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_reader_test.dart: jewish capped verse: the sheet says so and links to all of them
+05:57 +212: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_reader_test.dart: jewish: a verse without links reads so, plainly
+06:00 +213: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_reader_test.dart: protestant: the sheet gains Confession proofs; its row opens the section at its host
+06:03 +214: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_reader_test.dart: none: the shipped sheet, no tradition sections
+06:07 +215: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_reader_test.dart: jewish toggle: four options ride a chip menu on the OT; a JPS pick re-renders the page; the NT offers neither
+06:10 +216: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_reader_test.dart: hebrew renders right-to-left
+06:11 +217: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_reader_test.dart: catholic: WEBC on Esther names the KJV fallback and points to the Greek Esther
+06:12 +218: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_reader_test.dart: catholic: WEBC on Daniel names the KJV fallback; WEBC on Genesis carries no disclosure
+06:14 +219: loading /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_shell_test.dart
+06:19 +219: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_shell_test.dart: migration: a pre-run-9 install with the conference toggle on wakes up Latter-day Saint
+06:29 +220: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_shell_test.dart: restore: a stored tradition wakes up selected, and its Library tile is live
+06:34 +221: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_shell_test.dart: selecting a tradition persists it and re-scopes the Library; user data is untouched
+06:39 +222: /home/hatch/workspace/ww-gate-verify/flutter/test/tradition_shell_test.dart: bible only: no tradition tiles, no layer loads beyond the deuterocanon table
+06:40 +223: loading /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart
+06:45 +223: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: verseKey / parseVerseKey format matches the canonical example (Psalm 23:1)
+06:45 +224: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: verseKey / parseVerseKey parse round-trips verseKey
+06:45 +225: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: verseKey / parseVerseKey parse rejects garbage
+06:45 +226: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: HlColor keys stable string keys round-trip
+06:45 +227: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: HlColor keys unknown keys resolve to null
+06:45 +228: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: highlights set, re-color, and clear
+06:45 +229: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: highlights clearing an unknown profile is a no-op read
+06:45 +230: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: highlights clearing a highlight leaves the note untouched
+06:45 +231: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: notes set, edit, and clear
+06:45 +232: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: notes whitespace-only text clears the note
+06:45 +233: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: notes clearing a note leaves the highlight untouched
+06:45 +234: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: profile scoping two profiles are fully independent
+06:45 +235: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: serialization round-trip preserves all data
+06:46 +236: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: serialization document shape matches the spec
+06:46 +237: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: serialization defensive load drops unknown colors and garbage, never throws
+06:46 +238: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: serialization defensive load tolerates a garbage top-level shape
+06:46 +239: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: profiles a fresh model has exactly the default profile, active
+06:46 +240: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: profiles create adds a named profile and makes it active
+06:46 +241: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: profiles create trims the name and falls back on a blank one
+06:46 +242: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: profiles created ids never collide, even after deletes
+06:46 +243: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: profiles rename works for created and default profiles alike
+06:46 +244: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: profiles rename ignores unknown ids and blank names
+06:46 +245: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: profiles switching accepts real profiles and ignores unknown ids
+06:46 +246: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: profiles deleting a non-active profile leaves the active one alone
+06:46 +247: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: profiles deleting the active profile falls back to the default
+06:46 +248: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: profiles deleting the active profile falls back to a remaining one when the default is gone
+06:46 +249: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: profiles the last remaining profile can never be deleted
+06:46 +250: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: profiles deleting a profile deletes its highlights and notes
+06:46 +251: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: profiles active-profile isolation: writes under one profile are invisible under another
+06:46 +252: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: profiles a version 1 document keeps the default profile data untouched
+06:46 +253: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: profiles names, active id, and sequence survive a round-trip
+06:46 +254: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: profiles a stale stored active id resolves to a real profile
+06:46 +255: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: notesFor (My Notes) canonical order: book, then chapter, then verse, numeric
+06:46 +256: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: notesFor (My Notes) scoped to the requested profile
+06:46 +257: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: notesFor (My Notes) an empty profile has an empty list
+06:46 +258: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: UserDataStore save/load round-trip through SharedPreferences
+06:46 +259: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: UserDataStore profiles, names, and active id round-trip through the store
+06:46 +260: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: UserDataStore missing or corrupt stored document loads as empty
+06:46 +261: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: spans (board run 10) a partial span applies to the exact range and reads back
+06:46 +262: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: spans (board run 10) applying over an existing span recolors the intersection and keeps the tails
+06:46 +263: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: spans (board run 10) clearing a sub-range splits the span, keeping both tails
+06:46 +264: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: spans (board run 10) adjacent same-color spans merge into one
+06:46 +265: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: spans (board run 10) a full-verse write replaces every span on the verse
+06:46 +266: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: spans (board run 10) clearVerseSpans removes all spans and leaves the note
+06:46 +267: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: spans (board run 10) spans on different verses never interact
+06:46 +268: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: spans (board run 10) an open-ended span survives serialization open-ended
+06:46 +269: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: per-translation sets (board run 10) a highlight made in KJV is invisible in WEB and intact on return
+06:46 +270: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: per-translation sets (board run 10) notes follow the same per-translation rule
+06:46 +271: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: per-translation sets (board run 10) deleting in one translation leaves the other untouched
+06:46 +272: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: migration (board run 10) a v2 document migrates into the translation active at upgrade, as full-verse spans
+06:46 +273: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: migration (board run 10) migration does not duplicate into other translations
+06:46 +274: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: migration (board run 10) with no stored translation the migration lands in kjv
+06:46 +275: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: migration (board run 10) store load migrates with the stored preference (WEB)
+06:46 +276: /home/hatch/workspace/ww-gate-verify/flutter/test/user_data_test.dart: migration (board run 10) a v3 document round-trips spans and notes losslessly
+06:47 +277: All tests passed!

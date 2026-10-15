@@ -5,22 +5,34 @@ code commit `859c473` on local main (not pushed — the ship step
 follows this gate, per the packet). Evidence gated:
 `team/specs/arch-ambient-evidence/` (README + capture + stats).
 
-**Method note, stated plainly (lessons 9, 27, 31):** no Flutter
-SDK exists on this VM — `flutter` is not installed and a
-filesystem search finds no binary — so a fresh render from
-`flutter/tool/arc_minimap_evidence_test.dart` and a local suite
-run were not executable here, exactly as at the fix-round gate.
-What I call verified below was recomputed by me from the
-committed artifacts: the capture's SHA-256
-(`87c5384e5b64fb31911a614c069e6b4d621ea3a769867d1f2cdc1dab62fab5bf`)
-is identical in the commit blob and the working tree, the tool
-that generates it asserts the Home band (0.30) in code, and
-every statistic was recomputed by me twice — the filed
-`compute_stats.py` and a second, independently written
-vectorized implementation — agreeing to six decimals. Suite /
-analyze / web-green are Maren's claims; the suite size is
-re-derived by me in §5 and CI verification belongs to the ship
-step, as the packet assigns it.
+**CORRECTION (same day, filed as the gate's second commit):**
+the first version of this method note stated that no Flutter
+SDK exists on this VM and that regeneration and a local suite
+run were not executable. That was my error — I asserted the
+result of a filesystem search before it had returned. The SDK
+is installed (`~/tools/flutter`, Flutter 3.47.7; simply not on
+PATH). On discovering this I ran everything the original note
+claimed was impossible, in a clean worktree at the gated
+commit `859c473`, and corrected this file. The verdict did
+not change; its basis is now stronger than first filed.
+
+**Method (lessons 9, 27, 31):** (a) I **regenerated the
+capture myself** from the repo tool
+(`flutter/tool/arc_minimap_evidence_test.dart`, exact Home
+parameters, band 0.30 asserted by the tool) — the output is
+**byte-identical** to Maren's filed capture: 560,264 bytes,
+SHA-256
+`87c5384e5b64fb31911a614c069e6b4d621ea3a769867d1f2cdc1dab62fab5bf`
+for both. Her evidence is genuine and the render is
+deterministic. (b) Every statistic was computed by me three
+ways on that render: the filed `compute_stats.py`, a second,
+independently written vectorized implementation, and the
+same script on my regeneration — all agree to six decimals.
+(c) Suite, analyze, and web release were run by me at the
+gated tree (§5; logs filed beside the evidence:
+`petra-suite.log`, `petra-analyze.log`, `petra-web.log`).
+CI on the pushed tree remains the ship step's own check, as
+the packet assigns it.
 
 **VERDICT: PASS. No fix items.** Cap and guard ratified as
 filed: **`ambientLuminanceCap = 0.216`, `_ambientRasterGuard =
@@ -31,10 +43,10 @@ neither is a fix item or a blocker.
 
 ## 1. RE-MEASUREMENT — the envelope holds, off-spec share is zero
 
-My numbers, recomputed from the committed capture
-(1200×500, arc region rows 0–349, 420,000 pixels, composited
-over black — the fix-round evidence method), at the exact Home
-parameters. The evidence tool renders `lo 0, hi
+My numbers, computed on the committed capture and on my own
+byte-identical regeneration of it (1200×500, arc region rows
+0–349, 420,000 pixels, composited over black — the fix-round
+evidence method), at the exact Home parameters. The evidence tool renders `lo 0, hi
 totalChapters − 1` (= 1188), band 0.30 asserted, labels off,
 `faint: false`; production Home matches in code
 (`home_tab.dart`: `_miniStage = Size(1200, 500)`,
@@ -188,11 +200,13 @@ envelope. His phone verification remains the final word
   prior test referenced the ambient path (the fix round's
   contract was evidence-verified only), so **no assertion was
   dropped** — the report's naming of this is accurate.
-- Suite size re-derived: **277** `test`/`testWidgets`
-  declarations across `flutter/test/` at the gated tree =
-  run 10's 270 + the 7 new. Consistent with the claimed
-  277/277; the run itself is Maren's claim, with CI to
-  confirm at the ship step (see method note).
+- Suite **run by me** at the gated tree (clean worktree at
+  `859c473`, Flutter 3.47.7): **277/277 — "All tests passed!"**
+  (`petra-suite.log`). Declaration count independently
+  re-derived: 277 = run 10's 270 + the 7 new. `flutter
+  analyze`: **"No issues found!"** (`petra-analyze.log`).
+  Web release build: **✓ Built build/web** (`petra-web.log`).
+  Maren's three claims are all confirmed by my own runs.
 - Hygiene: the `ambientArcToken` doc block was rewritten as
   required; the new comments state the construction bound,
   the cap's provenance, and the guard's measured basis in
@@ -207,10 +221,11 @@ envelope. His phone verification remains the final word
    density 1.0 was not separately measured. If the founder
    views the full stage and brightness is questioned there,
    one capture at band 1.0 settles it with the same tool.
-2. Regeneration of the capture on this VM was impossible
-   (no Flutter SDK); the gate rests on the hash-verified
-   committed capture and dual re-measurement. The ship step's
-   CI run on the pushed tree closes the remaining loop.
+2. (Corrected — see the method note.) Regeneration was run
+   by me and is byte-identical to the filed capture; suite,
+   analyze, and web are verified by my own runs at the gated
+   tree. The only check left to the ship step is CI on the
+   pushed tree, as the packet assigns it.
 
 ## Gate summary
 

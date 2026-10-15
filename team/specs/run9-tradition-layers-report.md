@@ -12,8 +12,15 @@ first-class state. Packet:
 
 Verification of the final tree: `flutter analyze` — no issues.
 Full `flutter test` — **242 tests, all passed**. `flutter build
-web --release` — green. CI: [CI RUN — filled at ship]. Commits:
-[COMMITS — filled at ship]. Signed APK: [APK — filled at ship].
+web --release` — green. **CI: "Build Flutter app" run
+38665873380 — completed, success** on the final tree (head
+2ddbf21); the run's signer step prints certificate SHA-256
+`05d5a45cf52fd141a54e2ecfd00472a568c9c0bdffd0458e44ba52bfe4b5be11`,
+the pinned digest. Commits: pipelines `1d08f3f`, app `ab0d38a`,
+tests `9cfa1d1`, records `2ddbf21`. Signed APK (arm64, from the
+green run's artifact): `build-run9/woven_word_run9_traditions_20261014.apk`,
+31,879,349 bytes — also published by CI to the repo's
+flutter-apk-latest release for phone download.
 
 ---
 

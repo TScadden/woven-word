@@ -117,3 +117,26 @@ Built as scoped, with these integration decisions recorded:
 8. First-run tradition picker: DEFERRED (Profiles placement
    shipped; no evidence a first-run gate beats it, and the
    intro stays the static shipped one).
+
+## Ship record (Oct 15, 2026)
+
+9. **Petra gate: FAIL → fix round → re-gate PASS.** First gate
+   found P0-1 (deutero note editor text at 1.02:1 — theme fill
+   inherited on a paper sheet) and P1-1…P1-5 (Catholic tile
+   overcount 48/1090, undercounted fallback tile, undisclosed
+   WEBC Esther/Daniel KJV fallback, deutero selection blend
+   2.66–2.94, note sheet missing reduced-motion style). All six
+   landed exactly as specified with test locks; fixed tree:
+   analyze clean, 242/242 tests, web release green. Re-gate
+   recomputed every number (typed text 17.12:1; blend range
+   3.35–4.11; caption 46 books · 1066 chapters): **PASS — ship.**
+   Full record: team/specs/run9-tradition-layers-report.md.
+10. **Shipped.** Commits 1d08f3f (pipelines+assets), ab0d38a
+    (app), 9cfa1d1 (tests), 2ddbf21 (records). CI run 38665873380
+    — success on head 2ddbf21; signer SHA-256
+    05d5a45cf52fd141a54e2ecfd00472a568c9c0bdffd0458e44ba52bfe4b5be11
+    (the pinned digest). APK staged at
+    build-run9/woven_word_run9_traditions_20261014.apk
+    (31,879,349 bytes) and published to the flutter-apk-latest
+    release. Payroll accrues on founder verification: tradition
+    architecture + Jewish + Protestant + Catholic layers.

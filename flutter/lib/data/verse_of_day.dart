@@ -1,13 +1,16 @@
 import 'bible_data.dart';
 import 'scripture_text.dart';
 import 'tradition.dart';
+import 'verse_of_day_curation.dart';
 
-/// Verse of the Day (board run 11, spec §3): the day's verse is
-/// drawn from a pool of the canon's most-connected verses, chosen
-/// by a pure date rotation — the same verse all day, no repeat
-/// within the pool's length in days. Everything in this file is
-/// pure and unit-testable without widgets, SharedPreferences, or
-/// the asset bundle.
+/// Verse of the Day (board run 11, spec §3; pool rule replaced by
+/// team/specs/verse-of-day-quotable.md, founder ruling Oct 15,
+/// 2026 — "the verses should be ones that people can quote"): the
+/// day's verse is drawn from a quotability pool, chosen by a pure
+/// date rotation — the same verse all day, no repeat within the
+/// pool's length in days. Everything in this file is pure and
+/// unit-testable without widgets, SharedPreferences, or the asset
+/// bundle.
 
 /// One pool entry: a verse and its deduped connection count.
 class VerseOfDayPick {
@@ -52,28 +55,152 @@ int daysSinceEpochLocal(DateTime localDate) => DateTime.utc(
   localDate.day,
 ).difference(DateTime.utc(1970, 1, 1)).inDays;
 
-/// Builds the Verse of the Day pool: every verse of every chapter
-/// whose book is inside [tradition]'s canon, ordered by
-/// connection count descending with ties broken by canonical
-/// order (chapter asc, then verse asc), truncated to [poolSize].
-/// A canon holding fewer than [poolSize] verses yields every
-/// verse (0-count verses included, in canonical order at the
-/// tail) — never an error.
+/// The core canons' quotability floor (quotable spec §2.2): a
+/// verse enters the core pool only when at least this many
+/// distinct conference talks cite it.
+const int votdCitationFloor = 25;
+
+/// The Jewish canon's prominence floor (quotable spec §2.2): a
+/// verse enters the Tanakh pool only at this many deduped
+/// cross-reference connections. (The conference corpus is a
+/// Latter-day Saint corpus; its signal is not used there.)
+const int votdConnectionFloor = 55;
+
+/// The degraded pool's size (quotable spec §2.5): when the
+/// citation counts fail to load, the core pool falls back to the
+/// shipped run 11 ranking truncated to this many verses.
+const int votdFallbackPoolSize = 365;
+
+const Set<String> _votdNumberWords = {
+  'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight',
+  'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen',
+  'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen',
+  'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy',
+  'eighty', 'ninety', 'hundred', 'thousand',
+};
+
+final RegExp _votdBegat = RegExp(r'\bbegat\b');
+final RegExp _votdItinerary = RegExp(
+  r'\b(removed|departed|journeyed) from [a-z\-]+,? and (encamped|pitched)\b',
+);
+final RegExp _votdWordTokens = RegExp(r'[a-z]+');
+final RegExp _votdWhitespace = RegExp(r'\s+');
+
+/// Strips the punctuation set `.,;:!?()` from both ends of [word],
+/// mirroring Python's `str.strip('.,;:!?()')` in the normative
+/// predicate implementation.
+String _stripVotdPunctuation(String word) {
+  const strip = {'.', ',', ';', ':', '!', '?', '(', ')'};
+  var start = 0;
+  var end = word.length;
+  while (start < end && strip.contains(word[start])) {
+    start++;
+  }
+  while (end > start && strip.contains(word[end - 1])) {
+    end--;
+  }
+  return word.substring(start, end);
+}
+
+/// Python's `str.isupper()` for one character: cased and upper.
+bool _isUpperChar(String c) =>
+    c.toUpperCase() == c && c.toLowerCase() != c;
+
+/// The encoded quotability predicates (quotable spec §2.3), a
+/// pure function of the verse's bundled KJV text: true when the
+/// verse passes all four — i.e. it is NOT a genealogy line (P1,
+/// "begat"), NOT an itinerary log entry (P2, "removed/departed/
+/// journeyed from `place` and encamped/pitched"), NOT a census /
+/// name list (P3, "the children of" with ≥ 2 spelled-out number
+/// words, or a "these are the names of" opening), and NOT a
+/// proper-name list by density (P4, in a verse of ≥ 6 words,
+/// ≥ 45% of the non-initial words capitalized).
 ///
-/// A verse's count IS `data.verseConnections(ch, v).length`: the
-/// counts here are taken as the size of the distinct-target set
-/// of the verse's stored connection rows, and
-/// [BibleData.verseConnections] dedupes by exactly that target
-/// key, so the two counts are identical by construction (the
-/// suite asserts the equality on sampled verses).
+/// This is a Dart port of the normative implementation,
+/// `tools/votd_curation/generate.py` (`predicates()`); the two
+/// must match exactly, and the suite pins both with the same
+/// exemplars (spec §5 test 1).
+bool versePassesQuotabilityPredicates(String kjvText) {
+  final low = kjvText.toLowerCase();
+  // P1 — genealogy verb.
+  if (_votdBegat.hasMatch(low)) return false;
+  // P2 — itinerary log.
+  if (_votdItinerary.hasMatch(low)) return false;
+  // P3 — census / name list.
+  final numberWords = _votdWordTokens
+      .allMatches(low)
+      .map((m) => m.group(0)!)
+      .where(_votdNumberWords.contains)
+      .length;
+  if ((low.contains('the children of') && numberWords >= 2) ||
+      low.startsWith('these are the names of') ||
+      low.startsWith('and these are the names of')) {
+    return false;
+  }
+  // P4 — name density.
+  final toks = kjvText.trim().split(_votdWhitespace);
+  if (toks.length >= 6) {
+    final internal = <String>[];
+    for (final w in toks.skip(1)) {
+      final stripped = _stripVotdPunctuation(w);
+      if (stripped.isNotEmpty) internal.add(stripped);
+    }
+    if (internal.isNotEmpty &&
+        internal.where((w) => _isUpperChar(w[0])).length / internal.length >=
+            0.45) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/// Builds the Verse of the Day pool under the quotable rule
+/// (team/specs/verse-of-day-quotable.md §2): a signal floor per
+/// canon, the §2.3 encoded predicates, and the §2.4 curatorial
+/// exclusions ([votdCuratorialExclusions], always applied).
+///
+/// - Canon membership is [canonContainsBook] intersected with
+///   the core book range: only book indices < 1000 carry
+///   connection data, so deuterocanon books never pool.
+/// - Jewish tradition: the connections rule — verses with at
+///   least [votdConnectionFloor] connections, ranked connections
+///   descending then canonical order. [citationCount] is
+///   ignored.
+/// - Other traditions with [citationCount] provided: the
+///   citation rule — verses cited by at least
+///   [votdCitationFloor] distinct talks, ranked citations
+///   descending, connections descending, canonical order. No
+///   truncation and no padding: the floor is the standard.
+/// - Other traditions without [citationCount] (the citation
+///   signal failed to load): the §2.5 fallback — the shipped
+///   run 11 ranking (connections descending, canonical order),
+///   still filtered, truncated to [votdFallbackPoolSize].
+///
+/// The §2.3 predicates run when [kjvText] is provided (the shell
+/// only builds the pool once texts are loaded, so in practice it
+/// always is).
+///
+/// A verse's connection count IS
+/// `data.verseConnections(ch, v).length`: the counts here are
+/// taken as the size of the distinct-target set of the verse's
+/// stored connection rows, and [BibleData.verseConnections]
+/// dedupes by exactly that target key, so the two counts are
+/// identical by construction (the suite asserts the equality on
+/// sampled verses).
 List<VerseOfDayPick> buildVerseOfDayPool(
   BibleData data,
   WwTradition tradition, {
-  int poolSize = 365,
+  int Function(int globalChapter, int verse)? citationCount,
+  String Function(int globalChapter, int verse)? kjvText,
 }) {
-  final picks = <VerseOfDayPick>[];
+  final isJewish = tradition == WwTradition.jewish;
+  final useCitations = !isJewish && citationCount != null;
+  // Candidates carry their citation count alongside the pick for
+  // the citation ranking; it is not part of the pick's shape.
+  final candidates = <(VerseOfDayPick, int)>[];
   for (var ch = 0; ch < data.chapters.length; ch++) {
     final chapter = data.chapters[ch];
+    if (chapter.b >= 1000) continue;
     if (!canonContainsBook(tradition, data, chapter.b)) continue;
     for (var v = 1; v <= chapter.v; v++) {
       final raw = data.verseConnsByPos[data.versePos(ch, v)];
@@ -81,17 +208,38 @@ List<VerseOfDayPick> buildVerseOfDayPool(
       if (raw != null && raw.isNotEmpty) {
         count = <int>{for (final e in raw) e[0] * 1000 + e[1]}.length;
       }
-      picks.add(VerseOfDayPick(chapter: ch, verse: v, connectionCount: count));
+      final citations = useCitations ? citationCount(ch, v) : 0;
+      if (isJewish) {
+        if (count < votdConnectionFloor) continue;
+      } else if (useCitations) {
+        if (citations < votdCitationFloor) continue;
+      }
+      if (votdCuratorialExclusions.containsKey((ch, v))) continue;
+      if (kjvText != null &&
+          !versePassesQuotabilityPredicates(kjvText(ch, v))) {
+        continue;
+      }
+      candidates.add((
+        VerseOfDayPick(chapter: ch, verse: v, connectionCount: count),
+        citations,
+      ));
     }
   }
-  picks.sort((a, b) {
-    final byCount = b.connectionCount.compareTo(a.connectionCount);
+  candidates.sort((a, b) {
+    if (useCitations) {
+      final byCitations = b.$2.compareTo(a.$2);
+      if (byCitations != 0) return byCitations;
+    }
+    final byCount = b.$1.connectionCount.compareTo(a.$1.connectionCount);
     if (byCount != 0) return byCount;
-    final byChapter = a.chapter.compareTo(b.chapter);
+    final byChapter = a.$1.chapter.compareTo(b.$1.chapter);
     if (byChapter != 0) return byChapter;
-    return a.verse.compareTo(b.verse);
+    return a.$1.verse.compareTo(b.$1.verse);
   });
-  if (picks.length > poolSize) return picks.sublist(0, poolSize);
+  var picks = [for (final c in candidates) c.$1];
+  if (!isJewish && !useCitations && picks.length > votdFallbackPoolSize) {
+    picks = picks.sublist(0, votdFallbackPoolSize);
+  }
   return picks;
 }
 
@@ -107,12 +255,23 @@ VerseOfDayPick? verseOfDayFromPool(
 
 /// The pick for [localDate], building the pool fresh. Callers
 /// that rebuild often (the shell) cache the pool and call
-/// [verseOfDayFromPool] directly.
+/// [verseOfDayFromPool] directly. The pool inputs forward to
+/// [buildVerseOfDayPool] unchanged.
 VerseOfDayPick? verseOfDayForDate(
   BibleData data,
   WwTradition tradition,
-  DateTime localDate,
-) => verseOfDayFromPool(buildVerseOfDayPool(data, tradition), localDate);
+  DateTime localDate, {
+  int Function(int globalChapter, int verse)? citationCount,
+  String Function(int globalChapter, int verse)? kjvText,
+}) => verseOfDayFromPool(
+  buildVerseOfDayPool(
+    data,
+    tradition,
+    citationCount: citationCount,
+    kjvText: kjvText,
+  ),
+  localDate,
+);
 
 /// Reproduces the reader's translation resolution exactly
 /// (reader_screen.dart `_availableTranslations` + `_effT`): the

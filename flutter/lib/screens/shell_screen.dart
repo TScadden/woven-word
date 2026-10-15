@@ -45,6 +45,7 @@ class WwShell extends StatefulWidget {
     this.sefariaLoader,
     this.confessionLoader,
     this.deuteroLoader,
+    this.citationCountsLoader,
   });
 
   final Future<BibleData> Function()? dataLoader;
@@ -53,6 +54,8 @@ class WwShell extends StatefulWidget {
   final Future<SefariaData> Function(BibleData canon)? sefariaLoader;
   final Future<ConfessionData> Function(BibleData canon)? confessionLoader;
   final Future<DeuterocanonData> Function()? deuteroLoader;
+  final Future<Map<(int, int), int>> Function(BibleData canon)?
+  citationCountsLoader;
 
   @override
   State<WwShell> createState() => _WwShellState();
@@ -84,6 +87,7 @@ class ShellController extends ChangeNotifier
     this.sefariaLoader,
     this.confessionLoader,
     this.deuteroLoader,
+    this.citationCountsLoader,
   }) {
     dataFuture = (dataLoader ?? BibleData.load)();
     dataFuture
@@ -91,11 +95,14 @@ class ShellController extends ChangeNotifier
           if (_disposed) return;
           data = d;
           _loadPrefs();
+          unawaited(ensureCitationCountsLoaded());
         })
         .catchError((_) {});
     // The memoized texts future for the Home Verse of the Day
-    // card (board run 11, §7.2): resolution stores the texts (or
-    // records the failure) and notifies; never throws into the UI.
+    // card (board run 11, §7.2): resolution stores the texts and
+    // notifies; a failure leaves the texts unloaded (the Verse
+    // of the Day section renders only once its inputs exist —
+    // quotable spec §3.3) and never throws into the UI.
     _textsFuture = (textsLoader ?? ScriptureText.load)();
     _textsFuture!
         .then((t) {
@@ -105,7 +112,6 @@ class ShellController extends ChangeNotifier
         })
         .catchError((_) {
           if (_disposed) return;
-          _textsFailed = true;
           notifyListeners();
         });
     _loadUserData();
@@ -117,6 +123,8 @@ class ShellController extends ChangeNotifier
   final Future<SefariaData> Function(BibleData canon)? sefariaLoader;
   final Future<ConfessionData> Function(BibleData canon)? confessionLoader;
   final Future<DeuterocanonData> Function()? deuteroLoader;
+  final Future<Map<(int, int), int>> Function(BibleData canon)?
+  citationCountsLoader;
   late final Future<BibleData> dataFuture;
   BibleData? data;
 
@@ -188,6 +196,55 @@ class ShellController extends ChangeNotifier
   /// only. Persists through [setTradition].
   Future<void> setConferenceEnabled(bool enabled) async {
     await setTradition(enabled ? WwTradition.lds : WwTradition.none);
+  }
+
+  // --------------------------------------- votd citation counts
+
+  /// The conference citation counts behind the Verse of the Day
+  /// pool (quotable spec §3.2): loaded from the bundled
+  /// conference asset INDEPENDENTLY of the conference layer's
+  /// toggle and lazy load — the pool is a Home surface, not a
+  /// layer surface. Null until the load resolves, and null after
+  /// a failed load.
+  Map<(int, int), int>? citationCounts;
+
+  /// Whether the citation-count load has resolved, loaded or
+  /// failed. A failure resolves here too (never an error surface
+  /// on Home): [citationCounts] stays null and the pool builds
+  /// in the §2.5 fallback mode.
+  bool citationCountsResolved = false;
+
+  Future<void>? _citationCountsLoad;
+
+  /// Loads the citation counts once; concurrent calls share one
+  /// in-flight load. Never throws.
+  Future<void> ensureCitationCountsLoaded() async {
+    if (_disposed) return;
+    if (citationCountsResolved) return;
+    final inFlight = _citationCountsLoad;
+    if (inFlight != null) return inFlight;
+    final d = data;
+    if (d == null) return;
+    final load = () async {
+      try {
+        final loaded =
+            await (citationCountsLoader ??
+                ConferenceData.loadCitationCounts)(d);
+        if (_disposed) return;
+        citationCounts = loaded;
+      } catch (e) {
+        if (_disposed) return;
+        debugPrint('Woven Word: citation counts failed to load: $e');
+        citationCounts = null;
+      } finally {
+        _citationCountsLoad = null;
+      }
+      if (_disposed) return;
+      citationCountsResolved = true;
+      notifyListeners();
+    }();
+    _citationCountsLoad = load;
+    return load;
   }
 
   // ------------------------------------------------ tradition layers
@@ -397,13 +454,15 @@ class ShellController extends ChangeNotifier
   /// the Verse of the Day card's text.
   Future<ScriptureText>? _textsFuture;
   ScriptureText? _texts;
-  bool _textsFailed = false;
 
-  /// The Verse of the Day pool cache (§3.1): rebuilt lazily when
-  /// the data or tradition differs from the cached pair, reused
-  /// otherwise.
+  /// The Verse of the Day pool cache (run 11 §3.1; quotable spec
+  /// §3.3): rebuilt lazily when the data, the tradition, or the
+  /// pool's inputs (the citation counts, the scripture texts)
+  /// differ from the cached set, reused otherwise.
   List<VerseOfDayPick>? _votdPool;
   WwTradition? _votdPoolTradition;
+  Map<(int, int), int>? _votdPoolCitationCounts;
+  ScriptureText? _votdPoolTexts;
 
   /// The plans store snapshot behind the Home cards (§7.2). The
   /// plan detail screen loads its own instance; this snapshot is
@@ -1317,6 +1376,7 @@ class _WwShellState extends State<WwShell> {
       sefariaLoader: widget.sefariaLoader,
       confessionLoader: widget.confessionLoader,
       deuteroLoader: widget.deuteroLoader,
+      citationCountsLoader: widget.citationCountsLoader,
     );
   }
 
@@ -1427,40 +1487,53 @@ class _WwShellState extends State<WwShell> {
             const [],
         tradition: _ctl.tradition,
       ).length;
-      // Verse of the Day (§3.3): the pool is cached per
-      // (data, tradition); the pick is recomputed on every build
-      // from the local date.
-      if (_ctl._votdPool == null || _ctl._votdPoolTradition != _ctl.tradition) {
-        _ctl._votdPool = buildVerseOfDayPool(d, _ctl.tradition);
-        _ctl._votdPoolTradition = _ctl.tradition;
-      }
-      final pick = verseOfDayFromPool(_ctl._votdPool!, DateTime.now());
-      if (pick != null) {
-        final String? text;
-        final WwTranslation effective;
-        if (_ctl._textsFailed) {
-          text = '';
-          effective = _ctl.translation;
-        } else if (_ctl._texts == null) {
-          text = null;
-          effective = _ctl.translation;
-        } else {
-          effective = translationForVerseOfDay(
+      // Verse of the Day (run 11 §3.3 as amended by the quotable
+      // spec §3.3): the pool builds only when its inputs exist —
+      // the scripture texts loaded (for the §2.3 predicates and
+      // the card's text) AND the citation counts resolved (loaded
+      // or failed; failed resolves to the §2.5 fallback pool).
+      // Until then Home renders WITHOUT the section — a pick
+      // computed from partial inputs could visibly change when
+      // the rest arrive. The pool is cached per (data, tradition,
+      // inputs); the pick is recomputed on every build from the
+      // local date.
+      final votdTexts = _ctl._texts;
+      if (votdTexts != null && _ctl.citationCountsResolved) {
+        final counts = _ctl.citationCounts;
+        if (_ctl._votdPool == null ||
+            _ctl._votdPoolTradition != _ctl.tradition ||
+            !identical(_ctl._votdPoolCitationCounts, counts) ||
+            !identical(_ctl._votdPoolTexts, votdTexts)) {
+          _ctl._votdPool = buildVerseOfDayPool(
+            d,
+            _ctl.tradition,
+            citationCount: counts == null
+                ? null
+                : (ch, v) => counts[(ch, v)] ?? 0,
+            kjvText: (ch, v) =>
+                votdTexts.verseText(WwTranslation.kjv, d, ch, v),
+          );
+          _ctl._votdPoolTradition = _ctl.tradition;
+          _ctl._votdPoolCitationCounts = counts;
+          _ctl._votdPoolTexts = votdTexts;
+        }
+        final pick = verseOfDayFromPool(_ctl._votdPool!, DateTime.now());
+        if (pick != null) {
+          final effective = translationForVerseOfDay(
             stored: _ctl.translation,
             tradition: _ctl.tradition,
             otBook: d.chapters[pick.chapter].b < 39,
-            hasTranslation: _ctl._texts!.hasTranslation,
+            hasTranslation: votdTexts.hasTranslation,
           );
-          text = _ctl._texts!.verseText(effective, d, pick.chapter, pick.verse);
+          verseOfDay = VerseOfDayCardData(
+            chapter: pick.chapter,
+            verse: pick.verse,
+            reference: d.refName(pick.chapter, pick.verse),
+            connectionCount: pick.connectionCount,
+            text: votdTexts.verseText(effective, d, pick.chapter, pick.verse),
+            translation: effective,
+          );
         }
-        verseOfDay = VerseOfDayCardData(
-          chapter: pick.chapter,
-          verse: pick.verse,
-          reference: d.refName(pick.chapter, pick.verse),
-          connectionCount: pick.connectionCount,
-          text: text,
-          translation: effective,
-        );
       }
       // Study Plans (§7.2): offered plans only, in definition
       // order, from the store snapshot.

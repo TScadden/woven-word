@@ -365,3 +365,40 @@ rounds Rusty ran before the studio was founded).
     for fire-and-forget call sites only; a state switch other
     code observes is a future that completes when the state is
     actually usable.
+
+## Selection, per-translation data & baselines (board run 10)
+
+39. **An always-on `SelectableText` inside a horizontal pager
+    steals the page turn.** On Android its
+    `TapAndHorizontalDragGestureRecognizer` wins the arena eagerly
+    on drag, claiming horizontal swipes that start on text —
+    most of the page — before the pager's recognizer can. Run 10
+    proved it with the shipped suite: R-T8, R-T9 and TOOL-3
+    failed under the always-on construction and passed the hour
+    the text became a MODE — plain `Text.rich` at rest,
+    `SelectableText` only for the verse in selection mode,
+    entered by long-press. Rule: in paged readers, text
+    selection is a mode you enter, never a property the text
+    always carries; and the mode's presence must be invisible
+    to every shipped gesture outside it.
+40. **When the model changes, a test's scenario may be the thing
+    that was superseded — re-seed the scenario, don't re-assert
+    the claim.** Run 10's per-translation ruling voided a
+    shipped My Notes test that asserted two notes visible in
+    one view (they now belong to different translation sets).
+    The faithful translation re-seeded the fixture as a v3
+    document with the note in the set the scenario writes, the
+    matching active translation, and the matching tradition —
+    and asserted the other set's note is NOT in the view. A
+    test translated by find-and-replace on API names alone
+    would have kept asserting the old product.
+41. **A red test is a regression only after a same-environment
+    HEAD baseline says so.** Run 10's local suite showed 9
+    failures; a HEAD worktree run in the same environment
+    showed the conference dispose race failing at HEAD too
+    (241/242, CI green). The remaining 8 were mine and got
+    fixed; the race was reported as pre-existing with its
+    baseline numbers attached. Rule: before owning a failure,
+    run the failing file on the untouched tree in the same
+    environment — and never ship a "suite green" claim that
+    hides a baseline failure inside it.

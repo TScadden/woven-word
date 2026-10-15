@@ -24,3 +24,9 @@ Work package 1's professional opening sequence pays **$0**: the
 typewriter → dust → slide sequence was retired by the intro decision
 before founder verification, and a feature pays only when it ships.
 Its craft lessons (#5, #6) remain in team memory, scoped.
+
+## Accrued — awaiting founder verification
+
+| Date | Feature | Crew | Amount | Status |
+|---|---|---|---|---|
+| 2026-10-15 | Text-selection highlighting: exact-span highlights, per-translation highlights + notes, canon dormancy (board run 10) | Studio crew | $1,000 | Accrued — pays on founder verification |

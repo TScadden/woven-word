@@ -465,4 +465,40 @@ rounds Rusty ran before the studio was founded).
     constructor calls three files away; the analyzer names
     them, but the cheap pre-check is a grep for `const <Widget>`
     before the first compile. Rule: when a shared widget gains
-    a parameter, grep its const call sites in the same edit.
+    a parameter, grep its const call sites in the same edit.## Home sections, schedules & shared-tree landings (board run 11)
+
+46. **Verify an arithmetic rule against every instance's numbers
+    before pinning it.** Run 11's brief stated plan schedules as
+    "consecutive day chunks (ceil division)" beside fixed day
+    counts — but a fixed chunk of ceil(T/D) exhausts Psalms &
+    Proverbs (181 chapters / 60 days) on day 46 and the Whole
+    Bible (1,189 / 365) on day 298, leaving 14 and 67 empty days
+    that contradict the plans' own counts. Petra caught it at
+    SPEC time by computing the instances, not at build time.
+    The pinned rule is base/remainder (base = T ~/ D; the first
+    T % D days take one extra chapter; day sizes differ by ≤ 1;
+    no empty days). A rule and its totals in the same brief are
+    a claim about every instance: compute the extremes before
+    the spec files.
+47. **In a shared working tree, a commit's file list is part of
+    its claim.** Run 11's implementation (17 files, +4,388)
+    landed inside the arch-ambient package's records commit
+    (79992d8) because sibling packages shared one tree and one
+    staging area; the run's own commits (941a150) carry only its
+    fix. Provenance survived because the coordinator re-derived
+    the payload from `git show --stat` and CI at HEAD before
+    sign-off. Before pushing, diff-stat every landing commit
+    against the package's filed file list; swept files are
+    declared in the ship record, never discovered by the next
+    desk.
+48. **Fixed-geometry decorative surfaces are a text budget:
+    clamp scale inside the art, never the words.** The plan
+    cover is exactly 112×144 by spec §10, but ambient-scaled
+    text (lesson 21's 1.43 height multiplier) needs ~149dp of
+    its 118dp inner height at text scale 2.0 — the spec's
+    geometry and its own no-overflow assertion were
+    incompatible. The ratified build (gate D-1) clamps text
+    scale ≤ 1.0 INSIDE the cover only; the same words render at
+    full scale as the card's title and caption outside it. A
+    decorative surface may cap its own typography; the
+    information it carries must exist unclamped one level up.

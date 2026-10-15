@@ -7,3 +7,6 @@ eng-web_vpl.txt
 # Signing keystores must never be committed (see ~/workspace/woven-word-signing/)
 *.jks
 *.keystore
+
+# Pipeline work dirs (downloaded sources; regenerable via the build scripts)
+tools/*/work/

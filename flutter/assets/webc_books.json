@@ -1,0 +1,376 @@
+[
+ {
+  "usfm": "GEN",
+  "name": "Genesis",
+  "core": 0
+ },
+ {
+  "usfm": "EXO",
+  "name": "Exodus",
+  "core": 1
+ },
+ {
+  "usfm": "LEV",
+  "name": "Leviticus",
+  "core": 2
+ },
+ {
+  "usfm": "NUM",
+  "name": "Numbers",
+  "core": 3
+ },
+ {
+  "usfm": "DEU",
+  "name": "Deuteronomy",
+  "core": 4
+ },
+ {
+  "usfm": "JOS",
+  "name": "Joshua",
+  "core": 5
+ },
+ {
+  "usfm": "JDG",
+  "name": "Judges",
+  "core": 6
+ },
+ {
+  "usfm": "RUT",
+  "name": "Ruth",
+  "core": 7
+ },
+ {
+  "usfm": "1SA",
+  "name": "1 Samuel",
+  "core": 8
+ },
+ {
+  "usfm": "2SA",
+  "name": "2 Samuel",
+  "core": 9
+ },
+ {
+  "usfm": "1KI",
+  "name": "1 Kings",
+  "core": 10
+ },
+ {
+  "usfm": "2KI",
+  "name": "2 Kings",
+  "core": 11
+ },
+ {
+  "usfm": "1CH",
+  "name": "1 Chronicles",
+  "core": 12
+ },
+ {
+  "usfm": "2CH",
+  "name": "2 Chronicles",
+  "core": 13
+ },
+ {
+  "usfm": "EZR",
+  "name": "Ezra",
+  "core": 14
+ },
+ {
+  "usfm": "NEH",
+  "name": "Nehemiah",
+  "core": 15
+ },
+ {
+  "usfm": "JOB",
+  "name": "Job",
+  "core": 17
+ },
+ {
+  "usfm": "PSA",
+  "name": "Psalms",
+  "core": 18
+ },
+ {
+  "usfm": "PRO",
+  "name": "Proverbs",
+  "core": 19
+ },
+ {
+  "usfm": "ECC",
+  "name": "Ecclesiastes",
+  "core": 20
+ },
+ {
+  "usfm": "SNG",
+  "name": "Song of Solomon",
+  "core": 21
+ },
+ {
+  "usfm": "ISA",
+  "name": "Isaiah",
+  "core": 22
+ },
+ {
+  "usfm": "JER",
+  "name": "Jeremiah",
+  "core": 23
+ },
+ {
+  "usfm": "LAM",
+  "name": "Lamentations",
+  "core": 24
+ },
+ {
+  "usfm": "EZK",
+  "name": "Ezekiel",
+  "core": 25
+ },
+ {
+  "usfm": "HOS",
+  "name": "Hosea",
+  "core": 27
+ },
+ {
+  "usfm": "JOL",
+  "name": "Joel",
+  "core": 28
+ },
+ {
+  "usfm": "AMO",
+  "name": "Amos",
+  "core": 29
+ },
+ {
+  "usfm": "OBA",
+  "name": "Obadiah",
+  "core": 30
+ },
+ {
+  "usfm": "JON",
+  "name": "Jonah",
+  "core": 31
+ },
+ {
+  "usfm": "MIC",
+  "name": "Micah",
+  "core": 32
+ },
+ {
+  "usfm": "NAM",
+  "name": "Nahum",
+  "core": 33
+ },
+ {
+  "usfm": "HAB",
+  "name": "Habakkuk",
+  "core": 34
+ },
+ {
+  "usfm": "ZEP",
+  "name": "Zephaniah",
+  "core": 35
+ },
+ {
+  "usfm": "HAG",
+  "name": "Haggai",
+  "core": 36
+ },
+ {
+  "usfm": "ZEC",
+  "name": "Zechariah",
+  "core": 37
+ },
+ {
+  "usfm": "MAL",
+  "name": "Malachi",
+  "core": 38
+ },
+ {
+  "usfm": "TOB",
+  "name": "Tobit",
+  "core": null,
+  "extra": "tobit"
+ },
+ {
+  "usfm": "JDT",
+  "name": "Judith",
+  "core": null,
+  "extra": "judith"
+ },
+ {
+  "usfm": "ESG",
+  "name": "Esther (Greek)",
+  "core": null,
+  "extra": "esther-greek"
+ },
+ {
+  "usfm": "WIS",
+  "name": "Wisdom",
+  "core": null,
+  "extra": "wisdom"
+ },
+ {
+  "usfm": "SIR",
+  "name": "Sirach",
+  "core": null,
+  "extra": "sirach"
+ },
+ {
+  "usfm": "BAR",
+  "name": "Baruch",
+  "core": null,
+  "extra": "baruch"
+ },
+ {
+  "usfm": "1MA",
+  "name": "1 Maccabees",
+  "core": null,
+  "extra": "1-maccabees"
+ },
+ {
+  "usfm": "2MA",
+  "name": "2 Maccabees",
+  "core": null,
+  "extra": "2-maccabees"
+ },
+ {
+  "usfm": "DAG",
+  "name": "Daniel (Greek)",
+  "core": null,
+  "extra": "daniel-greek"
+ },
+ {
+  "usfm": "MAT",
+  "name": "Matthew",
+  "core": 39
+ },
+ {
+  "usfm": "MRK",
+  "name": "Mark",
+  "core": 40
+ },
+ {
+  "usfm": "LUK",
+  "name": "Luke",
+  "core": 41
+ },
+ {
+  "usfm": "JHN",
+  "name": "John",
+  "core": 42
+ },
+ {
+  "usfm": "ACT",
+  "name": "Acts",
+  "core": 43
+ },
+ {
+  "usfm": "ROM",
+  "name": "Romans",
+  "core": 44
+ },
+ {
+  "usfm": "1CO",
+  "name": "1 Corinthians",
+  "core": 45
+ },
+ {
+  "usfm": "2CO",
+  "name": "2 Corinthians",
+  "core": 46
+ },
+ {
+  "usfm": "GAL",
+  "name": "Galatians",
+  "core": 47
+ },
+ {
+  "usfm": "EPH",
+  "name": "Ephesians",
+  "core": 48
+ },
+ {
+  "usfm": "PHP",
+  "name": "Philippians",
+  "core": 49
+ },
+ {
+  "usfm": "COL",
+  "name": "Colossians",
+  "core": 50
+ },
+ {
+  "usfm": "1TH",
+  "name": "1 Thessalonians",
+  "core": 51
+ },
+ {
+  "usfm": "2TH",
+  "name": "2 Thessalonians",
+  "core": 52
+ },
+ {
+  "usfm": "1TI",
+  "name": "1 Timothy",
+  "core": 53
+ },
+ {
+  "usfm": "2TI",
+  "name": "2 Timothy",
+  "core": 54
+ },
+ {
+  "usfm": "TIT",
+  "name": "Titus",
+  "core": 55
+ },
+ {
+  "usfm": "PHM",
+  "name": "Philemon",
+  "core": 56
+ },
+ {
+  "usfm": "HEB",
+  "name": "Hebrews",
+  "core": 57
+ },
+ {
+  "usfm": "JAS",
+  "name": "James",
+  "core": 58
+ },
+ {
+  "usfm": "1PE",
+  "name": "1 Peter",
+  "core": 59
+ },
+ {
+  "usfm": "2PE",
+  "name": "2 Peter",
+  "core": 60
+ },
+ {
+  "usfm": "1JN",
+  "name": "1 John",
+  "core": 61
+ },
+ {
+  "usfm": "2JN",
+  "name": "2 John",
+  "core": 62
+ },
+ {
+  "usfm": "3JN",
+  "name": "3 John",
+  "core": 63
+ },
+ {
+  "usfm": "JUD",
+  "name": "Jude",
+  "core": 64
+ },
+ {
+  "usfm": "REV",
+  "name": "Revelation",
+  "core": 65
+ }
+]

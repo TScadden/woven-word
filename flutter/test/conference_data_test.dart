@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:woven_word/data/bible_data.dart';
 import 'package:woven_word/data/conference_data.dart';
 
+import 'bundled_fixture.dart';
 import 'fake_canon.dart';
 
 /// Board run 8: the conference connections data layer, parsed
@@ -270,10 +271,10 @@ void main() {
     test('the shipped dataset: routing counts under the amended '
         'rule (founder correction, Oct 14 2026)', () {
       final realCanon = BibleData.fromJsonString(
-        File('assets/data.json').readAsStringSync(),
+        readBundledJson('assets/data.json.gz'),
       );
       final shipped = ConferenceData.fromCanon(
-        File('assets/conference.json').readAsStringSync(),
+        readBundledJson('assets/conference.json.gz'),
         realCanon,
       );
       // The dataset does not shrink: every talk back to April

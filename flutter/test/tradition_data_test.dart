@@ -10,6 +10,7 @@ import 'package:woven_word/data/scripture_text.dart';
 import 'package:woven_word/data/sefaria_data.dart';
 import 'package:woven_word/data/tradition.dart';
 
+import 'bundled_fixture.dart';
 import 'fake_canon.dart';
 
 /// Board run 9: the tradition data layer — the enum + canon
@@ -355,12 +356,12 @@ void main() {
       // Parse against the REAL canon counts loaded from
       // data.json (the fake canon's 10-verse chapters would drop
       // real edges by design).
-      final raw = File('assets/confessions.json').readAsStringSync();
+      final raw = readBundledJson('assets/confessions.json.gz');
       final json = jsonDecode(raw) as Map<String, dynamic>;
       expect((json['docs'] as List).length, 2);
       expect((json['sections'] as List).length, 331);
       expect((json['edges'] as List).length, 5005);
-      final realCanon = File('assets/data.json').readAsStringSync();
+      final realCanon = readBundledJson('assets/data.json.gz');
       final canonJson = jsonDecode(realCanon) as Map<String, dynamic>;
       final counts = [
         for (final c in canonJson['chapters'] as List)
@@ -373,7 +374,7 @@ void main() {
     });
 
     test('sefaria.json.gz: the capped dataset parses whole', () {
-      final realCanon = File('assets/data.json').readAsStringSync();
+      final realCanon = readBundledJson('assets/data.json.gz');
       final canonJson = jsonDecode(realCanon) as Map<String, dynamic>;
       final counts = [
         for (final c in canonJson['chapters'] as List)
@@ -395,13 +396,13 @@ void main() {
       // documented Hebrew-versification gap, visible in the data.
       expect(sd.verseHasLinks(928, 1), isFalse);
       // JPS and Hebrew bundles: 66 slots, Tanakh filled.
-      final jps = jsonDecode(File('assets/jps.json').readAsStringSync()) as List;
+      final jps = jsonDecode(readBundledJson('assets/jps.json.gz')) as List;
       expect(jps.length, 66);
       expect((jps[0] as List).length, 50);
       expect((jps[39] as List), isEmpty);
       expect(((jps[0] as List)[0] as List)[0] as String,
           startsWith('IN THE beginning'));
-      final heb = jsonDecode(File('assets/hebrew.json').readAsStringSync()) as List;
+      final heb = jsonDecode(readBundledJson('assets/hebrew.json.gz')) as List;
       expect(heb.length, 66);
       expect((heb[0] as List).length, 50);
       expect((heb[39] as List), isEmpty);
@@ -426,11 +427,11 @@ void main() {
       ]);
       expect(deut.totalChapters, 161);
       // Every extra chapter's text exists in the WEBC payload.
-      final webc = jsonDecode(File('assets/webc.json').readAsStringSync()) as List;
+      final webc = jsonDecode(readBundledJson('assets/webc.json.gz')) as List;
       final texts = ScriptureText.fromPayloads(
         kjv: '[]',
         web: '[]',
-        webc: File('assets/webc.json').readAsStringSync(),
+        webc: readBundledJson('assets/webc.json.gz'),
         webcBooks: booksRaw,
       );
       for (final b in deut.books) {

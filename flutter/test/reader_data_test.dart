@@ -134,9 +134,9 @@ void main() {
 
     test('translation labels and asset paths', () {
       expect(WwTranslation.kjv.label, 'KJV');
-      expect(WwTranslation.kjv.assetPath, 'assets/kjv.json');
+      expect(WwTranslation.kjv.assetPath, 'assets/kjv.json.gz');
       expect(WwTranslation.web.label, 'WEB');
-      expect(WwTranslation.web.assetPath, 'assets/web.json');
+      expect(WwTranslation.web.assetPath, 'assets/web.json.gz');
       expect(WwTranslation.fromStored('WEB'), WwTranslation.web);
       expect(WwTranslation.fromStored('KJV'), WwTranslation.kjv);
       expect(WwTranslation.fromStored(null), WwTranslation.kjv);

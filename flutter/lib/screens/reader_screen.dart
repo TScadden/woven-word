@@ -5,9 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/bible_data.dart';
+import '../data/confession_data.dart';
 import '../data/conference_data.dart';
 import '../data/screen_state.dart';
 import '../data/scripture_text.dart';
+import '../data/sefaria_data.dart';
+import '../data/tradition.dart';
 import '../data/user_data.dart';
 import '../theme/ww_theme.dart';
 
@@ -56,6 +59,22 @@ abstract class ConferenceHost {
   /// conferences list and that conference's talks list beneath
   /// it, so Back unwinds the browse (§3.3, §4.5).
   void openConferenceTalk(ConferenceTalk talk);
+}
+
+/// The tradition-layer surface a host may carry (board run 9).
+/// Generalized exactly the way [ConferenceHost] was: a host that
+/// does not implement it renders the Bible-only reader — its
+/// extra translations hidden, no tradition section in the
+/// connections sheet, the verse dot lit by cross references
+/// alone.
+abstract class TraditionHost {
+  WwTradition get tradition;
+  SefariaData? get sefariaData;
+  ConfessionData? get confessionData;
+
+  /// Opens a tradition link outside the app (a work on Sefaria,
+  /// a confession at its host).
+  void openExternalLink(String url);
 }
 
 /// The reader: one screen's view of one book, PAGED (board run 7
@@ -194,9 +213,7 @@ class ReaderScreenState extends State<ReaderScreen>
 
   PageController _newPageController(int globalChapter) {
     final book = widget.data.books[widget.data.chapters[globalChapter].b];
-    return PageController(
-      initialPage: globalChapter - book.start,
-    );
+    return PageController(initialPage: globalChapter - book.start);
   }
 
   void _replacePageController(int globalChapter) {
@@ -264,6 +281,40 @@ class ReaderScreenState extends State<ReaderScreen>
     await _load();
   }
 
+  /// The tradition this reader renders under (board run 9): the
+  /// host's, when it carries one; Bible only otherwise.
+  WwTradition get _tradition {
+    final host = widget.host;
+    return host is TraditionHost
+        ? (host as TraditionHost).tradition
+        : WwTradition.none;
+  }
+
+  TraditionHost? get _traditionHost {
+    final host = widget.host;
+    return host is TraditionHost ? host as TraditionHost : null;
+  }
+
+  /// The translations the toggle offers on the current book:
+  /// the tradition's set for this testament, narrowed to the
+  /// texts the bundle actually carries.
+  List<WwTranslation> get _availableTranslations {
+    final all = translationsFor(_tradition, otBook: _bookIndex < 39);
+    final texts = _texts;
+    if (texts == null) return all;
+    return all.where(texts.hasTranslation).toList();
+  }
+
+  /// The translation actually rendered: the stored choice when
+  /// the tradition offers it on this book, KJV otherwise — a
+  /// stored Hebrew choice never renders on a New Testament page,
+  /// and never renders blank (ScriptureText falls back per
+  /// chapter as well).
+  WwTranslation get _effT {
+    final available = _availableTranslations;
+    return available.contains(_translation) ? _translation : WwTranslation.kjv;
+  }
+
   Future<void> _setTranslation(WwTranslation t) async {
     if (t == _translation) return;
     // §4.7 (paged): the pager stays on the same chapter page; the
@@ -278,16 +329,12 @@ class ReaderScreenState extends State<ReaderScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final anchor = _screen.anchorVerse;
-      final ctx = anchor != null
-          ? verseContext(_currentChapter, anchor)
-          : null;
+      final ctx = anchor != null ? verseContext(_currentChapter, anchor) : null;
       if (ctx != null) {
         Scrollable.ensureVisible(
           ctx,
           alignment: 0.5,
-          duration: WwMotion.reduced(context)
-              ? Duration.zero
-              : WwMotion.push,
+          duration: WwMotion.reduced(context) ? Duration.zero : WwMotion.push,
           curve: WwMotion.curve,
         );
       } else {
@@ -538,9 +585,7 @@ class ReaderScreenState extends State<ReaderScreen>
     if (verseBox != null && vpBox != null) {
       final verseRect = Rect.fromPoints(
         verseBox.localToGlobal(Offset.zero),
-        verseBox.localToGlobal(
-          verseBox.size.bottomRight(Offset.zero),
-        ),
+        verseBox.localToGlobal(verseBox.size.bottomRight(Offset.zero)),
       );
       final vpRect = Rect.fromPoints(
         vpBox.localToGlobal(Offset.zero),
@@ -687,9 +732,7 @@ class ReaderScreenState extends State<ReaderScreen>
         Scrollable.ensureVisible(
           verseCtx,
           alignment: 0.0,
-          duration: WwMotion.reduced(context)
-              ? Duration.zero
-              : WwMotion.push,
+          duration: WwMotion.reduced(context) ? Duration.zero : WwMotion.push,
           curve: WwMotion.curve,
         ).whenComplete(() {
           _toolbarScrollGuard = false;
@@ -757,7 +800,7 @@ class ReaderScreenState extends State<ReaderScreen>
     _sheetOpen = true;
     final data = widget.data;
     final texts = _texts!;
-    final translation = _translation;
+    final translation = _effT;
     final conns = data.verseConnections(ch, v);
     // The conference layer (board run 8, §3): the section renders
     // only when the host carries the layer and it is ON. A host
@@ -766,13 +809,33 @@ class ReaderScreenState extends State<ReaderScreen>
     // layer (§3.3), one row per talk however often it cites the
     // verse; an enabled-but-unloaded dataset reads as no talks.
     final host = widget.host;
-    final ConferenceHost? confHost =
-        host is ConferenceHost ? host as ConferenceHost : null;
+    final ConferenceHost? confHost = host is ConferenceHost
+        ? host as ConferenceHost
+        : null;
     final confOn = confHost?.conferenceEnabled ?? false;
     final talks = confOn
         ? (confHost?.conferenceData?.talksForVerse(ch, v) ??
               const <ConferenceTalk>[])
         : const <ConferenceTalk>[];
+    // The tradition sections (board run 9): the sheet gains the
+    // active tradition's corpus section, under the same §1.1
+    // rule — no tradition, or a host without the surface, gets
+    // the shipped sheet byte-for-byte. An enabled-but-unloaded
+    // dataset reads as no links, the conference rule.
+    final tradHost = _traditionHost;
+    final tradition = tradHost?.tradition ?? WwTradition.none;
+    final sefariaWorks = tradition == WwTradition.jewish
+        ? (tradHost?.sefariaData?.worksForVerse(ch, v) ??
+              const <(String, int)>[])
+        : const <(String, int)>[];
+    final confessionSections = tradition == WwTradition.protestant
+        ? (tradHost?.confessionData?.sectionsForVerse(ch, v) ??
+              const <ConfessionSection>[])
+        : const <ConfessionSection>[];
+    final layered =
+        confOn ||
+        tradition == WwTradition.jewish ||
+        tradition == WwTradition.protestant;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: WwColors.paper,
@@ -810,6 +873,9 @@ class ReaderScreenState extends State<ReaderScreen>
                           style: WwType.snippet,
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
+                          textDirection: translation.isRtl
+                              ? TextDirection.rtl
+                              : null,
                         ),
                       ],
                     ),
@@ -902,17 +968,111 @@ class ReaderScreenState extends State<ReaderScreen>
           );
         }
 
+        // One Sefaria row (board run 9): the work this verse is
+        // linked to, with its link count; the row opens the work
+        // on Sefaria. One semantics node, the exact label — the
+        // talk row's construction.
+        Widget sefariaRow((String, int) work) {
+          final (title, count) = work;
+          return Semantics(
+            container: true,
+            button: true,
+            label: 'Open $title on Sefaria',
+            child: ExcludeSemantics(
+              child: InkWell(
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  final sd = tradHost?.sefariaData;
+                  if (sd == null) return;
+                  tradHost?.openExternalLink(sd.urlFor(title, ch, v, data));
+                },
+                child: Container(
+                  constraints: const BoxConstraints(
+                    minHeight: WwSpace.minTarget,
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: WwType.bodyOnPaper.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        count == 1 ? '1 link' : '$count links',
+                        style: WwType.captionOnPaper,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        // One confession-proof row (board run 9): the document
+        // and the section that cites this verse; the row opens
+        // the confession at its host.
+        Widget confessionRow(ConfessionSection section) {
+          final cd = tradHost?.confessionData;
+          final doc = cd?.docFor(section);
+          return Semantics(
+            container: true,
+            button: true,
+            label:
+                'Open ${doc?.title ?? 'confession'} ${section.label} '
+                'proof text',
+            child: ExcludeSemantics(
+              child: InkWell(
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  if (cd == null) return;
+                  tradHost?.openExternalLink(cd.urlFor(section));
+                },
+                child: Container(
+                  constraints: const BoxConstraints(
+                    minHeight: WwSpace.minTarget,
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        doc?.title ?? '',
+                        style: WwType.bodyOnPaper.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${section.label} · proof text',
+                        style: WwType.captionOnPaper,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
         final header = <Widget>[
           Text(data.refName(ch, v), style: WwType.sheetRefTitle),
           const SizedBox(height: 8),
           Text(
             texts.verseText(translation, data, ch, v),
             style: WwType.readerSheetVerse,
+            textDirection: translation.isRtl ? TextDirection.rtl : null,
           ),
           const SizedBox(height: 12),
         ];
 
-        if (!confOn) {
+        if (!layered) {
           // The shipped sheet, byte-for-byte (§1.1 OFF contract).
           return ConstrainedBox(
             constraints: BoxConstraints(
@@ -965,19 +1125,88 @@ class ReaderScreenState extends State<ReaderScreen>
               if (i > 0) const Divider(height: 1, color: WwColors.line),
               connectionRow(conns[i][0], conns[i][1]),
             ],
-          const SizedBox(height: 16),
-          const Text('Conference talks', style: WwType.refLabel),
-          const SizedBox(height: 8),
-          if (talks.isEmpty)
-            const Text(
-              'No conference talks are recorded for this verse.',
-              style: WwType.captionOnPaper,
-            )
-          else
-            for (var i = 0; i < talks.length; i++) ...[
-              if (i > 0) const Divider(height: 1, color: WwColors.line),
-              talkRow(talks[i]),
+          if (confOn) ...[
+            const SizedBox(height: 16),
+            const Text('Conference talks', style: WwType.refLabel),
+            const SizedBox(height: 8),
+            if (talks.isEmpty)
+              const Text(
+                'No conference talks are recorded for this verse.',
+                style: WwType.captionOnPaper,
+              )
+            else
+              for (var i = 0; i < talks.length; i++) ...[
+                if (i > 0) const Divider(height: 1, color: WwColors.line),
+                talkRow(talks[i]),
+              ],
+          ],
+          if (tradition == WwTradition.jewish) ...[
+            const SizedBox(height: 16),
+            const Text('On Sefaria', style: WwType.refLabel),
+            const SizedBox(height: 8),
+            if (sefariaWorks.isEmpty)
+              const Text(
+                'No Sefaria links are recorded for this verse.',
+                style: WwType.captionOnPaper,
+              )
+            else ...[
+              for (var i = 0; i < sefariaWorks.length; i++) ...[
+                if (i > 0) const Divider(height: 1, color: WwColors.line),
+                sefariaRow(sefariaWorks[i]),
+              ],
+              // A capped verse (the pipeline keeps the 25
+              // most-cited works) says so and links to the
+              // verse's own Sefaria page, where every link
+              // lives — never a silent truncation.
+              if ((tradHost?.sefariaData?.verseWorkTotal(ch, v) ?? 0) >
+                  sefariaWorks.length) ...[
+                const Divider(height: 1, color: WwColors.line),
+                Semantics(
+                  container: true,
+                  button: true,
+                  label: 'See all links for this verse on Sefaria',
+                  child: ExcludeSemantics(
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        final sd = tradHost?.sefariaData;
+                        if (sd == null) return;
+                        tradHost?.openExternalLink(sd.verseUrl(ch, v, data));
+                      },
+                      child: Container(
+                        constraints: const BoxConstraints(
+                          minHeight: WwSpace.minTarget,
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          'See all ${tradHost?.sefariaData?.verseWorkTotal(ch, v)} '
+                          'links on Sefaria',
+                          style: WwType.bodyOnPaper.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
+          ],
+          if (tradition == WwTradition.protestant) ...[
+            const SizedBox(height: 16),
+            const Text('Confession proofs', style: WwType.refLabel),
+            const SizedBox(height: 8),
+            if (confessionSections.isEmpty)
+              const Text(
+                'No confession proofs are recorded for this verse.',
+                style: WwType.captionOnPaper,
+              )
+            else
+              for (var i = 0; i < confessionSections.length; i++) ...[
+                if (i > 0) const Divider(height: 1, color: WwColors.line),
+                confessionRow(confessionSections[i]),
+              ],
+          ],
         ];
         return ConstrainedBox(
           constraints: BoxConstraints(
@@ -991,10 +1220,7 @@ class ReaderScreenState extends State<ReaderScreen>
               children: [
                 ...header,
                 Flexible(
-                  child: ListView(
-                    shrinkWrap: true,
-                    children: scrollChildren,
-                  ),
+                  child: ListView(shrinkWrap: true, children: scrollChildren),
                 ),
               ],
             ),
@@ -1057,7 +1283,10 @@ class ReaderScreenState extends State<ReaderScreen>
               _topBar(data, showToggle: false),
               const Expanded(
                 child: Center(
-                  child: Text('Loading the text…', style: WwType.captionOnPaper),
+                  child: Text(
+                    'Loading the text…',
+                    style: WwType.captionOnPaper,
+                  ),
                 ),
               ),
             ],
@@ -1132,22 +1361,43 @@ class ReaderScreenState extends State<ReaderScreen>
                 }
               },
               itemBuilder: (_) => [
-                const PopupMenuItem(value: 'library', height: 48, child: Text('Library', style: WwType.bodyOnPaper)),
-                PopupMenuItem(value: 'testament', height: 48, child: Text(testament, style: WwType.bodyOnPaper)),
+                const PopupMenuItem(
+                  value: 'library',
+                  height: 48,
+                  child: Text('Library', style: WwType.bodyOnPaper),
+                ),
+                PopupMenuItem(
+                  value: 'testament',
+                  height: 48,
+                  child: Text(testament, style: WwType.bodyOnPaper),
+                ),
                 PopupMenuItem(
                   value: 'book',
                   height: 48,
                   enabled: false,
                   child: Row(
                     children: [
-                      const Icon(Icons.check, size: 20, color: WwColors.mutedOnPaper),
+                      const Icon(
+                        Icons.check,
+                        size: 20,
+                        color: WwColors.mutedOnPaper,
+                      ),
                       const SizedBox(width: 8),
-                      Text(bookName, style: WwType.bodyOnPaper.copyWith(color: WwColors.mutedOnPaper)),
+                      Text(
+                        bookName,
+                        style: WwType.bodyOnPaper.copyWith(
+                          color: WwColors.mutedOnPaper,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 const PopupMenuDivider(),
-                const PopupMenuItem(value: 'jump', height: 48, child: Text('Jump to reference…', style: WwType.bodyOnPaper)),
+                const PopupMenuItem(
+                  value: 'jump',
+                  height: 48,
+                  child: Text('Jump to reference…', style: WwType.bodyOnPaper),
+                ),
               ],
               child: ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
@@ -1177,6 +1427,69 @@ class ReaderScreenState extends State<ReaderScreen>
   }
 
   Widget _translationToggle() {
+    final available = _availableTranslations;
+    // Board run 9: with more than three options (Jewish on the
+    // Old Testament: KJV, WEB, JPS, Hebrew) the segmented toggle
+    // cannot fit the top bar beside the chapter title at phone
+    // widths — it becomes a single chip showing the current
+    // translation, opening the app's menu pattern with the full
+    // labels. Three or fewer options keep the shipped segmented
+    // construction, with compact labels (WwTranslation.toggleLabel).
+    if (available.length > 3) {
+      return Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: WwColors.line),
+          borderRadius: BorderRadius.circular(WwRadius.chip),
+        ),
+        child: PopupMenuButton<WwTranslation>(
+          color: WwColors.paper,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(WwRadius.chip),
+          ),
+          tooltip: 'Translation',
+          onSelected: _setTranslation,
+          itemBuilder: (_) => [
+            for (final t in available)
+              PopupMenuItem(
+                value: t,
+                height: 48,
+                child: Row(
+                  children: [
+                    if (t == _effT)
+                      const Icon(
+                        Icons.check,
+                        size: 20,
+                        color: WwColors.goldTextOnPaper,
+                      )
+                    else
+                      const SizedBox(width: 20),
+                    const SizedBox(width: 8),
+                    Text(t.label, style: WwType.bodyOnPaper),
+                  ],
+                ),
+              ),
+          ],
+          child: Container(
+            constraints: const BoxConstraints(
+              minWidth: WwSpace.minTarget,
+              minHeight: WwSpace.minTarget,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_effT.toggleLabel, style: WwType.goldButtonLabel),
+                const Icon(
+                  Icons.keyboard_arrow_down,
+                  size: 20,
+                  color: WwColors.mutedOnPaper,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: WwColors.line),
@@ -1185,11 +1498,9 @@ class ReaderScreenState extends State<ReaderScreen>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          for (final t in WwTranslation.values)
+          for (final t in available)
             Material(
-              color: t == _translation
-                  ? WwColors.goldBright
-                  : Colors.transparent,
+              color: t == _effT ? WwColors.goldBright : Colors.transparent,
               borderRadius: BorderRadius.circular(WwRadius.chip),
               child: InkWell(
                 borderRadius: BorderRadius.circular(WwRadius.chip),
@@ -1202,8 +1513,8 @@ class ReaderScreenState extends State<ReaderScreen>
                   alignment: Alignment.center,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Text(
-                    t.label,
-                    style: t == _translation
+                    t.toggleLabel,
+                    style: t == _effT
                         ? WwType.goldButtonLabel
                         : WwType.translationUnselected,
                   ),
@@ -1239,7 +1550,7 @@ class ReaderScreenState extends State<ReaderScreen>
   /// chapter's verses built eagerly in a Column inside an in-page
   /// vertical scroll view whose extent ends at the chapter's end.
   Widget _chapterPage(BibleData data, ScriptureText texts, int global) {
-    final verses = texts.chapterVerses(_translation, data, global);
+    final verses = texts.chapterVerses(_effT, data, global);
     final book = data.books[data.chapters[global].b];
     final isLast = global == book.start + book.chapters - 1;
     return SingleChildScrollView(
@@ -1283,6 +1594,13 @@ class ReaderScreenState extends State<ReaderScreen>
                   '${c.v} verses · ${data.chapterConnCount[ch]} connections',
                   style: WwType.captionOnPaper,
                 ),
+                if (_webcFallbackNote(book) != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    _webcFallbackNote(book)!,
+                    style: WwType.captionOnPaper,
+                  ),
+                ],
               ],
             ),
           ),
@@ -1315,6 +1633,27 @@ class ReaderScreenState extends State<ReaderScreen>
         ],
       ),
     );
+  }
+
+  /// WEBC fallback disclosure (run 9 gate): the World English
+  /// Bible Catholic Edition carries no separate Esther or Daniel
+  /// text — both exist only as their Greek editions — so under the
+  /// WEBC toggle those chapters fall back to KJV. The label block
+  /// names the fallback and points to the full Greek edition
+  /// rather than letting the toggle claim text it is not showing.
+  String? _webcFallbackNote(int bookIndex) {
+    if (_effT != WwTranslation.webc) return null;
+    if (bookIndex == 16) {
+      return 'Shown in the King James Version: the World English Bible '
+          'Catholic Edition has no separate Esther. The full Greek '
+          'Esther is in the Catholic Old Testament list.';
+    }
+    if (bookIndex == 26) {
+      return 'Shown in the King James Version: the World English Bible '
+          'Catholic Edition has no separate Daniel. Daniel with the '
+          'Greek portions is in the Catholic Old Testament list.';
+    }
+    return null;
   }
 
   /// The end-of-book block (§4.1): inside the last chapter's page,
@@ -1364,7 +1703,19 @@ class ReaderScreenState extends State<ReaderScreen>
 
   Widget _verseBlock(BibleData data, int ch, int v, String text) {
     final selected = v == _selectedVerse && ch == _selectedChapter;
-    final hasConns = data.verseHasConnections(ch, v);
+    // The dot means "this verse has connections" (board run 9):
+    // cross references always; plus the active tradition's
+    // corpus, when the host carries one. The conference layer's
+    // dot behavior is unchanged from run 8 — talks never lit it.
+    var hasConns = data.verseHasConnections(ch, v);
+    final tradHost = _traditionHost;
+    if (!hasConns && tradHost != null) {
+      if (tradHost.tradition == WwTradition.jewish) {
+        hasConns = tradHost.sefariaData?.verseHasLinks(ch, v) ?? false;
+      } else if (tradHost.tradition == WwTradition.protestant) {
+        hasConns = tradHost.confessionData?.verseHasProofs(ch, v) ?? false;
+      }
+    }
     final highlight = _highlightFor(ch, v);
     final tint = highlight == null ? null : _tintFor(highlight);
     final hasNote = _noteFor(ch, v) != null;
@@ -1432,7 +1783,13 @@ class ReaderScreenState extends State<ReaderScreen>
                   ),
                 ),
                 const SizedBox(width: 8),
-                Expanded(child: Text(text, style: WwType.readerBody)),
+                Expanded(
+                  child: Text(
+                    text,
+                    style: WwType.readerBody,
+                    textDirection: _effT.isRtl ? TextDirection.rtl : null,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1448,10 +1805,7 @@ class ReaderScreenState extends State<ReaderScreen>
     final v = _toolbarVerse!;
     final pos = _toolbarPos ?? const Offset(16, 64);
     final keyboard = MediaQuery.of(context).viewInsets.bottom;
-    final width = math.min(
-      MediaQuery.sizeOf(context).width - 32,
-      400.0,
-    );
+    final width = math.min(MediaQuery.sizeOf(context).width - 32, 400.0);
     final Widget card = Container(
       key: _cardKey,
       width: width,
@@ -1466,11 +1820,7 @@ class ReaderScreenState extends State<ReaderScreen>
           : _toolbarActionsView(data, ch, v),
     );
     if (_toolbarEditing && keyboard > 0) {
-      return Positioned(
-        left: pos.dx,
-        bottom: keyboard + 8,
-        child: card,
-      );
+      return Positioned(left: pos.dx, bottom: keyboard + 8, child: card);
     }
     return Positioned(left: pos.dx, top: pos.dy, child: card);
   }

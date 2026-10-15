@@ -3,7 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../data/bible_data.dart';
+import '../data/confession_data.dart';
 import '../data/conference_data.dart';
+import '../data/deuterocanon.dart';
+import '../data/tradition.dart';
 import '../theme/ww_theme.dart';
 
 /// A live view of the General Conference layer's state for the
@@ -16,6 +19,16 @@ import '../theme/ww_theme.dart';
 abstract class ConferenceLayerState {
   bool get conferenceEnabled;
   ConferenceData? get conferenceData;
+}
+
+/// The tradition layer's live state for the Library root (board
+/// run 9): the generalization of [ConferenceLayerState]. The
+/// shell controller implements it; standalone pumps pass null
+/// and render the shipped root.
+abstract class TraditionLayerState {
+  WwTradition get tradition;
+  ConfessionData? get confessionData;
+  DeuterocanonData? get deuterocanonData;
 }
 
 /// Text measurements derived from the framework's own text layout
@@ -157,6 +170,10 @@ class LibraryRoot extends StatefulWidget {
     required this.onOpenChapter,
     this.conferenceState,
     this.onOpenConference,
+    this.traditionState,
+    this.onOpenTanakh,
+    this.onOpenCatholicOt,
+    this.onOpenConfessions,
   });
 
   final Future<BibleData> dataFuture;
@@ -169,6 +186,20 @@ class LibraryRoot extends StatefulWidget {
 
   /// Pushes the conference browse (§4.2). The shell provides it.
   final VoidCallback? onOpenConference;
+
+  /// The tradition layer's live state (board run 9). Null
+  /// (standalone pumps) renders the shipped root, exactly.
+  final TraditionLayerState? traditionState;
+
+  /// Pushes the Tanakh sectioned grid (Jewish tradition).
+  final VoidCallback? onOpenTanakh;
+
+  /// Pushes the Catholic Old Testament grid (core + deuterocanon
+  /// books in Catholic order).
+  final VoidCallback? onOpenCatholicOt;
+
+  /// Pushes the confessions browse (Protestant tradition).
+  final VoidCallback? onOpenConfessions;
 
   @override
   State<LibraryRoot> createState() => LibraryRootState();
@@ -265,9 +296,7 @@ class LibraryRootState extends State<LibraryRoot> {
                         ),
                       ],
                       const SizedBox(height: 16),
-                      _testamentTile(data, isOT: true),
-                      const SizedBox(height: 8),
-                      _testamentTile(data, isOT: false),
+                      _tilesRegion(data),
                       _conferenceTileSlot(),
                       const SizedBox(height: 24),
                     ],
@@ -327,6 +356,172 @@ class LibraryRootState extends State<LibraryRoot> {
                 color: WwColors.mutedOnDark,
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The canon tile region (board run 9): the tradition decides
+  /// which canon the Library presents. With no tradition state
+  /// (standalone pumps) or Bible only / Latter-day Saint /
+  /// Protestant selected, the tiles are the shipped testament
+  /// pair (Protestant adds its confessions tile below). Jewish
+  /// presents the Tanakh alone; Catholic's Old Testament tile
+  /// counts the union canon and opens the mixed grid. When the
+  /// state object is listenable (the shell controller is), the
+  /// region rebuilds on its notifications, the conference slot's
+  /// rule.
+  Widget _tilesRegion(BibleData data) {
+    final state = widget.traditionState;
+    if (state == null) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _testamentTile(data, isOT: true),
+          const SizedBox(height: 8),
+          _testamentTile(data, isOT: false),
+        ],
+      );
+    }
+    if (state is Listenable) {
+      return ListenableBuilder(
+        listenable: state as Listenable,
+        builder: (context, _) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: _traditionTiles(data, state),
+        ),
+      );
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: _traditionTiles(data, state),
+    );
+  }
+
+  List<Widget> _traditionTiles(BibleData data, TraditionLayerState state) {
+    switch (state.tradition) {
+      case WwTradition.jewish:
+        final otBooks = math.min(39, data.books.length);
+        final chapters = data.books
+            .take(otBooks)
+            .fold(0, (sum, b) => sum + b.chapters);
+        return [
+          _layerTile(
+            title: 'Tanakh',
+            caption: '$otBooks books · $chapters chapters',
+            onTap: widget.onOpenTanakh,
+          ),
+        ];
+      case WwTradition.catholic:
+        final deutero = state.deuterocanonData;
+        if (deutero == null || deutero.books.isEmpty) {
+          // The extra canon has not loaded (or failed): no Old
+          // Testament tile at all until the union tile can render.
+          // The shipped 39-book tile would undercount the canon
+          // this tradition names, permanently if the load failed.
+          return [_testamentTile(data, isOT: false)];
+        }
+        final otBooks = math.min(39, data.books.length);
+        final otChapters = data.books
+            .take(otBooks)
+            .fold(0, (sum, b) => sum + b.chapters);
+        // The union count names each book once: the Greek Esther
+        // and Greek Daniel are alternate editions of core books
+        // already inside the 39, so they add tiles to the grid
+        // but not books or chapters to the count (46 books · 1066
+        // chapters on the bundled table).
+        final extra = deutero.books
+            .where(
+              (b) => b.slug != 'esther-greek' && b.slug != 'daniel-greek',
+            )
+            .toList();
+        final books = otBooks + extra.length;
+        final chapters =
+            otChapters + extra.fold(0, (sum, b) => sum + b.chapters);
+        return [
+          _layerTile(
+            title: 'Old Testament',
+            caption: '$books books · $chapters chapters',
+            onTap: widget.onOpenCatholicOt,
+          ),
+          const SizedBox(height: 8),
+          _testamentTile(data, isOT: false),
+        ];
+      case WwTradition.protestant:
+        final tiles = <Widget>[
+          _testamentTile(data, isOT: true),
+          const SizedBox(height: 8),
+          _testamentTile(data, isOT: false),
+        ];
+        final confessions = state.confessionData;
+        if (confessions != null && confessions.docs.isNotEmpty) {
+          final d = confessions.docs.length;
+          final s = confessions.sections.length;
+          tiles.add(const SizedBox(height: 8));
+          tiles.add(
+            _layerTile(
+              title: 'Confessions',
+              caption:
+                  '${d == 1 ? '1 document' : '$d documents'} · '
+                  '${s == 1 ? '1 section' : '$s sections'}',
+              onTap: widget.onOpenConfessions,
+            ),
+          );
+        }
+        return tiles;
+      case WwTradition.none:
+      case WwTradition.lds:
+        return [
+          _testamentTile(data, isOT: true),
+          const SizedBox(height: 8),
+          _testamentTile(data, isOT: false),
+        ];
+    }
+  }
+
+  /// A layer tile in the testament tile's construction
+  /// (selectionTitle + captionOnDark, 72dp floor, chevron).
+  Widget _layerTile({
+    required String title,
+    required String caption,
+    required VoidCallback? onTap,
+  }) {
+    return Semantics(
+      container: true,
+      button: true,
+      label: '$title, $caption',
+      child: ExcludeSemantics(
+        child: Material(
+          color: WwColors.surface,
+          borderRadius: BorderRadius.circular(WwRadius.row),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(WwRadius.row),
+            onTap: onTap,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 72),
+              padding: const EdgeInsets.all(WwSpace.screenMargin),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(title, style: WwType.selectionTitle),
+                        const SizedBox(height: 2),
+                        Text(caption, style: WwType.captionOnDark),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right,
+                    size: 20,
+                    color: WwColors.mutedOnDark,
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -460,10 +655,7 @@ class BookGrid extends StatelessWidget {
             libraryTopBar(
               title: title,
               onBack: onBack,
-              breadcrumbItems: [
-                ('library', 'Library'),
-                ('__current', title),
-              ],
+              breadcrumbItems: [('library', 'Library'), ('__current', title)],
               onBreadcrumb: (value) {
                 if (value == 'library') onBreadcrumbRoot();
               },
@@ -605,10 +797,7 @@ class ChapterGrid extends StatelessWidget {
                           onTap: () => onOpenChapter(book.start + i),
                           child: Container(
                             alignment: Alignment.center,
-                            child: Text(
-                              '${i + 1}',
-                              style: WwType.bodyOnDark,
-                            ),
+                            child: Text('${i + 1}', style: WwType.bodyOnDark),
                           ),
                         ),
                       );

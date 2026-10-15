@@ -1,11 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/bible_data.dart';
+import '../data/confession_data.dart';
 import '../data/conference_data.dart';
+import '../data/deuterocanon.dart';
 import '../data/screen_state.dart';
 import '../data/scripture_text.dart';
+import '../data/sefaria_data.dart';
+import '../data/tradition.dart';
 import '../data/user_data.dart';
 import '../theme/ww_theme.dart';
 import 'conference_screens.dart';
@@ -15,6 +22,7 @@ import 'my_notes_screen.dart';
 import 'profiles_screen.dart';
 import 'reader_screen.dart';
 import 'screens_tab.dart';
+import 'tradition_screens.dart';
 
 /// The shell (board run 7 part B, §1): three tabs, three
 /// navigators inside an [IndexedStack], one stack discipline, and
@@ -28,11 +36,17 @@ class WwShell extends StatefulWidget {
     this.dataLoader,
     this.textsLoader,
     this.conferenceLoader,
+    this.sefariaLoader,
+    this.confessionLoader,
+    this.deuteroLoader,
   });
 
   final Future<BibleData> Function()? dataLoader;
   final Future<ScriptureText> Function()? textsLoader;
   final Future<ConferenceData> Function(BibleData canon)? conferenceLoader;
+  final Future<SefariaData> Function(BibleData canon)? sefariaLoader;
+  final Future<ConfessionData> Function(BibleData canon)? confessionLoader;
+  final Future<DeuterocanonData> Function()? deuteroLoader;
 
   @override
   State<WwShell> createState() => _WwShellState();
@@ -50,23 +64,36 @@ class _RootRoute<T> extends PageRouteBuilder<T> {
 }
 
 class ShellController extends ChangeNotifier
-    implements ReaderHost, ConferenceHost, ConferenceLayerState {
+    implements
+        ReaderHost,
+        ConferenceHost,
+        ConferenceLayerState,
+        TraditionHost,
+        TraditionLayerState {
   ShellController({
     required this.dataLoader,
     required this.textsLoader,
     this.conferenceLoader,
+    this.sefariaLoader,
+    this.confessionLoader,
+    this.deuteroLoader,
   }) {
     dataFuture = (dataLoader ?? BibleData.load)();
-    dataFuture.then((d) {
-      data = d;
-      _loadPrefs();
-    }).catchError((_) {});
+    dataFuture
+        .then((d) {
+          data = d;
+          _loadPrefs();
+        })
+        .catchError((_) {});
     _loadUserData();
   }
 
   final Future<BibleData> Function()? dataLoader;
   final Future<ScriptureText> Function()? textsLoader;
   final Future<ConferenceData> Function(BibleData canon)? conferenceLoader;
+  final Future<SefariaData> Function(BibleData canon)? sefariaLoader;
+  final Future<ConfessionData> Function(BibleData canon)? confessionLoader;
+  final Future<DeuterocanonData> Function()? deuteroLoader;
   late final Future<BibleData> dataFuture;
   BibleData? data;
 
@@ -115,19 +142,161 @@ class ShellController extends ChangeNotifier
     return load;
   }
 
-  /// Sets and persists the conference layer toggle. Enabling the
-  /// layer kicks off its lazy load; disabling never unloads data
-  /// already in memory.
+  /// Sets the conference layer (board run 8's API, kept): since
+  /// board run 9 the toggle IS the tradition selection — on
+  /// selects the Latter-day Saint tradition, off selects Bible
+  /// only. Persists through [setTradition].
   Future<void> setConferenceEnabled(bool enabled) async {
-    if (conferenceEnabled != enabled) {
-      conferenceEnabled = enabled;
+    await setTradition(enabled ? WwTradition.lds : WwTradition.none);
+  }
+
+  // ------------------------------------------------ tradition layers
+
+  /// The founder's tradition selection (board run 9): the one
+  /// state the canon presentation, the connections layers, the
+  /// translations, and the link-outs all read. Bible only
+  /// ([WwTradition.none]) is the default and a first-class state.
+  /// Persisted under [traditionPrefsKey]; restored in
+  /// [_loadPrefs], with the run-8 conference toggle migrated
+  /// there. User profiles, highlights, and notes are never
+  /// touched by a tradition switch — verse keys stay canonical.
+  @override
+  WwTradition tradition = WwTradition.none;
+
+  /// The loaded layer datasets, or null while their tradition is
+  /// not selected, still loading, or after a failed load (a
+  /// failed asset load degrades to "the layer shows nothing" —
+  /// the shell never crashes over it, the conference rule).
+  @override
+  SefariaData? sefariaData;
+
+  @override
+  ConfessionData? confessionData;
+
+  @override
+  DeuterocanonData? deuterocanonData;
+
+  Future<void>? _sefariaLoad;
+  Future<void>? _confessionLoad;
+  Future<void>? _deuteroLoad;
+
+  /// Sets and persists the tradition selection, and kicks the
+  /// newly selected layer's lazy load. The conference layer's
+  /// enabled flag follows the selection (it IS the LDS layer).
+  Future<void> setTradition(WwTradition next) async {
+    if (tradition != next) {
+      tradition = next;
+      conferenceEnabled = next == WwTradition.lds;
       notifyListeners();
     }
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(conferenceLayerKey, enabled);
+      await prefs.setString(traditionPrefsKey, next.storedValue);
     } catch (_) {}
-    if (enabled) await ensureConferenceLoaded();
+    await _kickTraditionLoads();
+  }
+
+  /// Starts the active tradition's dataset load (the conference
+  /// rule: a layer's data loads when its tradition is selected,
+  /// not before). Awaited by [setTradition] so a caller that
+  /// awaits the selection can read the layer's state — the
+  /// run-8 setConferenceEnabled contract.
+  Future<void> _kickTraditionLoads() async {
+    switch (tradition) {
+      case WwTradition.lds:
+        await ensureConferenceLoaded();
+      case WwTradition.jewish:
+        await ensureSefariaLoaded();
+      case WwTradition.protestant:
+        await ensureConfessionLoaded();
+      case WwTradition.catholic:
+        await ensureDeuteroLoaded();
+      case WwTradition.none:
+        break;
+    }
+  }
+
+  /// Loads the Sefaria links dataset on first use; concurrent
+  /// calls share one in-flight load, a call after a failure
+  /// retries. Never throws (the conference loader's pattern).
+  Future<void> ensureSefariaLoaded() async {
+    if (sefariaData != null) return;
+    final inFlight = _sefariaLoad;
+    if (inFlight != null) return inFlight;
+    final d = data;
+    if (d == null) return;
+    final load = () async {
+      try {
+        sefariaData = await (sefariaLoader ?? SefariaData.load)(d);
+      } catch (e) {
+        debugPrint('Woven Word: Sefaria layer failed to load: $e');
+        sefariaData = null;
+      } finally {
+        _sefariaLoad = null;
+      }
+      notifyListeners();
+    }();
+    _sefariaLoad = load;
+    return load;
+  }
+
+  /// Loads the confessions dataset on first use (same pattern).
+  Future<void> ensureConfessionLoaded() async {
+    if (confessionData != null) return;
+    final inFlight = _confessionLoad;
+    if (inFlight != null) return inFlight;
+    final d = data;
+    if (d == null) return;
+    final load = () async {
+      try {
+        confessionData = await (confessionLoader ?? ConfessionData.load)(d);
+      } catch (e) {
+        debugPrint('Woven Word: confessions layer failed to load: $e');
+        confessionData = null;
+      } finally {
+        _confessionLoad = null;
+      }
+      notifyListeners();
+    }();
+    _confessionLoad = load;
+    return load;
+  }
+
+  /// Loads the deuterocanon table on first use (same pattern).
+  /// Also kicked at startup under every tradition: the Home
+  /// notes count and My Notes count deuterocanon notes wherever
+  /// they were written.
+  Future<void> ensureDeuteroLoaded() async {
+    if (deuterocanonData != null) return;
+    final inFlight = _deuteroLoad;
+    if (inFlight != null) return inFlight;
+    final load = () async {
+      try {
+        deuterocanonData = await (deuteroLoader ?? DeuterocanonData.load)();
+      } catch (e) {
+        debugPrint('Woven Word: deuterocanon failed to load: $e');
+        deuterocanonData = null;
+      } finally {
+        _deuteroLoad = null;
+      }
+      notifyListeners();
+    }();
+    _deuteroLoad = load;
+    return load;
+  }
+
+  /// Tradition link-outs (the reader's Sefaria and confession
+  /// rows): opened outside the app; a failed open is logged,
+  /// never thrown into the UI.
+  @override
+  void openExternalLink(String url) {
+    unawaited(() async {
+      try {
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      } catch (e) {
+        debugPrint('Woven Word: external link failed: $e');
+      }
+    }());
   }
 
   String tab = 'home';
@@ -157,7 +326,9 @@ class ShellController extends ChangeNotifier
       // §10: the retired scope key is removed on first launch.
       await prefs.remove('ww_home_scope');
       final savedTab = prefs.getString('ww_shell_tab');
-      if (savedTab == 'home' || savedTab == 'library' || savedTab == 'screens') {
+      if (savedTab == 'home' ||
+          savedTab == 'library' ||
+          savedTab == 'screens') {
         tab = savedTab!;
       }
       final savedSelection = prefs.getInt('ww_home_selected');
@@ -174,12 +345,23 @@ class ShellController extends ChangeNotifier
       screens = parsed;
       activeScreenIndex = active;
       _nextScreenId = screens.length + 1;
-      // Conference layer (board run 8): the toggle restores from
-      // prefs, and the dataset loads on startup only when the
-      // persisted choice is already on — otherwise it stays
-      // unloaded until the layer is first enabled.
-      conferenceEnabled = prefs.getBool(conferenceLayerKey) ?? false;
-      if (conferenceEnabled) ensureConferenceLoaded();
+      // Tradition (board run 9): the selection restores from its
+      // own key, and its layer loads on startup only when the
+      // persisted choice carries one. Migration: a pre-run-9
+      // install whose conference toggle was on becomes the
+      // Latter-day Saint tradition — the same layer, renamed.
+      final storedTradition = prefs.getString(traditionPrefsKey);
+      if (storedTradition != null) {
+        tradition = WwTradition.fromStored(storedTradition);
+      } else if (prefs.getBool(conferenceLayerKey) ?? false) {
+        tradition = WwTradition.lds;
+      }
+      conferenceEnabled = tradition == WwTradition.lds;
+      unawaited(_kickTraditionLoads());
+      // The deuterocanon table loads under every tradition (the
+      // Home notes count and My Notes count its notes wherever
+      // they were written).
+      ensureDeuteroLoaded();
     } catch (_) {
       if (screens.isEmpty) {
         final ch = selection ?? 0;
@@ -537,6 +719,249 @@ class ShellController extends ChangeNotifier
     );
   }
 
+  // ------------------------------------------------ tradition browsing
+
+  /// The Tanakh grid (Jewish tradition): the canon view's
+  /// sections over the core books; a book tap lands on the
+  /// shipped chapter grid, a chapter tap on the reader.
+  void _openTanakhGrid() {
+    final d = data;
+    final nav = libraryNavKey.currentState;
+    if (d == null || nav == null) return;
+    final view = CanonView.tanakh(d);
+    nav.push(
+      WwPageRoute(
+        settings: const RouteSettings(name: 'ww-tanakh'),
+        builder: (_) => SectionedBookGrid(
+          title: 'Tanakh',
+          sections: [
+            for (final section in view.sections)
+              BookGridSection(section.title, [
+                for (final b in section.books)
+                  BookGridEntry(
+                    name: b.name,
+                    chapters: d.books[b.bookIndex].chapters,
+                    onTap: () => _pushChapterGrid(b.bookIndex),
+                  ),
+              ]),
+          ],
+          onBack: () => nav.pop(),
+          breadcrumbItems: const [
+            ('library', 'Library'),
+            ('__current', 'Tanakh'),
+          ],
+          onBreadcrumb: (value) {
+            if (value == 'library') nav.popUntil((r) => r.isFirst);
+          },
+        ),
+      ),
+    );
+  }
+
+  /// The Catholic Old Testament grid: core and deuterocanon
+  /// books in Catholic order in one section — Tobit and Judith
+  /// after Nehemiah, the Greek Esther after Esther, Wisdom and
+  /// Sirach after the Song, Baruch after Lamentations, the Greek
+  /// Daniel after Daniel, the Maccabees closing the testament.
+  /// Any extra book the table carries beyond those named here
+  /// appends in table order rather than vanishing.
+  void _openCatholicOtGrid() {
+    final d = data;
+    final deutero = deuterocanonData;
+    final nav = libraryNavKey.currentState;
+    if (d == null || deutero == null || nav == null) return;
+    final entries = <BookGridEntry>[];
+    final placed = <String>{};
+    void extra(String slug) {
+      final b = deutero.bySlug(slug);
+      if (b == null || !placed.add(slug)) return;
+      entries.add(
+        BookGridEntry(
+          name: b.name,
+          chapters: b.chapters,
+          deutero: true,
+          onTap: () => _pushDeuteroChapters(b),
+        ),
+      );
+    }
+
+    for (var i = 0; i < 39 && i < d.books.length; i++) {
+      final bookIndex = i;
+      entries.add(
+        BookGridEntry(
+          name: d.books[bookIndex].name,
+          chapters: d.books[bookIndex].chapters,
+          onTap: () => _pushChapterGrid(bookIndex),
+        ),
+      );
+      switch (i) {
+        case 15:
+          extra('tobit');
+          extra('judith');
+        case 16:
+          extra('esther-greek');
+        case 21:
+          extra('wisdom');
+          extra('sirach');
+        case 24:
+          extra('baruch');
+        case 26:
+          extra('daniel-greek');
+        case 38:
+          extra('1-maccabees');
+          extra('2-maccabees');
+      }
+    }
+    for (final b in deutero.books) {
+      if (!placed.contains(b.slug)) extra(b.slug);
+    }
+    nav.push(
+      WwPageRoute(
+        settings: const RouteSettings(name: 'ww-catholic-ot'),
+        builder: (_) => SectionedBookGrid(
+          title: 'Old Testament',
+          sections: [BookGridSection('Old Testament', entries)],
+          onBack: () => nav.pop(),
+          breadcrumbItems: const [
+            ('library', 'Library'),
+            ('__current', 'Old Testament'),
+          ],
+          onBreadcrumb: (value) {
+            if (value == 'library') nav.popUntil((r) => r.isFirst);
+          },
+        ),
+      ),
+    );
+  }
+
+  void _pushDeuteroChapters(DeuteroBook book) {
+    final nav = libraryNavKey.currentState;
+    if (nav == null) return;
+    nav.push(
+      WwPageRoute(
+        settings: const RouteSettings(name: 'ww-deutero-chapters'),
+        builder: (_) => DeuteroChapterGrid(
+          book: book,
+          onBack: () => nav.pop(),
+          onBreadcrumb: (value) {
+            if (value == 'library') {
+              nav.popUntil((r) => r.isFirst);
+            } else if (value == 'canon') {
+              nav.pop();
+            }
+          },
+          onOpenChapter: (chapterInBook) =>
+              _openDeuteroReader(libraryNavKey, book, chapterInBook, null),
+        ),
+      ),
+    );
+  }
+
+  /// Pushes the deuterocanon reader on [navKey]'s stack — the
+  /// Library stack from the Catholic browse, the Home stack from
+  /// a My Notes row, so Back returns to where the tap happened.
+  void _openDeuteroReader(
+    GlobalKey<NavigatorState> navKey,
+    DeuteroBook book,
+    int chapterInBook,
+    int? verse,
+  ) {
+    final deutero = deuterocanonData;
+    final nav = navKey.currentState;
+    if (deutero == null || nav == null) return;
+    nav.push(
+      WwPageRoute(
+        settings: const RouteSettings(name: 'ww-deutero-reader'),
+        builder: (_) => DeuteroReaderScreen(
+          deutero: deutero,
+          book: book,
+          initialChapter: chapterInBook,
+          initialVerse: verse,
+          textsLoader: textsLoader,
+          onBack: () => nav.pop(),
+        ),
+      ),
+    );
+  }
+
+  /// The confessions browse (Protestant tradition): documents,
+  /// then a document's sections, then a section's cited verses.
+  void _openConfessions() {
+    final cd = confessionData;
+    final nav = libraryNavKey.currentState;
+    if (cd == null || nav == null) return;
+    nav.push(
+      WwPageRoute(
+        settings: const RouteSettings(name: 'ww-confessions'),
+        builder: (_) => ConfessionDocsScreen(
+          confessionData: cd,
+          onBack: () => nav.pop(),
+          onBreadcrumbRoot: () => nav.popUntil((r) => r.isFirst),
+          onOpenDoc: _pushConfessionSections,
+        ),
+      ),
+    );
+  }
+
+  void _pushConfessionSections(int docIndex) {
+    final cd = confessionData;
+    final nav = libraryNavKey.currentState;
+    if (cd == null || nav == null) return;
+    nav.push(
+      WwPageRoute(
+        settings: const RouteSettings(name: 'ww-confession-sections'),
+        builder: (_) => ConfessionSectionsScreen(
+          confessionData: cd,
+          docIndex: docIndex,
+          onBack: () => nav.pop(),
+          onBreadcrumb: (value) {
+            if (value == 'library') {
+              nav.popUntil((r) => r.isFirst);
+            } else if (value == 'confessions') {
+              nav.popUntil(
+                (r) => r.isFirst || r.settings.name == 'ww-confessions',
+              );
+            }
+          },
+          onOpenSection: _pushConfessionSection,
+        ),
+      ),
+    );
+  }
+
+  void _pushConfessionSection(ConfessionSection section) {
+    final d = data;
+    final cd = confessionData;
+    final nav = libraryNavKey.currentState;
+    if (d == null || cd == null || nav == null) return;
+    nav.push(
+      WwPageRoute(
+        settings: const RouteSettings(name: 'ww-confession-section'),
+        builder: (_) => ConfessionSectionScreen(
+          data: d,
+          confessionData: cd,
+          section: section,
+          textsLoader: textsLoader,
+          onBack: () => nav.pop(),
+          onBreadcrumb: (value) {
+            if (value == 'library') {
+              nav.popUntil((r) => r.isFirst);
+            } else if (value == 'confessions') {
+              nav.popUntil(
+                (r) => r.isFirst || r.settings.name == 'ww-confessions',
+              );
+            } else if (value == 'sections') {
+              nav.popUntil(
+                (r) => r.isFirst || r.settings.name == 'ww-confession-sections',
+              );
+            }
+          },
+          onOpenVerse: (ch, verse) => openChapter(ch, verse: verse),
+        ),
+      ),
+    );
+  }
+
   // ---------------------------------------------------------------- home
 
   Future<void> _openProfiles() async {
@@ -545,8 +970,8 @@ class ShellController extends ChangeNotifier
     await nav.push(
       WwPageRoute(
         builder: (_) => ProfilesScreen(
-          conferenceEnabled: conferenceEnabled,
-          onConferenceChanged: setConferenceEnabled,
+          tradition: tradition,
+          onTraditionChanged: setTradition,
         ),
       ),
     );
@@ -561,7 +986,19 @@ class ShellController extends ChangeNotifier
       WwPageRoute(
         builder: (_) => MyNotesScreen(
           data: d,
+          textsLoader: textsLoader,
+          deuteroLoader: () async {
+            await ensureDeuteroLoaded();
+            return deuterocanonData;
+          },
           onOpenVerse: (book, chapterInBook, verse) {
+            if (book >= DeuteroBook.bookIndexBase) {
+              final dBook = deuterocanonData?.byBookIndex(book);
+              if (dBook != null) {
+                _openDeuteroReader(homeNavKey, dBook, chapterInBook, verse);
+              }
+              return;
+            }
             final global = d.books[book].start + chapterInBook - 1;
             openChapter(global, verse: verse);
           },
@@ -673,6 +1110,9 @@ class _WwShellState extends State<WwShell> {
       dataLoader: widget.dataLoader,
       textsLoader: widget.textsLoader,
       conferenceLoader: widget.conferenceLoader,
+      sefariaLoader: widget.sefariaLoader,
+      confessionLoader: widget.confessionLoader,
+      deuteroLoader: widget.deuteroLoader,
     );
   }
 
@@ -744,7 +1184,13 @@ class _WwShellState extends State<WwShell> {
       notesCount = _ctl.userData
           .notesFor(_ctl.userData.activeProfileId)
           .where(
-            (n) => notePositionInCanon(d, n.book, n.chapter, n.verse),
+            (n) => notePositionInCanon(
+              d,
+              n.book,
+              n.chapter,
+              n.verse,
+              deutero: _ctl.deuterocanonData,
+            ),
           )
           .length;
     }
@@ -778,6 +1224,10 @@ class _WwShellState extends State<WwShell> {
       onOpenChapter: (ch) => _ctl.openChapter(ch),
       conferenceState: _ctl,
       onOpenConference: _ctl.openConferenceBrowse,
+      traditionState: _ctl,
+      onOpenTanakh: _ctl._openTanakhGrid,
+      onOpenCatholicOt: _ctl._openCatholicOtGrid,
+      onOpenConfessions: _ctl._openConfessions,
     );
   }
 

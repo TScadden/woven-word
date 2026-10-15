@@ -64,9 +64,16 @@ flutter:
   assets:
     - assets/app_icon.png
     - assets/conference.json
+    - assets/confessions.json
     - assets/data.json
+    - assets/deuterocanon.json
+    - assets/hebrew.json
+    - assets/jps.json
     - assets/kjv.json
+    - assets/sefaria.json.gz
     - assets/web.json
+    - assets/webc.json
+    - assets/webc_books.json
 
   # To add assets to your application, add an assets section, like this:
   # assets:

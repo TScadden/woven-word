@@ -6,8 +6,32 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/tradition.dart';
 import '../data/user_data.dart';
 import '../theme/ww_theme.dart';
+
+/// What each tradition selection adds, in the row's own words
+/// (board run 9): honest coverage copy, naming what the layer
+/// holds and — for Catholic — what it does not hold yet.
+const Map<WwTradition, String> _traditionDescriptions = {
+  WwTradition.none:
+      'The woven web on its own: cross references, highlights, '
+      'and notes.',
+  WwTradition.lds:
+      'Adds the General Conference talks that cite each verse. '
+      'Talks are read in Gospel Library or the Citation Index; '
+      'no talk text is stored in this app.',
+  WwTradition.jewish:
+      'Tanakh order, the JPS 1917 translation and the Hebrew '
+      'text, and each verse\u2019s connections on Sefaria.',
+  WwTradition.protestant:
+      'Adds the proof texts of the Westminster Confession (1647) '
+      'and the 1689 London Baptist Confession to each verse.',
+  WwTradition.catholic:
+      'The 73-book canon: the deuterocanon, read in the World '
+      'English Bible Catholic Edition. Catechism citations are '
+      'not included yet.',
+};
 
 /// Profiles screen: on-device profiles, managed in place.
 ///
@@ -25,8 +49,8 @@ class ProfilesScreen extends StatefulWidget {
     super.key,
     this.pickBackupFile,
     this.shareBackup,
-    this.conferenceEnabled = false,
-    this.onConferenceChanged,
+    this.tradition = WwTradition.none,
+    this.onTraditionChanged,
   });
 
   /// Picks a backup file and returns its bytes; a null return is a
@@ -34,17 +58,17 @@ class ProfilesScreen extends StatefulWidget {
   /// inject a fake picker through this seam.
   final Future<Uint8List?> Function()? pickBackupFile;
 
-  /// The General Conference layer's state when this screen opens
-  /// (board run 8, spec §2). The shell owns the preference; this
-  /// screen shows the value it was opened with and reports flips
-  /// through [onConferenceChanged]. A standalone pump (tests) gets
-  /// the default OFF state and may flip the row locally.
-  final bool conferenceEnabled;
+  /// The tradition selection when this screen opens (board run 9).
+  /// The shell owns the preference; this screen shows the value it
+  /// was opened with and reports changes through
+  /// [onTraditionChanged]. A standalone pump (tests) gets the
+  /// Bible-only default and may change the selection locally.
+  final WwTradition tradition;
 
-  /// Called with the new value the moment the toggle row is
+  /// Called with the new selection the moment a tradition row is
   /// tapped — visible state first, persistence fire-and-forget at
-  /// the owner (spec §1.1 / §2.4).
-  final ValueChanged<bool>? onConferenceChanged;
+  /// the owner.
+  final ValueChanged<WwTradition>? onTraditionChanged;
 
   /// Shares the exported backup JSON. Defaults to the system share
   /// sheet. Tests inject a fake through this seam.
@@ -58,22 +82,21 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   UserDataStore? _store;
   UserData _data = UserData();
   bool _loaded = false;
-  late bool _conferenceEnabled;
+  late WwTradition _tradition;
 
   @override
   void initState() {
     super.initState();
-    _conferenceEnabled = widget.conferenceEnabled;
+    _tradition = widget.tradition;
     _load();
   }
 
-  /// The conference toggle (spec §2.4): one action for the whole
-  /// row and for the switch inside it. The visible state flips
-  /// first; the owner persists at tap time (§1.1).
-  void _toggleConference(bool value) {
-    if (value == _conferenceEnabled) return;
-    setState(() => _conferenceEnabled = value);
-    widget.onConferenceChanged?.call(value);
+  /// The tradition selection: one action for the whole row. The
+  /// visible state changes first; the owner persists at tap time.
+  void _selectTradition(WwTradition value) {
+    if (value == _tradition) return;
+    setState(() => _tradition = value);
+    widget.onTraditionChanged?.call(value);
   }
 
   Future<void> _load() async {
@@ -375,10 +398,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
           'This file could not be imported',
           style: WwType.selectionTitle,
         ),
-        content: Text(
-          'Nothing was changed. $reason',
-          style: WwType.bodyOnDark,
-        ),
+        content: Text('Nothing was changed. $reason', style: WwType.bodyOnDark),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
@@ -469,18 +489,21 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
           child: const Text('New profile', style: WwType.goldButtonLabel),
         ),
         const SizedBox(height: 24),
-        const Text('General Conference', style: WwType.selectionTitle),
+        const Text('Your tradition', style: WwType.selectionTitle),
         const SizedBox(height: 4),
         const Text(
-          'Conference talks are not stored in this app. When this is '
-          'on, you can see which talks cite a verse, browse talks in '
-          'the Library, and open each talk in Gospel Library or the '
-          'Citation Index.',
+          'Woven Word shapes itself around your tradition: the '
+          'canon it presents, the connections it layers over each '
+          'verse, and where reading links lead. Your profiles, '
+          'highlights, and notes never change.',
           style: WwType.captionOnDark,
         ),
         const SizedBox(height: 16),
-        _conferenceRow(),
-        const SizedBox(height: 24),
+        for (final t in WwTradition.values) ...[
+          _traditionRow(t),
+          const SizedBox(height: 8),
+        ],
+        const SizedBox(height: 16),
         const Text('Backup', style: WwType.selectionTitle),
         const SizedBox(height: 4),
         const Text(
@@ -558,38 +581,40 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     );
   }
 
-  /// The General Conference toggle row (board run 8, spec §2.4):
-  /// the Backup-row construction, the whole row the tap target,
-  /// and a switch whose every color is set on the widget (§2.4.1 —
-  /// `wwTheme()` defines no switchTheme, so a stock switch would
-  /// be an unexamined default). The row and the switch are ONE
-  /// semantics node: container + toggled flag, label exactly
-  /// 'Show conference talks', the state carried by the flag only
-  /// (§2.5). The row's inner semantics are excluded so descendant
-  /// text cannot merge into the node's label — the tree holds
-  /// that single node, with that exact label, for this action.
-  Widget _conferenceRow() {
+  /// One tradition selection row (board run 9): the profile-row
+  /// construction — the whole row is the tap target — with the
+  /// selection carried by a check and by semantics, never by
+  /// color alone. The row is ONE semantics node (container +
+  /// selected flag, label exactly the tradition's name); its
+  /// inner semantics are excluded so descendant text cannot
+  /// merge into the node's label (lesson 25).
+  Widget _traditionRow(WwTradition t) {
+    final selected = t == _tradition;
     return Semantics(
       container: true,
       button: true,
-      toggled: _conferenceEnabled,
-      label: 'Show conference talks',
+      selected: selected,
+      label: t.label,
       child: ExcludeSemantics(
         child: Material(
           color: WwColors.surface,
           borderRadius: BorderRadius.circular(WwRadius.row),
           child: InkWell(
             borderRadius: BorderRadius.circular(WwRadius.row),
-            onTap: () => _toggleConference(!_conferenceEnabled),
+            onTap: () => _selectTradition(t),
             child: Container(
               constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.menu_book,
+                  Icon(
+                    selected
+                        ? Icons.check_circle
+                        : Icons.radio_button_unchecked,
                     size: 20,
-                    color: WwColors.goldBright,
+                    color: selected
+                        ? WwColors.goldBright
+                        : WwColors.mutedOnDark,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -598,43 +623,17 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'Show conference talks',
+                          t.label,
                           style: WwType.controlLabel.copyWith(
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         const SizedBox(height: 2),
-                        const Text(
-                          'Verse connections and the Library browse',
+                        Text(
+                          _traditionDescriptions[t]!,
                           style: WwType.captionOnDark,
                         ),
                       ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Switch(
-                    value: _conferenceEnabled,
-                    onChanged: _toggleConference,
-                    activeTrackColor: WwColors.goldBright,
-                    inactiveTrackColor: WwColors.surfaceHigh,
-                    activeThumbColor: WwColors.onGold,
-                    inactiveThumbColor: WwColors.mutedOnDark,
-                    trackOutlineColor: WidgetStateProperty.resolveWith(
-                      (states) => states.contains(WidgetState.selected)
-                          ? Colors.transparent
-                          : WwColors.borderDark,
-                    ),
-                    trackOutlineWidth: WidgetStateProperty.resolveWith(
-                      (states) =>
-                          states.contains(WidgetState.selected) ? 0.0 : 1.0,
-                    ),
-                    thumbIcon: WidgetStateProperty.resolveWith(
-                      (states) => states.contains(WidgetState.selected)
-                          ? const Icon(
-                              Icons.check,
-                              color: WwColors.goldBright,
-                            )
-                          : null,
                     ),
                   ),
                 ],
@@ -745,9 +744,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       ),
       child: Text(
         letter,
-        style: isActive
-            ? WwType.avatarLetterOnGold
-            : WwType.avatarLetterOnDark,
+        style: isActive ? WwType.avatarLetterOnGold : WwType.avatarLetterOnDark,
       ),
     );
   }

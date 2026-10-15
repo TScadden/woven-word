@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/bible_data.dart';
+import '../data/deuterocanon.dart';
 import '../data/scripture_text.dart';
 import '../data/user_data.dart';
 import '../theme/ww_theme.dart';
@@ -12,17 +13,24 @@ import 'reader_screen.dart';
 /// would compute global chapter −1 (a RangeError in the reference
 /// label) and verse 0 would render as ":0" — corrupt-store keys
 /// like `b0c0v1` are filtered here, never rendered (Maren, run 5).
+///
+/// Board run 9: keys at or above [DeuteroBook.bookIndexBase]
+/// address the deuterocanon and are in-canon exactly when
+/// [deutero] is supplied and its table carries the position;
+/// without it they stay filtered out, as before.
 bool notePositionInCanon(
   BibleData data,
   int book,
   int chapter,
-  int verse,
-) =>
-    book >= 0 &&
-    book < data.books.length &&
-    chapter >= 1 &&
-    chapter <= data.books[book].chapters &&
-    verse >= 1;
+  int verse, {
+  DeuterocanonData? deutero,
+}) => book >= DeuteroBook.bookIndexBase
+    ? (deutero?.positionInCanon(book, chapter, verse) ?? false)
+    : book >= 0 &&
+          book < data.books.length &&
+          chapter >= 1 &&
+          chapter <= data.books[book].chapters &&
+          verse >= 1;
 
 /// My Notes: every note belonging to the active profile, in
 /// canonical order (book, then chapter, then verse).
@@ -39,7 +47,13 @@ bool notePositionInCanon(
 /// notes inside a profile or "saved" area is the discoverability
 /// failure YouVersion's own redesign case study documents).
 class MyNotesScreen extends StatefulWidget {
-  const MyNotesScreen({super.key, required this.data, this.onOpenVerse});
+  const MyNotesScreen({
+    super.key,
+    required this.data,
+    this.onOpenVerse,
+    this.deuteroLoader,
+    this.textsLoader,
+  });
 
   final BibleData data;
 
@@ -48,6 +62,16 @@ class MyNotesScreen extends StatefulWidget {
   /// chapterInBook, verse). When null (standalone test pumps), row
   /// taps do nothing — in the app the shell always provides it.
   final void Function(int book, int chapterInBook, int verse)? onOpenVerse;
+
+  /// Loads the deuterocanon table (board run 9) so notes on
+  /// deuterocanon verses (book index ≥ 1000) render with their
+  /// reference and text. Null (standalone pumps) leaves those
+  /// notes filtered out, as before.
+  final Future<DeuterocanonData?> Function()? deuteroLoader;
+
+  /// Loads the scripture texts; defaults to [ScriptureText.load].
+  /// Tests inject a fake through this seam (the TalkView pattern).
+  final Future<ScriptureText> Function()? textsLoader;
 
   @override
   State<MyNotesScreen> createState() => _MyNotesScreenState();
@@ -59,6 +83,7 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
   String _profileId = UserData.defaultProfileId;
 
   ScriptureText? _texts;
+  DeuterocanonData? _deutero;
   WwTranslation _translation = WwTranslation.kjv;
   bool _loaded = false;
 
@@ -88,11 +113,16 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
       // The default translation stands.
     }
     try {
-      _texts = await ScriptureText.load();
+      _texts = await (widget.textsLoader ?? ScriptureText.load)();
     } catch (_) {
       // Snippets are best-effort: without the texts the list still
       // shows every reference and note, just no verse line.
       _texts = null;
+    }
+    try {
+      _deutero = await widget.deuteroLoader?.call();
+    } catch (_) {
+      _deutero = null;
     }
     if (mounted) setState(() => _loaded = true);
   }
@@ -137,8 +167,7 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
   /// The note editor: the same paper sheet as the reader's (board
   /// run 4), carrying the same local border law — line idle,
   /// goldTextOnPaper focused, never the theme's goldBright border.
-  void _editNote(String key, int globalChapter, int verse) {
-    final data = widget.data;
+  void _editNote(String key, String refLabel) {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: WwColors.paper,
@@ -155,7 +184,7 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
       // the future can complete while the exit transition still
       // builds the field. See _NoteEditorSheet.
       builder: (_) => _NoteEditorSheet(
-        refLabel: data.refName(globalChapter, verse),
+        refLabel: refLabel,
         initialText: _userData.note(_profileId, key) ?? '',
         onSave: (text) {
           // UserData.setNote semantics (board run 4):
@@ -260,15 +289,19 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
     final notes = _userData
         .notesFor(_profileId)
         .where(
-          (n) => notePositionInCanon(widget.data, n.book, n.chapter, n.verse),
+          (n) => notePositionInCanon(
+            widget.data,
+            n.book,
+            n.chapter,
+            n.verse,
+            deutero: _deutero,
+          ),
         )
         .toList();
     if (notes.isEmpty) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: WwSpace.screenMargin,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: WwSpace.screenMargin),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -310,12 +343,29 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
     ({String key, int book, int chapter, int verse, String text}) note,
   ) {
     final data = widget.data;
-    final globalChapter = _globalChapter(note.book, note.chapter);
-    final ref = data.refName(globalChapter, note.verse);
     final texts = _texts;
-    final snippet = texts == null
-        ? ''
-        : texts.verseText(_translation, data, globalChapter, note.verse);
+    // Deuterocanon rows (board run 9): the reference and the
+    // snippet come from the extra canon's table and text; the
+    // core canon is never indexed with their book numbers.
+    final dBook = note.book >= DeuteroBook.bookIndexBase
+        ? _deutero?.byBookIndex(note.book)
+        : null;
+    final String ref;
+    final String snippet;
+    if (note.book >= DeuteroBook.bookIndexBase) {
+      ref = dBook != null
+          ? _deutero!.refLabel(dBook.bookIndex, note.chapter, note.verse)
+          : 'Deuterocanon ${note.chapter}:${note.verse}';
+      snippet = texts == null || dBook == null
+          ? ''
+          : texts.extraVerseText(dBook.slug, note.chapter, note.verse);
+    } else {
+      final globalChapter = _globalChapter(note.book, note.chapter);
+      ref = data.refName(globalChapter, note.verse);
+      snippet = texts == null
+          ? ''
+          : texts.verseText(_translation, data, globalChapter, note.verse);
+    }
     return Material(
       color: WwColors.surface,
       borderRadius: BorderRadius.circular(WwRadius.row),
@@ -355,8 +405,7 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
               ),
               IconButton(
                 tooltip: 'Edit note',
-                onPressed: () =>
-                    _editNote(note.key, globalChapter, note.verse),
+                onPressed: () => _editNote(note.key, ref),
                 icon: const Icon(Icons.edit, size: 20, color: WwColors.navInk),
                 constraints: const BoxConstraints(
                   minWidth: WwSpace.minTarget,
@@ -423,8 +472,7 @@ class _NoteEditorSheetState extends State<_NoteEditorSheet> {
         left: WwSpace.screenMargin,
         right: WwSpace.screenMargin,
         top: WwSpace.screenMargin,
-        bottom:
-            WwSpace.screenMargin + MediaQuery.of(context).viewInsets.bottom,
+        bottom: WwSpace.screenMargin + MediaQuery.of(context).viewInsets.bottom,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

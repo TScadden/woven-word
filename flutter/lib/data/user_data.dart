@@ -246,11 +246,22 @@ class ProfileData {
   ProfileData({
     Map<String, List<HighlightSpan>>? spans,
     Map<String, Map<String, String>>? notes,
+    this.readerArchExpanded = true,
   }) : spans = spans ?? <String, List<HighlightSpan>>{},
        notes = notes ?? <String, Map<String, String>>{};
 
   final Map<String, List<HighlightSpan>> spans;
   final Map<String, Map<String, String>> notes;
+
+  /// Whether the reader's connection arch panel is expanded
+  /// for this profile (reader arch package, founder request
+  /// Oct 15, 2026: "remember what they last did (minimize or
+  /// expand) so it's like a saved profile setting"). Defaults
+  /// to expanded — the recorded first-run call (spec I-4).
+  /// Persisted as the bucket's `readerArchExpanded` member; a
+  /// document without the member (every pre-package backup)
+  /// loads expanded.
+  bool readerArchExpanded;
 
   /// Span count across every translation set.
   int get spanCount =>
@@ -269,6 +280,7 @@ class ProfileData {
       for (final entry in notes.entries)
         entry.key: Map<String, String>.from(entry.value),
     },
+    'readerArchExpanded': readerArchExpanded,
   };
 
   /// Defensive parse: wrong shapes are dropped, never thrown.
@@ -281,6 +293,13 @@ class ProfileData {
   factory ProfileData.fromJson(Object? json, {String legacyTranslation = 'kjv'}) {
     final profile = ProfileData();
     if (json is! Map) return profile;
+    // The reader arch setting (reader arch package): only a
+    // bool is honored; an absent member (every pre-package
+    // document) or a malformed one leaves the expanded
+    // default. Import-time shape strictness lives in the
+    // validator, not here (lesson 22).
+    final rawArch = json['readerArchExpanded'];
+    if (rawArch is bool) profile.readerArchExpanded = rawArch;
     final rawSpans = json['spans'];
     if (rawSpans is Map) {
       for (final entry in rawSpans.entries) {
@@ -693,6 +712,22 @@ class UserData {
         text;
   }
 
+  // ------------------------------------------------- profile settings
+
+  /// Whether the reader's connection arch panel is expanded
+  /// under [profileId] (reader arch package). A profile that
+  /// does not exist resolves to the first-run default,
+  /// expanded — read paths never create buckets.
+  bool readerArchExpandedFor(String profileId) =>
+      profiles[profileId]?.readerArchExpanded ?? true;
+
+  /// Remembers the arch panel's expanded/minimized state for
+  /// [profileId]. A write materializes the profile bucket,
+  /// the same contract as [setNote].
+  void setReaderArchExpanded(String profileId, bool expanded) {
+    _bucketForWrite(profileId).readerArchExpanded = expanded;
+  }
+
   Map<String, dynamic> toJson() => {
     'version': version,
     'activeProfileId': activeProfileId,
@@ -827,6 +862,14 @@ class UserDataStore {
     }
     for (final bucket in rawProfiles.values) {
       if (bucket is! Map) {
+        return const BackupImportResult.invalid(BackupImportError.notBackup);
+      }
+      // Reader arch package: the per-profile arch setting,
+      // when present, must be a bool — the same shape-gate
+      // discipline as the bucket itself. Absent is valid:
+      // pre-package backups import and default to expanded.
+      final rawArch = bucket['readerArchExpanded'];
+      if (rawArch != null && rawArch is! bool) {
         return const BackupImportResult.invalid(BackupImportError.notBackup);
       }
     }

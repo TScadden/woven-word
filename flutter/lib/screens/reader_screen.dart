@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,6 +15,7 @@ import '../data/sefaria_data.dart';
 import '../data/tradition.dart';
 import '../data/user_data.dart';
 import '../theme/ww_theme.dart';
+import '../widgets/arc_stage.dart';
 
 /// Host services the reader needs from the shell (Petra spec §7.4,
 /// §4.4, §6.4). The shell implements this; the reader never reaches
@@ -141,6 +143,13 @@ class ReaderScreenState extends State<ReaderScreen>
   UserData _userData = UserData();
   String _profileId = UserData.defaultProfileId;
 
+  // The connection arch panel (reader arch package): the
+  // chapter-bars background image, rendered once per density
+  // band and cached exactly as Home caches its stage image.
+  static const _archStageSize = Size(1200, 500);
+  final _archImages = <String, ui.Image>{};
+  final _archRendering = <String>{};
+
   // Pager state (§4.1/§4.3). [_currentChapter] is the single
   // current-chapter truth: the pager's reported current page,
   // mapped to its chapter. In-page scroll never writes it.
@@ -222,6 +231,9 @@ class ReaderScreenState extends State<ReaderScreen>
     widget.host.persistScreens();
     _flashTimer?.cancel();
     _pageCtl.dispose();
+    for (final img in _archImages.values) {
+      img.dispose();
+    }
     for (final ctl in _pageControllers.values) {
       ctl.dispose();
     }
@@ -440,6 +452,175 @@ class ReaderScreenState extends State<ReaderScreen>
     try {
       await store.save();
     } catch (_) {}
+  }
+
+  // ---------------------------------------------------- connection arch
+
+  /// Whether the connection arch panel is expanded for the
+  /// active profile (reader arch package). Resolved from the
+  /// loaded model on every build (lesson 44) — the profile's
+  /// remembered choice, never a mirrored field. Defaults to
+  /// expanded (spec I-4).
+  bool get _archExpanded => _userData.readerArchExpandedFor(_profileId);
+
+  /// The minimize/expand toggle's write: mutate the model,
+  /// persist through the same path as every user-data write.
+  void _setArchExpanded(bool expanded) {
+    if (expanded == _archExpanded) return;
+    setState(() => _userData.setReaderArchExpanded(_profileId, expanded));
+    _persistUserData();
+  }
+
+  /// Renders the arch panel's background (chapter bars only)
+  /// once per density band, Home's caching pattern verbatim.
+  Future<void> _ensureArchImage({
+    required String key,
+    required BibleData data,
+    required double band,
+  }) async {
+    if (_archImages.containsKey(key) || _archRendering.contains(key)) return;
+    _archRendering.add(key);
+    try {
+      final img = await renderArcImage(
+        data: data,
+        lo: 0,
+        hi: data.totalChapters - 1,
+        stage: _archStageSize,
+        density: band,
+        faint: false,
+        includeArcs: false,
+        includeLabels: false,
+      );
+      _archImages[key] = img;
+      if (mounted) setState(() {});
+    } finally {
+      _archRendering.remove(key);
+    }
+  }
+
+  /// The expanded arch panel (spec §3): the current chapter's
+  /// connection web — Home's stage construction (bars image +
+  /// [MiniSelectionPainter]) on the stage plate, inset by the
+  /// screen margin, with the minimize control at its top
+  /// right. Static: it changes only when the chapter does.
+  Widget _archPanel(BibleData data) {
+    return Padding(
+      key: const ValueKey('reader-arch-panel'),
+      padding: const EdgeInsets.fromLTRB(
+        WwSpace.screenMargin,
+        8,
+        WwSpace.screenMargin,
+        0,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(WwRadius.sheet),
+        child: Container(
+          color: WwColors.stage,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final w = constraints.maxWidth;
+              final band = bandFor(densityFor(w));
+              final key = 'reader-arch-$band';
+              final img = _archImages[key];
+              if (img == null) {
+                _ensureArchImage(key: key, data: data, band: band);
+              }
+              return SizedBox(
+                width: w,
+                height: w * _archStageSize.height / _archStageSize.width,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: FittedBox(
+                        fit: BoxFit.fill,
+                        child: SizedBox(
+                          width: _archStageSize.width,
+                          height: _archStageSize.height,
+                          child: Stack(
+                            children: [
+                              if (img != null)
+                                RawImage(
+                                  image: img,
+                                  width: _archStageSize.width,
+                                  height: _archStageSize.height,
+                                  fit: BoxFit.fill,
+                                ),
+                              Positioned.fill(
+                                child: Semantics(
+                                  container: true,
+                                  label:
+                                      'Chapter connections for '
+                                      '${data.chapterName(_currentChapter)}',
+                                  child: CustomPaint(
+                                    key: const ValueKey('reader-arch-paint'),
+                                    painter: MiniSelectionPainter(
+                                      data: data,
+                                      lo: 0,
+                                      hi: data.totalChapters - 1,
+                                      stage: _archStageSize,
+                                      selected: _currentChapter,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: IconButton(
+                        key: const ValueKey('reader-arch-minimize'),
+                        tooltip: 'Hide chapter connections',
+                        onPressed: () => _setArchExpanded(false),
+                        icon: const Icon(
+                          Icons.keyboard_arrow_up,
+                          color: WwColors.goldBright,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: WwSpace.minTarget,
+                          minHeight: WwSpace.minTarget,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The minimized state's expand affordance (spec §3): a
+  /// 48dp chip floating at the top right of the pager
+  /// viewport — the panel is fully out of the reading flow,
+  /// and the control stays where the panel's toggle was.
+  Widget _archExpandChip() {
+    return Positioned(
+      top: 8,
+      right: 8,
+      child: Material(
+        color: _palette.cardBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(WwRadius.chip),
+          side: BorderSide(color: _palette.cardBorder),
+        ),
+        child: IconButton(
+          key: const ValueKey('reader-arch-expand'),
+          tooltip: 'Show chapter connections',
+          onPressed: () => _setArchExpanded(true),
+          icon: Icon(Icons.keyboard_arrow_down, color: _palette.accent),
+          constraints: const BoxConstraints(
+            minWidth: WwSpace.minTarget,
+            minHeight: WwSpace.minTarget,
+          ),
+        ),
+      ),
+    );
   }
 
   /// The verse toolbar's color write (board run 10): a full-verse
@@ -1506,6 +1687,25 @@ class ReaderScreenState extends State<ReaderScreen>
           children: [
             // §4.5 as amended: the top bar is FIXED. It never hides.
             _topBar(data, showToggle: true),
+            // The connection arch panel (reader arch package):
+            // the slot collapses to nothing when the profile's
+            // remembered state is minimized. Reduced motion
+            // renders the final state: the slot is swapped
+            // outright, with no AnimatedSize in the tree (a
+            // zero-duration AnimatedSize mutates its render
+            // object during its own layout — the instant swap
+            // is the design law's construction anyway).
+            if (WwMotion.reduced(context))
+              _archExpanded ? _archPanel(data) : const SizedBox.shrink()
+            else
+              AnimatedSize(
+                duration: WwMotion.expand,
+                curve: WwMotion.curve,
+                alignment: Alignment.topCenter,
+                child: _archExpanded
+                    ? _archPanel(data)
+                    : const SizedBox.shrink(),
+              ),
             Expanded(
               child: Stack(
                 key: _stackKey,
@@ -1530,6 +1730,7 @@ class ReaderScreenState extends State<ReaderScreen>
                       child: _pager(data, texts),
                     ),
                   ),
+                  if (!_archExpanded) _archExpandChip(),
                   if (_toolbarVerse != null) _toolbarOverlay(data),
                 ],
               ),

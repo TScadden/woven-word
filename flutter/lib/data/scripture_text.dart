@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'bible_data.dart';
+import 'bundled_gzip.dart';
 
 /// The copyright-free translations bundled with the app. KJV and
 /// WEB are the base pair (board run 3); board run 9 adds the
@@ -11,11 +12,11 @@ import 'bible_data.dart';
 /// and the WEB Catholic Edition for the 73-book canon. Every one
 /// is public domain (see the pipelines' LICENSE-EVIDENCE files).
 enum WwTranslation {
-  kjv('KJV', 'assets/kjv.json'),
-  web('WEB', 'assets/web.json'),
-  jps('JPS', 'assets/jps.json'),
-  hebrew('Hebrew', 'assets/hebrew.json'),
-  webc('WEBC', 'assets/webc.json');
+  kjv('KJV', 'assets/kjv.json.gz'),
+  web('WEB', 'assets/web.json.gz'),
+  jps('JPS', 'assets/jps.json.gz'),
+  hebrew('Hebrew', 'assets/hebrew.json.gz'),
+  webc('WEBC', 'assets/webc.json.gz');
 
   const WwTranslation(this.label, this.assetPath);
 
@@ -151,13 +152,15 @@ class ScriptureText {
     return ScriptureText._(texts, coreOf, extraOf);
   }
 
-  /// Loads the bundled texts off the UI thread. The base pair is
+  /// Loads the bundled texts off the UI thread. The assets ship
+  /// gzipped (assets/*.json.gz) and are inflated in the same
+  /// isolate that parses them. The base pair is
   /// required; each tradition asset is best-effort — an absent
   /// asset leaves that translation unavailable and the reader
   /// falls back (failures-as-values, like the layer loaders).
   static Future<ScriptureText> load() async {
-    final kjv = await rootBundle.loadString(WwTranslation.kjv.assetPath);
-    final web = await rootBundle.loadString(WwTranslation.web.assetPath);
+    final kjv = await loadBundledBytes(WwTranslation.kjv.assetPath);
+    final web = await loadBundledBytes(WwTranslation.web.assetPath);
     Future<String?> optional(String path) async {
       try {
         return await rootBundle.loadString(path);
@@ -166,11 +169,18 @@ class ScriptureText {
       }
     }
 
-    final jps = await optional(WwTranslation.jps.assetPath);
-    final hebrew = await optional(WwTranslation.hebrew.assetPath);
-    final webc = await optional(WwTranslation.webc.assetPath);
+    final jps = await loadBundledBytesOrNull(WwTranslation.jps.assetPath);
+    final hebrew = await loadBundledBytesOrNull(WwTranslation.hebrew.assetPath);
+    final webc = await loadBundledBytesOrNull(WwTranslation.webc.assetPath);
     final webcBooks = await optional('assets/webc_books.json');
-    return compute(_parseAll, (kjv, web, jps, hebrew, webc, webcBooks));
+    return compute(_inflateAndParseAll, (
+      kjv,
+      web,
+      jps,
+      hebrew,
+      webc,
+      webcBooks,
+    ));
   }
 
   /// Whether [t]'s text is bundled in this instance.
@@ -252,3 +262,17 @@ ScriptureText _parseAll(
   webc: args.$5,
   webcBooks: args.$6,
 );
+
+/// Top-level inflate entry for [compute] in [ScriptureText.load]:
+/// inflates each non-null gzipped buffer, then delegates to
+/// [_parseAll] unchanged (same tuple meaning, decoded to text).
+ScriptureText _inflateAndParseAll(
+  (Uint8List, Uint8List, Uint8List?, Uint8List?, Uint8List?, String?) args,
+) => _parseAll((
+  inflateBundledJson(args.$1),
+  inflateBundledJson(args.$2),
+  args.$3 == null ? null : inflateBundledJson(args.$3!),
+  args.$4 == null ? null : inflateBundledJson(args.$4!),
+  args.$5 == null ? null : inflateBundledJson(args.$5!),
+  args.$6,
+));

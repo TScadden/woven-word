@@ -38,6 +38,7 @@ dependencies:
   share_plus: ^13.3.1
   file_picker: ^13.1.0
   url_launcher: ^6.3.2
+  archive: ^4.5.2
 
 dev_dependencies:
   flutter_test:
@@ -63,16 +64,16 @@ flutter:
 
   assets:
     - assets/app_icon.png
-    - assets/conference.json
-    - assets/confessions.json
-    - assets/data.json
+    - assets/conference.json.gz
+    - assets/confessions.json.gz
+    - assets/data.json.gz
     - assets/deuterocanon.json
-    - assets/hebrew.json
-    - assets/jps.json
-    - assets/kjv.json
+    - assets/hebrew.json.gz
+    - assets/jps.json.gz
+    - assets/kjv.json.gz
     - assets/sefaria.json.gz
-    - assets/web.json
-    - assets/webc.json
+    - assets/web.json.gz
+    - assets/webc.json.gz
     - assets/webc_books.json
 
   # To add assets to your application, add an assets section, like this:

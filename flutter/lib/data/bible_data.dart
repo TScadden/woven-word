@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
+
+import 'bundled_gzip.dart';
 
 /// One book of the Bible: abbreviation, full name, chapter count, and the
 /// global chapter index where the book starts.
@@ -22,7 +23,7 @@ class Chapter {
   const Chapter(this.b, this.c, this.v);
 }
 
-/// The full cross-reference dataset, parsed from assets/data.json
+/// The full cross-reference dataset, parsed from assets/data.json.gz
 /// (OpenBible.info cross references, CC BY / Treasury of Scripture
 /// Knowledge). Mirrors the web v1 indexing in app.js exactly.
 class BibleData {
@@ -251,12 +252,19 @@ class BibleData {
     );
   }
 
-  /// Loads and indexes data.json off the UI thread.
+  /// Loads and indexes data.json off the UI thread. The asset
+  /// ships gzipped (assets/data.json.gz) and is inflated in the
+  /// same isolate that parses it.
   static Future<BibleData> load() async {
-    final source = await rootBundle.loadString('assets/data.json');
-    return compute(BibleData.fromJsonString, source);
+    final bytes = await loadBundledBytes('assets/data.json.gz');
+    return compute(_parseDataGz, bytes);
   }
 }
+
+/// Top-level parse entry for [compute] in [BibleData.load]:
+/// inflate, then parse via [BibleData.fromJsonString] unchanged.
+BibleData _parseDataGz(Uint8List bytes) =>
+    BibleData.fromJsonString(inflateBundledJson(bytes));
 
 /// log10 for arc weighting, matching the web draw code.
 double log10(num x) => math.log(x) / math.ln10;

@@ -1,14 +1,14 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 
 import 'bible_data.dart';
+import 'bundled_gzip.dart';
 
 /// One LDS General Conference talk in the connections layer
 /// (board run 8, data layer only — no UI consumes this yet).
 ///
-/// Mirrors one row of the bundled `assets/conference.json` talks
+/// Mirrors one row of the bundled `assets/conference.json.gz` talks
 /// table, which the studio pipeline emits in the compact shape
 /// `{"i","t","s","y","e","n","u","c","x"}`; [ConferenceData.parse]
 /// expands it to these named fields.
@@ -83,12 +83,13 @@ int _newestFirst(ConferenceTalk a, ConferenceTalk b) {
 }
 
 /// Top-level parse entry for [compute] in [ConferenceData.load].
-/// The chapter table crosses the isolate boundary as plain
+/// The gzipped payload is inflated here, in the parse isolate;
+/// the chapter table crosses the isolate boundary as plain
 /// `[bookIndex, chapterInBook, verseCount]` rows — always sendable.
-ConferenceData _parsePayload((String, List<List<int>>) args) {
-  final (source, rows) = args;
+ConferenceData _parsePayload((Uint8List, List<List<int>>) args) {
+  final (bytes, rows) = args;
   return ConferenceData.parse(
-    source,
+    inflateBundledJson(bytes),
     chapterVerseCounts: [for (final r in rows) r[2]],
     chapters: [for (final r in rows) Chapter(r[0], r[1], r[2])],
   );
@@ -96,7 +97,7 @@ ConferenceData _parsePayload((String, List<List<int>>) args) {
 
 /// The General Conference connections dataset (board run 8):
 /// talks plus verse-level citation edges from talks to Bible
-/// verses, parsed from the bundled `assets/conference.json`.
+/// verses, parsed from the bundled `assets/conference.json.gz`.
 ///
 /// The pipeline's shape is fixed:
 /// ```
@@ -340,15 +341,17 @@ class ConferenceData {
     chapters: canon.chapters,
   );
 
-  /// Loads and indexes assets/conference.json off the UI thread,
-  /// mirroring [ScriptureText.load]. A missing or malformed asset
+  /// Loads and indexes assets/conference.json.gz off the UI
+  /// thread — the asset ships gzipped and is inflated in the
+  /// same isolate that parses it — mirroring
+  /// [ScriptureText.load]. A missing or malformed asset
   /// throws here; the shell's lazy loader catches it and degrades
   /// to an unloaded layer (failures-as-values at the call site).
   static Future<ConferenceData> load(BibleData canon) async {
-    final source = await rootBundle.loadString('assets/conference.json');
+    final bytes = await loadBundledBytes('assets/conference.json.gz');
     final rows = [
       for (final c in canon.chapters) [c.b, c.c, c.v],
     ];
-    return compute(_parsePayload, (source, rows));
+    return compute(_parsePayload, (bytes, rows));
   }
 }

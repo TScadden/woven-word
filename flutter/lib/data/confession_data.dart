@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 
 import 'bible_data.dart';
+import 'bundled_gzip.dart';
 
 /// One historic confession in the Protestant connections layer
 /// (board run 9): a public-domain document whose published
@@ -56,7 +56,7 @@ class ConfessionSection {
 
 /// The Protestant connections dataset: confession sections plus
 /// verse-level proof edges, parsed from the bundled
-/// `assets/confessions.json`.
+/// `assets/confessions.json.gz`.
 ///
 /// The pipeline's shape is fixed:
 /// ```
@@ -210,15 +210,18 @@ class ConfessionData {
   static ConfessionData fromCanon(String source, BibleData canon) =>
       parse(source, chapterVerseCounts: [for (final c in canon.chapters) c.v]);
 
-  /// Loads and indexes assets/confessions.json off the UI thread.
-  /// A missing or malformed asset throws here; the shell's lazy
-  /// loader catches it and degrades to an unloaded layer.
+  /// Loads and indexes assets/confessions.json.gz off the UI
+  /// thread — the asset ships gzipped and is inflated in the
+  /// same isolate that parses it. A missing or malformed asset
+  /// throws here; the shell's lazy loader catches it and degrades
+  /// to an unloaded layer.
   static Future<ConfessionData> load(BibleData canon) async {
-    final source = await rootBundle.loadString('assets/confessions.json');
-    return compute(_parseConfessions, (source, canon));
+    final bytes = await loadBundledBytes('assets/confessions.json.gz');
+    return compute(_parseConfessions, (bytes, canon));
   }
 }
 
-/// Top-level parse entry for [compute] in [ConfessionData.load].
-ConfessionData _parseConfessions((String, BibleData) args) =>
-    ConfessionData.fromCanon(args.$1, args.$2);
+/// Top-level parse entry for [compute] in [ConfessionData.load]:
+/// inflate, then parse via [ConfessionData.fromCanon] unchanged.
+ConfessionData _parseConfessions((Uint8List, BibleData) args) =>
+    ConfessionData.fromCanon(inflateBundledJson(args.$1), args.$2);

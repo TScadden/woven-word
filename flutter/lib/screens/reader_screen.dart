@@ -1049,6 +1049,71 @@ class ReaderScreenState extends State<ReaderScreen>
           );
         }
 
+        // The chapter section (HOME ARCH GOES AMBIENT, spec §8):
+        // this chapter's partner chapters, ranked as shipped
+        // (partnersSorted: count desc, chapter asc), each row
+        // ≥48dp, tapping one pops the sheet and routes through
+        // the host's one open-chapter procedure — same-book
+        // partners page inside the reader, cross-book partners
+        // take its book swap. Connections live in the reader
+        // now that Home's selection panel is removed.
+        Widget chapterPartnerRow(MapEntry<int, int> entry) {
+          final pc = entry.key;
+          final count = entry.value;
+          return InkWell(
+            key: ValueKey('chapter-partner-$pc'),
+            onTap: () {
+              Navigator.of(sheetContext).pop();
+              widget.host.openChapter(pc);
+            },
+            child: Container(
+              constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    data.chapterName(pc),
+                    style: _palette.smallBodyStyle.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    count == 1 ? '1 connection' : '$count connections',
+                    style: _palette.captionStyle,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final partners = data.partnersSorted(ch);
+        // The chapter section sits LAST in the sheet's scroll
+        // region (spec §8, as amended at build): every shipped
+        // section keeps its baseline position and build order,
+        // and the partners are reached by scrolling the sheet.
+        final chapterSection = <Widget>[
+          const SizedBox(height: 16),
+          Text(
+            '${data.chapterName(ch)} connects to',
+            style: _palette.refLabelStyle,
+          ),
+          const SizedBox(height: 8),
+          if (partners.isEmpty)
+            Text(
+              'No chapter connections are recorded for this chapter.',
+              style: _palette.captionStyle,
+            )
+          else
+            for (var i = 0; i < partners.length; i++) ...[
+              if (i > 0) Divider(height: 1, color: _palette.hairline),
+              chapterPartnerRow(partners[i]),
+            ],
+        ];
+
         // One conference talk row (§3.2): ≥48dp, title uncapped
         // in bodyOnPaper w600, the speaker line beneath it, and
         // NO trailing control — a talk has no screen in this app;
@@ -1201,7 +1266,13 @@ class ReaderScreenState extends State<ReaderScreen>
         ];
 
         if (!layered) {
-          // The shipped sheet, byte-for-byte (§1.1 OFF contract).
+          // The shipped sheet (§1.1 OFF contract), extended by
+          // the chapter section (spec §8): header fixed, then
+          // ONE scroll region holding the chapter partners and
+          // the verse connections — the layered form's single-
+          // scroll construction, so a long partner list can
+          // never push the verse section off the sheet. Every
+          // shipped string and verse row is verbatim.
           return ConstrainedBox(
             constraints: BoxConstraints(
               maxHeight: MediaQuery.of(sheetContext).size.height * 0.75,
@@ -1213,24 +1284,27 @@ class ReaderScreenState extends State<ReaderScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ...header,
-                  Text('Connections', style: _palette.refLabelStyle),
-                  const SizedBox(height: 8),
-                  if (conns.isEmpty)
-                    Text(
-                      'No cross references are recorded for this verse.',
-                      style: _palette.captionStyle,
-                    )
-                  else
-                    Flexible(
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: conns.length,
-                        separatorBuilder: (_, _) =>
-                            Divider(height: 1, color: _palette.hairline),
-                        itemBuilder: (_, i) =>
+                  Flexible(
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: [
+                        Text('Connections', style: _palette.refLabelStyle),
+                        const SizedBox(height: 8),
+                        if (conns.isEmpty)
+                          Text(
+                            'No cross references are recorded for this verse.',
+                            style: _palette.captionStyle,
+                          )
+                        else
+                          for (var i = 0; i < conns.length; i++) ...[
+                            if (i > 0)
+                              Divider(height: 1, color: _palette.hairline),
                             connectionRow(conns[i][0], conns[i][1]),
-                      ),
+                          ],
+                        ...chapterSection,
+                      ],
                     ),
+                  ),
                 ],
               ),
             ),
@@ -1335,6 +1409,9 @@ class ReaderScreenState extends State<ReaderScreen>
                 confessionRow(confessionSections[i]),
               ],
           ],
+          // The chapter section closes the scroll region
+          // (spec §8, as amended at build).
+          ...chapterSection,
         ];
         return ConstrainedBox(
           constraints: BoxConstraints(

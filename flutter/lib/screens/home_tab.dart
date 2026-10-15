@@ -1,27 +1,44 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
+import '../data/ambient_stage.dart';
 import '../data/bible_data.dart';
 import '../data/plans.dart';
+import '../data/tradition.dart';
 import '../data/user_data.dart';
 import '../data/verse_of_day.dart';
 import '../theme/ww_theme.dart';
 import '../widgets/arc_stage.dart';
 
+/// The route observer for Home's own route (HOME ARCH GOES
+/// AMBIENT, spec §5): the shell registers it on its navigators
+/// so HomeTab's [RouteAware] callbacks learn when a route is
+/// pushed above Home (rotation pauses) and when it pops
+/// (rotation resumes). Standalone HomeTab trees (tests) may
+/// register it on their own navigator the same way.
+final RouteObserver<PageRoute<dynamic>> wwHomeRouteObserver =
+    RouteObserver<PageRoute<dynamic>>();
+
 /// The Home tab's root (board run 7 part B, §2): top bar with the
-/// profile chip, the pinned arc mini-map (display only), and a
-/// scroll area holding, in order (board run 11, §1): Continue
-/// reading, the selection panel, Verse of the Day, Study Plans,
-/// and Study Tools. The scope dropdown is retired — the map's
-/// range derives from the selection (§2.2). HomeTab renders the
-/// values it is handed; the shell computes them (§7.1).
+/// profile chip, the pinned AMBIENT arc stage (HOME ARCH GOES
+/// AMBIENT: a self-running visual that features a new chapter
+/// of the active canon every 3 seconds, with a caption naming
+/// it and its connection count; tapping it opens the featured
+/// chapter in the reader), and a scroll area holding, in order
+/// (spec §1): Continue reading, Verse of the Day, Study Plans,
+/// and Study Tools. The selection panel is REMOVED — chapter
+/// taps open the reader directly, and connections live in the
+/// reader. HomeTab renders the values it is handed; the shell
+/// computes them (§7.1).
 class HomeTab extends StatefulWidget {
   const HomeTab({
     super.key,
     required this.dataFuture,
     required this.userData,
-    required this.selection,
+    required this.tradition,
     required this.resumeBound,
     required this.resumeSubtitle,
     required this.notesCount,
@@ -29,7 +46,6 @@ class HomeTab extends StatefulWidget {
     required this.plans,
     required this.highlightsCount,
     required this.onOpenChapter,
-    required this.onClearSelection,
     required this.onResume,
     required this.onOpenProfiles,
     required this.onOpenMyNotes,
@@ -37,11 +53,25 @@ class HomeTab extends StatefulWidget {
     required this.onOpenPlan,
     required this.onOpenHighlights,
     required this.onRetryLoad,
+    this.ambientActive = true,
+    this.ambientRandom,
   });
 
   final Future<BibleData> dataFuture;
   final UserData userData;
-  final int? selection;
+
+  /// The active tradition: the ambient pool and the stage range
+  /// follow its canon (spec §2).
+  final WwTradition tradition;
+
+  /// Whether Home is the shell's selected tab (spec §5): Home
+  /// lives in an IndexedStack, so hidden is not disposed — the
+  /// shell passes its tab state and rotation pauses off-tab.
+  final bool ambientActive;
+
+  /// Test seam for the ambient picker (spec §3): the shell
+  /// passes none and the picker uses a fresh `Random`.
+  final math.Random? ambientRandom;
   final bool resumeBound;
   final String resumeSubtitle;
   final int notesCount;
@@ -58,7 +88,6 @@ class HomeTab extends StatefulWidget {
   final int highlightsCount;
 
   final void Function(int ch) onOpenChapter;
-  final VoidCallback onClearSelection;
   final VoidCallback onResume;
   final VoidCallback onOpenProfiles;
   final VoidCallback onOpenMyNotes;
@@ -71,20 +100,178 @@ class HomeTab extends StatefulWidget {
   State<HomeTab> createState() => HomeTabState();
 }
 
-class HomeTabState extends State<HomeTab> {
+class HomeTabState extends State<HomeTab>
+    with TickerProviderStateMixin, WidgetsBindingObserver, RouteAware {
   static const _miniStage = Size(1200, 500);
 
   final _scrollCtl = ScrollController();
   final _images = <String, ui.Image>{};
   final _rendering = <String>{};
 
+  // ------------------------------------------------ ambient stage
+
+  /// The rotation driver (spec I-3): a frame ticker, not a
+  /// Timer — TickerMode mutes it under a covering route, it
+  /// dies with this State, and it leaves no pending-timer leak.
+  late final Ticker _rotationTicker;
+
+  /// The morph driver (spec §4): 600ms, eased in the painter.
+  late final AnimationController _morph;
+
+  Duration _lastFeature = Duration.zero;
+  int? _featured;
+  int? _previous;
+
+  /// The picker pool, computed once per (data, tradition)
+  /// (spec §2/§7), and the precomputed arc geometry, once per
+  /// dataset (spec §7). A tick reads only these.
+  List<int> _pool = const [];
+  BibleData? _poolData;
+  WwTradition? _poolTradition;
+  Map<int, List<AmbientArc>> _geometry = const {};
+  BibleData? _geometryData;
+  AmbientPicker? _picker;
+
+  /// Pause state (spec §5): plain fields, never setState —
+  /// pausing and resuming start/stop the ticker only.
+  bool _scrollActive = false;
+  bool _pointerActive = false;
+  bool _routeCovered = false;
+  bool _foreground = true;
+  bool _reducedMotion = false;
+  PageRoute<dynamic>? _route;
+
+  @override
+  void initState() {
+    super.initState();
+    _rotationTicker = createTicker(_onRotationTick);
+    _morph = AnimationController(
+      vsync: this,
+      duration: ambientMorphDuration,
+      value: 1,
+    );
+    WidgetsBinding.instance.addObserver(this);
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    if (_route != null) wwHomeRouteObserver.unsubscribe(this);
+    _rotationTicker.dispose();
+    _morph.dispose();
     _scrollCtl.dispose();
     for (final img in _images.values) {
       img.dispose();
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reducedMotion = MediaQuery.of(context).disableAnimations;
+    if (_reducedMotion && _morph.isAnimating) _morph.value = 1;
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic> && !identical(route, _route)) {
+      if (_route != null) wwHomeRouteObserver.unsubscribe(this);
+      _route = route;
+      wwHomeRouteObserver.subscribe(this, route);
+    }
+    _syncRotation();
+  }
+
+  @override
+  void didUpdateWidget(HomeTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncRotation();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    _syncRotation();
+  }
+
+  @override
+  void didPushNext() {
+    _routeCovered = true;
+    _syncRotation();
+  }
+
+  @override
+  void didPopNext() {
+    _routeCovered = false;
+    _syncRotation();
+  }
+
+  bool get _shouldRotate =>
+      widget.ambientActive &&
+      _foreground &&
+      !_routeCovered &&
+      !_scrollActive &&
+      !_pointerActive &&
+      !_reducedMotion &&
+      _pool.length > 1 &&
+      _featured != null;
+
+  /// Starts or stops the rotation ticker to match the pause
+  /// matrix (spec §5). Resume always starts a fresh interval:
+  /// the ticker's clock restarts, so no partial credit and no
+  /// catch-up burst.
+  void _syncRotation() {
+    if (!mounted) return;
+    if (_shouldRotate) {
+      if (!_rotationTicker.isActive) {
+        _lastFeature = Duration.zero;
+        _rotationTicker.start();
+      }
+    } else {
+      if (_rotationTicker.isActive) _rotationTicker.stop();
+    }
+  }
+
+  void _onRotationTick(Duration elapsed) {
+    if (elapsed - _lastFeature < ambientInterval) return;
+    _lastFeature = elapsed;
+    _rotate();
+  }
+
+  /// One feature change (spec §7): one picker draw over the
+  /// cached pool, one state swap, the morph starts. Nothing
+  /// scans the dataset here.
+  void _rotate() {
+    final picker = _picker;
+    if (picker == null) return;
+    final next = picker.next(_pool, _featured);
+    if (next == null || next == _featured) return;
+    setState(() {
+      _previous = _featured;
+      _featured = next;
+    });
+    if (!_reducedMotion) _morph.forward(from: 0);
+  }
+
+  /// Computes the cached pool/geometry when their inputs change
+  /// and draws the initial feature (spec §2/§7). Runs inside
+  /// build like the shipped image cache did; every write is
+  /// guarded by the identity it caches on.
+  void _ensureAmbient(BibleData data) {
+    if (!identical(_geometryData, data)) {
+      _geometryData = data;
+      _geometry = buildAmbientArcGeometry(data);
+      _poolData = null;
+    }
+    if (!identical(_poolData, data) || _poolTradition != widget.tradition) {
+      _poolData = data;
+      _poolTradition = widget.tradition;
+      _pool = buildAmbientPool(data, widget.tradition).pool;
+      _picker = AmbientPicker(widget.ambientRandom);
+      if (_featured == null || !_pool.contains(_featured)) {
+        _featured = _picker!.next(_pool, null);
+        _previous = _featured;
+        if (_morph.value != 1) _morph.value = 1;
+      }
+    }
   }
 
   void scrollToTop() {
@@ -139,22 +326,49 @@ class HomeTabState extends State<HomeTab> {
     return Scaffold(
       backgroundColor: WwColors.stage,
       body: SafeArea(
-        child: FutureBuilder<BibleData>(
-          future: widget.dataFuture,
-          builder: (context, snapshot) {
-            final data = snapshot.data;
-            return Column(
-              children: [
-                _topBar(),
-                if (data != null) _miniMap(data),
-                Expanded(
-                  child: data != null
-                      ? _scrollArea(data)
-                      : _statusArea(snapshot),
-                ),
-              ],
-            );
+        // Any touch on Home pauses rotation until it lifts
+        // (spec §5, interaction row): the Listener only
+        // observes; it never consumes a gesture.
+        child: Listener(
+          onPointerDown: (_) {
+            if (!_pointerActive) {
+              _pointerActive = true;
+              _syncRotation();
+            }
           },
+          onPointerUp: (_) {
+            if (_pointerActive) {
+              _pointerActive = false;
+              _syncRotation();
+            }
+          },
+          onPointerCancel: (_) {
+            if (_pointerActive) {
+              _pointerActive = false;
+              _syncRotation();
+            }
+          },
+          child: FutureBuilder<BibleData>(
+            future: widget.dataFuture,
+            builder: (context, snapshot) {
+              final data = snapshot.data;
+              if (data != null) {
+                _ensureAmbient(data);
+                _syncRotation();
+              }
+              return Column(
+                children: [
+                  _topBar(),
+                  if (data != null) _ambientStage(data),
+                  Expanded(
+                    child: data != null
+                        ? _scrollArea(data)
+                        : _statusArea(snapshot),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
@@ -256,98 +470,176 @@ class HomeTabState extends State<HomeTab> {
     );
   }
 
-  (int, int) _range(BibleData data) {
-    final sel = widget.selection;
-    if (sel == null) return (0, data.totalChapters - 1);
-    final book = data.chapters[sel].b;
-    return data.scopeRange(book < 39 ? 'ot' : 'nt');
-  }
+  (int, int) _range(BibleData data) => ambientRange(data, widget.tradition);
 
-  Widget _miniMap(BibleData data) {
+  /// The ambient stage (spec §4): the featured chapter's arcs
+  /// over the shipped selection-state background (chapter bars,
+  /// no ambient web), the caption under it, and ONE tap target
+  /// for the whole stage + caption that opens the featured
+  /// chapter in the reader through the shell's routing.
+  Widget _ambientStage(BibleData data) {
     final (lo, hi) = _range(data);
-    return Container(
-      decoration: const BoxDecoration(
-        color: WwColors.stage,
-        border: Border(bottom: BorderSide(color: WwColors.borderDarkSoft)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final w = constraints.maxWidth;
-          final band = bandFor(densityFor(w));
-          final includeArcs = widget.selection == null;
-          final key = '$lo-$hi-$band-$includeArcs';
-          final img = _images[key];
-          if (img == null) {
-            _ensureMiniImage(
-              key: key,
-              data: data,
-              lo: lo,
-              hi: hi,
-              band: band,
-              includeArcs: includeArcs,
-            );
-          }
-          return SizedBox(
-            width: w,
-            height: w * _miniStage.height / _miniStage.width,
-            child: FittedBox(
-              fit: BoxFit.fill,
-              child: SizedBox(
-                width: _miniStage.width,
-                height: _miniStage.height,
-                child: Stack(
-                  children: [
-                    if (img != null)
-                      RawImage(
-                        image: img,
-                        width: _miniStage.width,
-                        height: _miniStage.height,
-                        fit: BoxFit.fill,
-                      ),
-                    if (widget.selection != null)
-                      Positioned.fill(
-                        child: CustomPaint(
-                          painter: MiniSelectionPainter(
-                            data: data,
-                            lo: lo,
-                            hi: hi,
-                            stage: _miniStage,
-                            selected: widget.selection,
+    final featured = _featured;
+    final caption = featured == null
+        ? null
+        : '${data.chapterName(featured)} · '
+              '${_fmt(data.chapterConnCount[featured])} '
+              '${data.chapterConnCount[featured] == 1 ? 'connection' : 'connections'}';
+    return Semantics(
+      key: const ValueKey('ambient-stage'),
+      container: true,
+      button: true,
+      label: featured == null ? 'Arc stage' : 'Open ${data.chapterName(featured)}',
+      child: ExcludeSemantics(
+        child: Material(
+          color: WwColors.stage,
+          child: InkWell(
+            onTap: featured == null
+                ? null
+                : () => widget.onOpenChapter(featured),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  decoration: const BoxDecoration(
+                    color: WwColors.stage,
+                    border: Border(
+                      bottom: BorderSide(color: WwColors.borderDarkSoft),
+                    ),
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final w = constraints.maxWidth;
+                      final band = bandFor(densityFor(w));
+                      const includeArcs = false;
+                      final key = '$lo-$hi-$band-$includeArcs';
+                      final img = _images[key];
+                      if (img == null) {
+                        _ensureMiniImage(
+                          key: key,
+                          data: data,
+                          lo: lo,
+                          hi: hi,
+                          band: band,
+                          includeArcs: includeArcs,
+                        );
+                      }
+                      return SizedBox(
+                        width: w,
+                        height: w * _miniStage.height / _miniStage.width,
+                        child: FittedBox(
+                          fit: BoxFit.fill,
+                          child: SizedBox(
+                            width: _miniStage.width,
+                            height: _miniStage.height,
+                            child: Stack(
+                              children: [
+                                if (img != null)
+                                  RawImage(
+                                    image: img,
+                                    width: _miniStage.width,
+                                    height: _miniStage.height,
+                                    fit: BoxFit.fill,
+                                  ),
+                                if (featured != null)
+                                  Positioned.fill(
+                                    child: AnimatedBuilder(
+                                      animation: _morph,
+                                      builder: (context, _) => CustomPaint(
+                                        painter: AmbientArcPainter(
+                                          data: data,
+                                          lo: lo,
+                                          hi: hi,
+                                          stage: _miniStage,
+                                          fromChapter: _previous,
+                                          toChapter: featured,
+                                          fromArcs: _previous == null
+                                              ? const []
+                                              : (_geometry[_previous] ??
+                                                    const []),
+                                          toArcs:
+                                              _geometry[featured] ?? const [],
+                                          t: _reducedMotion
+                                              ? 1
+                                              : Curves.easeInOut.transform(
+                                                  _morph.value,
+                                                ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                      );
+                    },
+                  ),
                 ),
-              ),
+                Container(
+                  key: const ValueKey('ambient-caption'),
+                  constraints: const BoxConstraints(
+                    minHeight: WwSpace.minTarget,
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: WwSpace.screenMargin,
+                  ),
+                  alignment: Alignment.centerLeft,
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: WwColors.borderDarkSoft),
+                    ),
+                  ),
+                  child: caption == null
+                      ? const SizedBox.shrink()
+                      : Text(caption, style: WwType.captionOnDark),
+                ),
+              ],
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }
 
   Widget _scrollArea(BibleData data) {
-    return ListView(
-      controller: _scrollCtl,
-      padding: const EdgeInsets.only(top: 16),
-      children: [
-        _resumeCard(),
-        if (widget.selection != null) ...[
+    // Scrolling anywhere inside Home — the main list or the
+    // plan row — pauses rotation (spec §5): notifications from
+    // every descendant scrollable bubble through here.
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification is ScrollStartNotification) {
+          if (!_scrollActive) {
+            _scrollActive = true;
+            _syncRotation();
+          }
+        } else if (notification is ScrollEndNotification) {
+          if (_scrollActive) {
+            _scrollActive = false;
+            _syncRotation();
+          }
+        }
+        return false;
+      },
+      child: ListView(
+        controller: _scrollCtl,
+        padding: const EdgeInsets.only(top: 16),
+        children: [
+          _resumeCard(),
+          if (widget.verseOfDay != null) ...[
+            const SizedBox(height: 16),
+            _verseOfDayCard(),
+          ],
+          if (widget.plans.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _plansSection(data),
+          ],
           const SizedBox(height: 16),
-          _selectionPanel(data),
+          _toolsSection(),
+          const SizedBox(height: 24),
         ],
-        if (widget.verseOfDay != null) ...[
-          const SizedBox(height: 16),
-          _verseOfDayCard(),
-        ],
-        if (widget.plans.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          _plansSection(data),
-        ],
-        const SizedBox(height: 16),
-        _toolsSection(),
-        const SizedBox(height: 24),
-      ],
+      ),
     );
   }
 
@@ -761,98 +1053,6 @@ class HomeTabState extends State<HomeTab> {
                 ],
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _selectionPanel(BibleData data) {
-    final ch = widget.selection!;
-    final c = data.chapters[ch];
-    return Container(
-      color: WwColors.surface,
-      padding: const EdgeInsets.all(WwSpace.screenMargin),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(data.chapterName(ch), style: WwType.selectionTitle),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${_fmt(c.v)} verses · '
-                      '${_fmt(data.chapterConnCount[ch])} connections',
-                      style: WwType.captionOnDark,
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                tooltip: 'Clear selection',
-                onPressed: widget.onClearSelection,
-                icon: const Icon(Icons.close, color: WwColors.navInk),
-                constraints: const BoxConstraints(
-                  minWidth: WwSpace.minTarget,
-                  minHeight: WwSpace.minTarget,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ElevatedButton(
-            onPressed: () => widget.onOpenChapter(ch),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: WwColors.goldBright,
-              foregroundColor: WwColors.onGold,
-              minimumSize: const Size.fromHeight(WwSpace.minTarget),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(WwRadius.chip),
-              ),
-            ),
-            child: Text(
-              'Read ${data.chapterName(ch)}',
-              style: WwType.goldButtonLabel,
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Text('Connected chapters', style: WwType.captionOnDark),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final entry in data.partnersSorted(ch))
-                _partnerChip(data, entry),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _partnerChip(BibleData data, MapEntry<int, int> entry) {
-    return Material(
-      color: WwColors.surfaceHigh,
-      borderRadius: BorderRadius.circular(WwRadius.chip),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(WwRadius.chip),
-        onTap: () => widget.onOpenChapter(entry.key),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(data.chapterName(entry.key), style: WwType.controlLabel),
-              const SizedBox(width: 6),
-              Text(_fmt(entry.value), style: WwType.captionOnDark),
-            ],
           ),
         ),
       ),

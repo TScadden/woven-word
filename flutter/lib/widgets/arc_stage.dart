@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../data/ambient_stage.dart';
 import '../data/bible_data.dart';
 import '../theme/ww_theme.dart';
 
@@ -27,6 +28,12 @@ class ArcGeometry {
   double get maxArcH => math.min(axisY - 80, stage.width * 0.85);
 
   double xForPos(int pos) =>
+      padX + (pos - loV) / (hiV - loV) * (stage.width - padX * 2);
+
+  /// [xForPos] for an interpolated (fractional) verse position —
+  /// the ambient morph's lerped endpoints (arch-ambient-home
+  /// spec §4). Same mapping, double input.
+  double xForPosValue(double pos) =>
       padX + (pos - loV) / (hiV - loV) * (stage.width - padX * 2);
 
   int posForX(double x) {
@@ -325,6 +332,156 @@ class MiniSelectionPainter extends CustomPainter {
   @override
   bool shouldRepaint(MiniSelectionPainter old) =>
       old.selected != selected ||
+      old.lo != lo ||
+      old.hi != hi ||
+      old.stage != stage;
+}
+
+/// The ambient Home stage's featured-chapter arcs (HOME ARCH
+/// GOES AMBIENT, spec §4): the shipped selected-chapter rendering
+/// — [MiniSelectionPainter]'s geometry, its `_arcColor` sweep,
+/// its alpha formula, its gold bar — carried across a morph
+/// between two featured chapters. The color path is the shipped
+/// one verbatim; this painter only interpolates the GEOMETRY
+/// the precomputed [AmbientArc] lists hand it (spec §7) and
+/// cross-fades the arcs a rank pairing cannot carry.
+///
+/// Pairing is by rank in partner-ascending order: a paired arc's
+/// source position, target position, and count lerp from the
+/// outgoing chapter's arc to the incoming one's; unpaired
+/// outgoing arcs fade in place, unpaired incoming arcs fade in.
+/// At t = 0 the render is exactly the outgoing chapter's
+/// selected rendering; at t = 1 exactly the incoming one's.
+class AmbientArcPainter extends CustomPainter {
+  final BibleData data;
+  final int lo;
+  final int hi;
+  final Size stage;
+  final int? fromChapter;
+  final int? toChapter;
+
+  /// The outgoing chapter's precomputed arcs (empty when the
+  /// chapter has no partners or there is no outgoing chapter).
+  final List<AmbientArc> fromArcs;
+
+  /// The incoming (featured) chapter's precomputed arcs.
+  final List<AmbientArc> toArcs;
+
+  /// Morph progress, 0..1 (already eased by the driver).
+  final double t;
+
+  const AmbientArcPainter({
+    required this.data,
+    required this.lo,
+    required this.hi,
+    required this.stage,
+    required this.fromChapter,
+    required this.toChapter,
+    required this.fromArcs,
+    required this.toArcs,
+    required this.t,
+  });
+
+  double _lerp(double a, double b) => a + (b - a) * t;
+
+  void _drawArcD(Canvas canvas, ArcGeometry g, double pa, double pb,
+      Paint paint) {
+    final x1 = g.xForPosValue(pa), x2 = g.xForPosValue(pb);
+    if ((x2 - x1).abs() < 0.8) return;
+    final hgt = math.min(g.maxArcH, (x2 - x1).abs() * 0.52);
+    final path = Path()
+      ..moveTo(x1, g.axisY)
+      ..quadraticBezierTo((x1 + x2) / 2, g.axisY - hgt * 2, x2, g.axisY);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final to = toChapter;
+    if (to == null || to < lo || to > hi) return;
+    final g = ArcGeometry(
+      stage,
+      data.chapterStart[lo],
+      data.chapterStart[hi] + data.chapters[hi].v,
+    );
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6;
+    // The shipped selection alpha (MiniSelectionPainter): the
+    // base for one partner arc of count n, before the morph's
+    // fade factor for unpaired arcs.
+    double alphaFor(double n, double factor) =>
+        (0.30 + math.min(0.45, log10(n) * 0.18)) * factor;
+    void drawArc(double pa, double pb, double n, double factor) {
+      if (factor <= 0) return;
+      paint.color = _arcColor(
+        (pb - pa).abs() / (g.hiV - g.loV),
+        alphaFor(n, factor).clamp(0.0, 1.0),
+      );
+      _drawArcD(canvas, g, pa, pb, paint);
+    }
+
+    final paired = math.min(fromArcs.length, toArcs.length);
+    for (var i = 0; i < paired; i++) {
+      final a = fromArcs[i], b = toArcs[i];
+      // A paired arc whose partner sits outside the stage range
+      // in either state is not drawn in that state (the shipped
+      // painter's range rule); the morph fades it at the side
+      // where it exists instead of sliding it across the range.
+      final aIn = a.partner >= lo && a.partner <= hi;
+      final bIn = b.partner >= lo && b.partner <= hi;
+      if (aIn && bIn) {
+        drawArc(
+          _lerp(a.fromPos.toDouble(), b.fromPos.toDouble()),
+          _lerp(a.toPos.toDouble(), b.toPos.toDouble()),
+          _lerp(a.count.toDouble(), b.count.toDouble()),
+          1,
+        );
+      } else if (aIn) {
+        drawArc(a.fromPos.toDouble(), a.toPos.toDouble(),
+            a.count.toDouble(), 1 - t);
+      } else if (bIn) {
+        drawArc(b.fromPos.toDouble(), b.toPos.toDouble(),
+            b.count.toDouble(), t);
+      }
+    }
+    for (var i = paired; i < fromArcs.length; i++) {
+      final a = fromArcs[i];
+      if (a.partner < lo || a.partner > hi) continue;
+      drawArc(a.fromPos.toDouble(), a.toPos.toDouble(),
+          a.count.toDouble(), 1 - t);
+    }
+    for (var i = paired; i < toArcs.length; i++) {
+      final b = toArcs[i];
+      if (b.partner < lo || b.partner > hi) continue;
+      drawArc(b.fromPos.toDouble(), b.toPos.toDouble(),
+          b.count.toDouble(), t);
+    }
+    // Gold selection bars, cross-faded like the arcs: the
+    // outgoing chapter's at (1 − t), the featured one's at t —
+    // at the endpoints exactly the shipped single gold bar.
+    void goldBar(int ch, double factor) {
+      if (factor <= 0 || ch < lo || ch > hi) return;
+      final c = data.chapters[ch];
+      final x0 = g.xForPos(data.chapterStart[ch]);
+      final x1 = g.xForPos(data.chapterStart[ch] + c.v);
+      final h = 14 + math.sqrt(c.v) * 4.4;
+      canvas.drawRect(
+        Rect.fromLTWH(x0, g.axisY, math.max(2.0, x1 - x0 - 0.6), h),
+        Paint()..color = WwColors.goldBright.withValues(alpha: factor),
+      );
+    }
+
+    final from = fromChapter;
+    if (from != null && from != to) goldBar(from, 1 - t);
+    goldBar(to, from == null || from == to ? 1 : t);
+  }
+
+  @override
+  bool shouldRepaint(AmbientArcPainter old) =>
+      old.t != t ||
+      old.fromChapter != fromChapter ||
+      old.toChapter != toChapter ||
       old.lo != lo ||
       old.hi != hi ||
       old.stage != stage;

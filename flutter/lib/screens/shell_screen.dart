@@ -416,12 +416,11 @@ class ShellController extends ChangeNotifier
           savedTab == 'screens') {
         tab = savedTab!;
       }
-      final savedSelection = prefs.getInt('ww_home_selected');
-      if (savedSelection != null &&
-          savedSelection >= 0 &&
-          savedSelection < d.totalChapters) {
-        selection = savedSelection;
-      }
+      // HOME ARCH GOES AMBIENT (spec §6): the ww_home_selected
+      // state is RETIRED — the stale key is removed on load and
+      // never restored from. Reading places restore from the
+      // screens document below, as shipped.
+      await prefs.remove('ww_home_selected');
       final (parsed, active) = parseWwScreens(
         prefs.getString('ww_screens_v1'),
         d,
@@ -500,18 +499,16 @@ class ShellController extends ChangeNotifier
 
   @override
   void recordSelection(int ch) {
+    // Retired persistence (spec §6): the selection lives in
+    // memory only — the reader host contract and the screens
+    // fallback still read it, but ww_home_selected is never
+    // written again.
     selection = ch;
-    SharedPreferences.getInstance()
-        .then((prefs) => prefs.setInt('ww_home_selected', ch))
-        .catchError((_) => false);
     notifyListeners();
   }
 
   void clearSelection() {
     selection = null;
-    SharedPreferences.getInstance()
-        .then((prefs) => prefs.remove('ww_home_selected'))
-        .catchError((_) => false);
     notifyListeners();
   }
 
@@ -1318,6 +1315,13 @@ class _WwShellState extends State<WwShell> {
   ) {
     return Navigator(
       key: key,
+      // Home's ambient rotation pauses while a route covers it
+      // (spec §5): HomeTab subscribes to its route through this
+      // observer. A RouteObserver attaches to ONE navigator, so
+      // only the Home navigator carries it.
+      observers: identical(key, _ctl.homeNavKey)
+          ? [wwHomeRouteObserver]
+          : const [],
       onGenerateRoute: (settings) => _RootRoute(builder: rootBuilder),
     );
   }
@@ -1418,7 +1422,8 @@ class _WwShellState extends State<WwShell> {
       key: _ctl.homeTabKey,
       dataFuture: _ctl.dataFuture,
       userData: _ctl.userData,
-      selection: _ctl.selection,
+      tradition: _ctl.tradition,
+      ambientActive: _ctl.tab == 'home',
       resumeBound: activeBound,
       resumeSubtitle: resumeSubtitle,
       notesCount: notesCount,
@@ -1426,7 +1431,6 @@ class _WwShellState extends State<WwShell> {
       plans: planCards,
       highlightsCount: highlightsCount,
       onOpenChapter: (ch) => _ctl.openChapter(ch),
-      onClearSelection: _ctl.clearSelection,
       onResume: _ctl._resume,
       onOpenProfiles: _ctl._openProfiles,
       onOpenMyNotes: _ctl._openMyNotes,

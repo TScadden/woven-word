@@ -1,0 +1,10 @@
+{
+  "file": "../team/specs/arch-ambient-evidence/ambient-minimap-clamped-rainbow.png",
+  "size": "1200x500",
+  "arcRegionRows": "0..349",
+  "arcRegionPixels": 420000,
+  "meanLuminance": 0.079974,
+  "p99Luminance": 0.173455,
+  "maxLuminance": 0.213268,
+  "fracAbove0.9": 0.0
+}

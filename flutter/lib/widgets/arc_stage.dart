@@ -61,24 +61,82 @@ Color _arcColor(double distFrac, double alpha) {
   return HSLColor.fromAHSL(alpha, hue, 0.85, 0.58).toColor();
 }
 
-/// The ambient web's one color (run-8 fix round, Defect 2): the
-/// gold token, nothing else. The pre-fix ambient path ran the
-/// hue sweep above through additive (BlendMode.plus) blending, so
-/// thousands of overlapping arcs summed past 1.0 near the axis and
-/// clipped to a white/yellow dome with green/cyan/purple fringes —
-/// measured on the pre-fix tree at the Home parameters: arc-region
-/// mean luminance 0.593, 59.6% of pixels above 0.9 luminance.
-/// The sweep survives ONLY in the selection painter (shipped
-/// behavior, single-pass normal blending, no accumulation).
+/// The ambient web's brightness cap (arch-ambient package, Oct 15,
+/// 2026): every ambient stroke color is luminance-clamped to at
+/// most this WCAG relative luminance before it is drawn. History
+/// in two lines: the original hue sweep under additive blending
+/// blew out to a white dome, and the run-8 fix round replaced it
+/// with one gold token under srcOver — bounded, but flat gold.
+/// The founder then asked the static arch to look more like the
+/// original until a chapter is selected, so the ambient path now
+/// draws the distance-hue sweep again, with each sweep color
+/// clamped to this cap and additive blending still banned.
 ///
-/// The ambient path now draws this token with srcOver compositing.
-/// srcOver accumulation of one color over black is bounded by
-/// construction: stacked arcs converge toward the token and can
-/// never exceed it, so the brightest possible ambient pixel is
-/// WwColors.gold (#B8860B, WCAG relative luminance 0.273) at full
-/// accumulation — dim gold, never white — and sparse regions sit
-/// far below it at the per-arc alpha (see renderArcImage).
-const ambientArcToken = WwColors.gold;
+/// The bound is by construction (lesson 31): the ambient path
+/// composites with srcOver over the black stage, and a srcOver
+/// composite is a convex combination of the stroke colors, so no
+/// ambient pixel's luminance can exceed the brightest single
+/// stroke's — and every stroke is clamped to the cap. The cap's
+/// starting value is the fix round's measured max: 0.216, the
+/// gold-token render's brightest arc-region pixel at the Home
+/// parameters (its construction cap was the token's own 0.273;
+/// accumulation at the shipped alphas never reached it). The
+/// sweep also survives in the selection painter (shipped
+/// behavior, single-pass normal blending, no accumulation),
+/// which this cap does not govern.
+const ambientLuminanceCap = 0.216;
+
+/// Rasterization guard subtracted from [ambientLuminanceCap] to
+/// get the clamp target. The construction bound above is exact
+/// in float arithmetic, but the stage rasterizes to 8-bit
+/// premultiplied pixels: thousands of srcOver draws at one pixel
+/// each round the surface to bytes, and the accumulated rounding
+/// drifts measured pixels ABOVE the float bound — measured on
+/// this package's first capture, clamped to exactly the cap:
+/// max 0.221248, +0.0052 over, in 31 of 420,000 arc-region
+/// pixels. (The gold render never showed it: its accumulation
+/// sat 0.057 below its token cap.) Clamping to cap − guard keeps
+/// every measured pixel at or under the cap; the guard is sized
+/// above the measured drift.
+const _ambientRasterGuard = 0.008;
+
+/// Scales [color] toward black — one proportional factor on all
+/// three RGB channels, so hue is preserved and alpha untouched —
+/// until its WCAG relative luminance equals the clamp target,
+/// [ambientLuminanceCap] − [_ambientRasterGuard]. Colors already
+/// at or under the target pass through unchanged.
+Color clampToAmbientCap(Color color) {
+  const target = ambientLuminanceCap - _ambientRasterGuard;
+  if (color.computeLuminance() <= target) return color;
+  // Luminance rises monotonically with the RGB scale factor, so
+  // bisect for the factor whose luminance lands on the target;
+  // keep the under-target side so the result never exceeds it.
+  var lo = 0.0, hi = 1.0;
+  for (var i = 0; i < 64; i++) {
+    final mid = (lo + hi) / 2;
+    final scaled = color.withValues(
+      red: color.r * mid,
+      green: color.g * mid,
+      blue: color.b * mid,
+    );
+    if (scaled.computeLuminance() > target) {
+      hi = mid;
+    } else {
+      lo = mid;
+    }
+  }
+  return color.withValues(
+    red: color.r * lo,
+    green: color.g * lo,
+    blue: color.b * lo,
+  );
+}
+
+/// The ambient path's color for one arc: the distance-hue sweep
+/// ([_arcColor], the original's rainbow), luminance-clamped to
+/// [ambientLuminanceCap].
+Color ambientArcColor(double distFrac, double alpha) =>
+    clampToAmbientCap(_arcColor(distFrac, alpha));
 
 void _drawArc(Canvas canvas, ArcGeometry g, int pa, int pb, Paint paint) {
   final x1 = g.xForPos(pa), x2 = g.xForPos(pb);
@@ -133,12 +191,14 @@ Future<ui.Image> renderArcImage({
         );
       }
     } else {
-      // Ambient web (run-8 fix round, Defect 2): srcOver, the one
-      // gold token, per-arc alpha unchanged in form — min(0.30,
-      // 0.028 + log10(n) * 0.055) * density, so at the Home band
-      // (0.30) alpha runs 0.0084–0.09 and at full density at most
-      // 0.30. Stacking deepens toward the token (bounded, see
-      // ambientArcToken) instead of summing to white.
+      // Ambient web (arch-ambient package): srcOver — additive
+      // blending stays banned — with the distance-hue sweep
+      // restored as the color source and every stroke color
+      // luminance-clamped to ambientLuminanceCap before drawing
+      // (see the cap's doc for the bound). Per-arc alpha unchanged
+      // in form — min(0.30, 0.028 + log10(n) * 0.055) * density,
+      // so at the Home band (0.30) alpha runs 0.0084–0.09 and at
+      // full density at most 0.30.
       arcPaint.blendMode = BlendMode.srcOver;
       for (final arc in data.chapterArcs) {
         final a = arc[0], b = arc[1], n = arc[2];
@@ -146,7 +206,8 @@ Future<ui.Image> renderArcImage({
         final pa = data.versePos(a, (data.chapters[a].v / 2).ceil());
         final pb = data.versePos(b, (data.chapters[b].v / 2).ceil());
         final alpha = math.min(0.30, 0.028 + log10(n) * 0.055) * density;
-        arcPaint.color = ambientArcToken.withValues(alpha: alpha);
+        final distFrac = (pb - pa).abs() / (g.hiV - g.loV);
+        arcPaint.color = ambientArcColor(distFrac, alpha);
         _drawArc(canvas, g, pa, pb, arcPaint);
       }
     }

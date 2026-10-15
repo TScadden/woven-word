@@ -14,6 +14,13 @@
 //     --dart-define=EVIDENCE_LABEL=before
 // Writes ../team/specs/run8-fix-evidence/ambient-minimap-<label>.png
 // Pixel stats: ../team/specs/run8-fix-evidence/compute_stats.py
+//
+// Extended for the arch-ambient package (Oct 15, 2026): pass
+// EVIDENCE_DIR to write the capture elsewhere — the clamped-
+// rainbow capture lives in ../team/specs/arch-ambient-evidence:
+//   flutter test tool/arc_minimap_evidence_test.dart \
+//     --dart-define=EVIDENCE_LABEL=clamped-rainbow \
+//     --dart-define=EVIDENCE_DIR=../team/specs/arch-ambient-evidence
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -30,6 +37,10 @@ void main() {
       defaultValue: 'after',
     );
     const width = int.fromEnvironment('EVIDENCE_WIDTH', defaultValue: 390);
+    const outDir = String.fromEnvironment(
+      'EVIDENCE_DIR',
+      defaultValue: '../team/specs/run8-fix-evidence',
+    );
     final data = await BibleData.load();
     final band = bandFor(densityFor(width.toDouble()));
     // The band Home computes at phone width must be the one in the
@@ -47,7 +58,7 @@ void main() {
     );
     final png = await img.toByteData(format: ui.ImageByteFormat.png);
     expect(png, isNotNull);
-    final dir = Directory('../team/specs/run8-fix-evidence');
+    final dir = Directory(outDir);
     await dir.create(recursive: true);
     final file = File('${dir.path}/ambient-minimap-$label.png');
     await file.writeAsBytes(png!.buffer.asUint8List());

@@ -4,15 +4,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:woven_word/data/bible_data.dart';
 import 'package:woven_word/data/conference_data.dart';
+import 'package:woven_word/data/tradition.dart';
 import 'package:woven_word/screens/shell_screen.dart';
 
 import 'fake_canon.dart';
 
 /// Board run 8 plumbing: the conference layer toggle on
-/// [ShellController] — persisted under `ww_conference_layer`,
-/// off by default, and the dataset loads lazily (first enable,
-/// or startup only when the persisted choice is already on).
-/// A failing load degrades to an unloaded layer, never a throw.
+/// [ShellController] — off by default, and the dataset loads
+/// lazily (first enable, or startup only when the persisted
+/// choice is already on). A failing load degrades to an unloaded
+/// layer, never a throw. Board run 9 re-map: the toggle IS the
+/// tradition selection now — setConferenceEnabled delegates to
+/// setTradition, persistence lives under `ww_tradition`
+/// ('lds'/'none'), and a pre-run-9 `ww_conference_layer: true`
+/// still wakes the layer up (the migration, asserted below).
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -93,13 +98,13 @@ void main() {
 
       await ctl.setConferenceEnabled(true);
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getBool(ShellController.conferenceLayerKey), isTrue);
+      expect(prefs.getString(traditionPrefsKey), 'lds');
       expect(ctl.conferenceEnabled, isTrue);
       expect(ctl.conferenceData?.talkCount, 8);
       expect(loads, 1);
 
       await ctl.setConferenceEnabled(false);
-      expect(prefs.getBool(ShellController.conferenceLayerKey), isFalse);
+      expect(prefs.getString(traditionPrefsKey), 'none');
       expect(ctl.conferenceEnabled, isFalse);
       // Disabling never unloads data already in memory.
       expect(ctl.conferenceData, isNotNull);

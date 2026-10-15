@@ -92,29 +92,26 @@ void main() {
     expect(find.text('New Testament'), findsOneWidget);
     expect(find.text('General Conference'), findsNothing);
 
-    // Enable from Profiles (§2 in situ).
+    // Enable from Profiles (§2 in situ). Board run 9 re-map:
+    // the conference toggle is the Latter-day Saint tradition
+    // row now — same flow, same assertions, new surface.
     await tapTab(tester, 'Home');
     await tester.tap(find.byTooltip('Profiles'));
     await navSettle(tester);
-    await tester.scrollUntilVisible(
-      find.text('Show conference talks'),
-      100,
-    );
+    await tester.scrollUntilVisible(find.text('Latter-day Saint'), 100);
     await tester.pump();
     var node = tester.getSemantics(
-      find.bySemanticsLabel('Show conference talks'),
+      find.bySemanticsLabel('Latter-day Saint'),
     );
-    expect(node.flagsCollection.isToggled, ui.Tristate.isFalse);
-    await tester.tap(find.text('Show conference talks'));
+    expect(node.flagsCollection.isSelected, ui.Tristate.isFalse);
+    await tester.tap(find.text('Latter-day Saint'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump();
-    node = tester.getSemantics(
-      find.bySemanticsLabel('Show conference talks'),
-    );
-    expect(node.flagsCollection.isToggled, ui.Tristate.isTrue);
+    node = tester.getSemantics(find.bySemanticsLabel('Latter-day Saint'));
+    expect(node.flagsCollection.isSelected, ui.Tristate.isTrue);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool(ShellController.conferenceLayerKey), isTrue);
+    expect(prefs.getString('ww_tradition'), 'lds');
 
     // Back to Home root, then Library: the tile is there, counted.
     await tester.tap(find.byTooltip('Back'));

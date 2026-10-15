@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:woven_word/data/bible_data.dart';
+import 'package:woven_word/data/confession_data.dart';
+import 'package:woven_word/data/conference_data.dart';
+import 'package:woven_word/data/deuterocanon.dart';
 import 'package:woven_word/data/scripture_text.dart';
+import 'package:woven_word/data/sefaria_data.dart';
 import 'package:woven_word/screens/shell_screen.dart';
 import 'package:woven_word/theme/ww_theme.dart';
 
@@ -17,6 +21,10 @@ Future<void> pumpShell(
   double? textScale,
   bool disableAnimations = false,
   bool resetPrefs = true,
+  Future<ConferenceData> Function(BibleData canon)? conferenceLoader,
+  Future<SefariaData> Function(BibleData canon)? sefariaLoader,
+  Future<ConfessionData> Function(BibleData canon)? confessionLoader,
+  Future<DeuterocanonData> Function()? deuteroLoader,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -37,6 +45,10 @@ Future<void> pumpShell(
       home: WwShell(
         dataLoader: () async => data,
         textsLoader: () async => texts,
+        conferenceLoader: conferenceLoader,
+        sefariaLoader: sefariaLoader,
+        confessionLoader: confessionLoader,
+        deuteroLoader: deuteroLoader,
       ),
     ),
   );

@@ -427,7 +427,12 @@ void main() {
       await tester.pump();
       // Success feedback after persistence.
       expect(find.text('Data replaced from backup.'), findsOneWidget);
-      // The screen reloaded from the replaced model.
+      // The screen reloaded from the replaced model. (Board run
+      // 9: the tradition section makes the screen taller, so the
+      // list is still scrolled at Backup — scroll back to the
+      // profiles before asserting on them.)
+      await tester.scrollUntilVisible(find.text('Imported'), -100);
+      await tester.pump();
       expect(find.text('Imported'), findsOneWidget);
       expect(find.text('Mine'), findsNothing);
       // The persisted document equals the validated file model.

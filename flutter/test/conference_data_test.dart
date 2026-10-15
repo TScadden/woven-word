@@ -341,4 +341,66 @@ void main() {
       expect(empty.refsForTalk(0), isEmpty);
     });
   });
+
+  group('citationCountsFromSource (quotable spec §3.2 / §5 test 8)', () {
+    test('distinct talks per verse; out-of-range edges dropped; '
+        'verse upper bound not clamped', () {
+      final counts = ConferenceData.citationCountsFromSource(
+        '{"v":1,"talks":[],"edges":['
+        '[0,0,1],[0,0,1],[1,0,1],[1,0,2],'
+        '[2,10,1],[2,-1,1],[2,0,0],'
+        '[3,0,99],[3,9,5]'
+        ']}',
+        chapterCount: 10,
+      );
+      // (0,1): talks 0 and 1 — talk 0's duplicate row counts
+      // once. Chapter 10 (== chapterCount) and chapter -1 drop;
+      // verse 0 drops. Verse 99 is KEPT (counts for verses that
+      // do not exist are inert; the builder only asks about real
+      // verses).
+      expect(counts, {(0, 1): 2, (0, 2): 1, (0, 99): 1, (9, 5): 1});
+    });
+
+    test('no edges counts nothing', () {
+      expect(
+        ConferenceData.citationCountsFromSource(
+          '{"v":1,"talks":[],"edges":[]}',
+          chapterCount: 1189,
+        ),
+        isEmpty,
+      );
+    });
+
+    test('the shipped dataset: counts agree with the parsed index', () {
+      final source = readBundledJson('assets/conference.json.gz');
+      final realCanon = BibleData.fromJsonString(
+        readBundledJson('assets/data.json.gz'),
+      );
+      final counts = ConferenceData.citationCountsFromSource(
+        source,
+        chapterCount: realCanon.chapters.length,
+      );
+      final shipped = ConferenceData.fromCanon(source, realCanon);
+      // Every counted verse carries exactly the talks the full
+      // parse indexes for it, and the totals agree.
+      var total = 0;
+      for (final e in counts.entries) {
+        expect(
+          shipped.talksForVerse(e.key.$1, e.key.$2).length,
+          e.value,
+          reason: 'verse ${e.key}',
+        );
+        total += e.value;
+      }
+      expect(total, shipped.edgeCount);
+      // The spec's headline: Matthew 22:39 is the most-cited
+      // verse in the Bible by this measure (259 distinct talks).
+      final matthew22 = realCanon.books
+              .firstWhere((b) => b.name == 'Matthew')
+              .start +
+          21;
+      expect(counts[(matthew22, 39)], 259);
+      expect(counts[(matthew22, 37)], 238);
+    });
+  });
 }

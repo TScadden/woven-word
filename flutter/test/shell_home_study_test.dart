@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:woven_word/data/conference_data.dart';
 import 'package:woven_word/data/deuterocanon.dart';
 import 'package:woven_word/data/plans.dart';
+import 'package:woven_word/data/scripture_text.dart';
 import 'package:woven_word/data/sefaria_data.dart';
 import 'package:woven_word/data/tradition.dart';
 import 'package:woven_word/data/user_data.dart';
@@ -16,6 +19,7 @@ import 'package:woven_word/screens/plan_detail_screen.dart';
 import 'package:woven_word/screens/profiles_screen.dart';
 import 'package:woven_word/screens/reader_screen.dart';
 
+import 'bundled_fixture.dart';
 import 'fake_canon.dart';
 import 'shell_pump.dart';
 
@@ -75,12 +79,19 @@ void main() {
   testWidgets('routing: tools, plan card, and the verse of the day', (
     tester,
   ) async {
+    // The quotable pool's signal (quotable spec §3.2): the real
+    // bundled citation counts, computed from the asset directly.
+    final counts = ConferenceData.citationCountsFromSource(
+      readBundledJson('assets/conference.json.gz'),
+      chapterCount: data.chapters.length,
+    );
     await pumpShell(
       tester,
       data: data,
       texts: texts,
       deuteroLoader: () async => deutero,
       sefariaLoader: fakeSefaria,
+      citationCountsLoader: (_) async => counts,
     );
     await settle(tester);
 
@@ -125,7 +136,16 @@ void main() {
     await back(tester);
 
     // Verse of the Day card -> Screens tab, reader open at the pick.
-    final pick = verseOfDayForDate(data, WwTradition.none, DateTime.now())!;
+    // The pick comes from the quotable pool built exactly as the
+    // shell builds it: real citation counts + the fake texts'
+    // KJV verses feeding the §2.3 predicates.
+    final pick = verseOfDayForDate(
+      data,
+      WwTradition.none,
+      DateTime.now(),
+      citationCount: (ch, v) => counts[(ch, v)] ?? 0,
+      kjvText: (ch, v) => texts.verseText(WwTranslation.kjv, data, ch, v),
+    )!;
     await scrollHomeTo(tester, find.byKey(const ValueKey('votd-card')));
     await tester.tap(find.byKey(const ValueKey('votd-card')));
     await tester.pump();
@@ -271,6 +291,48 @@ void main() {
     expect(find.byKey(const ValueKey('plan-cover-gospels')), findsOneWidget);
     expect(find.text('Day 1 of 30 · 1%'), findsOneWidget);
   });
+
+  testWidgets(
+    'votd gating: no section until counts resolve; failure falls back',
+    (tester) async {
+      final counts = ConferenceData.citationCountsFromSource(
+        readBundledJson('assets/conference.json.gz'),
+        chapterCount: data.chapters.length,
+      );
+      final pending = Completer<Map<(int, int), int>>();
+      await pumpShell(
+        tester,
+        data: data,
+        texts: texts,
+        deuteroLoader: () async => deutero,
+        sefariaLoader: fakeSefaria,
+        citationCountsLoader: (_) => pending.future,
+      );
+      await settle(tester);
+      // Texts are loaded but the counts have not resolved: Home
+      // renders without the Verse of the Day section (quotable
+      // spec §3.3 — no "loading" card, no partial-input pick).
+      expect(find.byKey(const ValueKey('votd-card')), findsNothing);
+      pending.complete(counts);
+      await settle(tester);
+      await scrollHomeTo(tester, find.byKey(const ValueKey('votd-card')));
+      expect(find.byKey(const ValueKey('votd-card')), findsOneWidget);
+
+      // A failed counts load resolves to the §2.5 fallback pool:
+      // the card renders, never an error surface.
+      await pumpShell(
+        tester,
+        data: data,
+        texts: texts,
+        deuteroLoader: () async => deutero,
+        sefariaLoader: fakeSefaria,
+        citationCountsLoader: (_) async => throw StateError('no asset'),
+      );
+      await settle(tester);
+      await scrollHomeTo(tester, find.byKey(const ValueKey('votd-card')));
+      expect(find.byKey(const ValueKey('votd-card')), findsOneWidget);
+    },
+  );
 
   testWidgets('highlights count honesty: active set only, no dormant spans', (
     tester,

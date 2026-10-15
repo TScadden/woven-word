@@ -8,14 +8,17 @@ founder correction added mid-round (screenshot:
 Silas's retrieval and root-cause work was verified in the code
 independently; agreement and one sharpening are noted per defect.
 
-Verification of the final tree: `flutter analyze` — no issues.
-Full `flutter test` — **192 tests, all passed** (includes the new
-geometry and routing suites). `flutter build web --release` —
+Verification of the final tree (after Fix Item 4, added
+mid-round): `flutter analyze` — no issues. Full `flutter test`
+— **202 tests, all passed** (192 through Item 3, plus Item 4's
+10-test system-back suite). `flutter build web --release` —
 green. **CI: "Build Flutter app" run 38655650765 — completed,
-success**, on head 508b037. Commits: Defect 1 `69e0d07`,
-Defect 2 `bd3e458`, Fix Item 3 `9e0fd7d`, records `508b037`
-(this sentence's own amendment is a docs-only follow-up that the
-workflow's path filter does not rebuild).
+success** for the Items 1–3 tree (head 508b037); the Item 4 CI
+run id is reported to Silas with this report and recorded in
+the follow-up records commit. Commits: Defect 1 `69e0d07`,
+Defect 2 `bd3e458`, Fix Item 3 `9e0fd7d`, records `508b037` /
+`564ca11`, Fix Item 4 in its own commit after this section was
+written.
 
 ---
 
@@ -238,6 +241,98 @@ suites pass unchanged in behavior.
 
 ---
 
+## Fix Item 4 — System back drives the ladder, never exits early
+
+Founder request (via Rusty, Oct 14, 2026), verbatim: "Can you
+make sure when a user swipes back it will just go to the last
+screen instead of leaving the app." The required behavior is
+the run-7 §7.1 ladder: (1) toolbar/sheet/note editor dismisses,
+(2) reader jump history steps back, (3) the active tab's stack
+pops one level, (4) a non-Home tab root switches to Home,
+(5) only the Home root exits.
+
+**Audit method:** before touching code, I probed the REAL event
+path on the pre-fix tree with throwaway widget tests driving
+`tester.binding.handlePopRoute()` — the same entry the platform
+back event takes — from eight representative states (reader
+with history, toolbar open, connections sheet open, note editor
+open, reader with no history, a pushed Library screen, a modal
+dialog open, tab roots). Per-rung verdicts:
+
+- **Rung 1 (reader states) — already correct, now proven.** With
+  the toolbar open, system back dismissed the toolbar only
+  (history untouched); with the sheet open, it closed the sheet
+  only; with the note editor open, it returned to the toolbar
+  action view unsaved. The suspect hole — a child navigator's
+  dispatcher popping the reader route around the shell's
+  PopScope — does **not** occur on this SDK: the shell's
+  `PopScope(canPop: false)` is consulted and
+  `ShellController.handleBack()` runs its ladder.
+- **Rung 2 — already correct, now proven.** Reader at John 3
+  with Genesis 1 in history: system back landed on Genesis 1,
+  reader open.
+- **Rung 3 — already correct, now proven.** Library book grid
+  popped to the Library root; the reader with no history popped
+  its route to the Screens list; the conference talk view (new
+  test, fixture dataset in the real shell) popped one level at
+  a time down talks list → conferences list → Library root.
+- **Rungs 4 and 5 — already correct, now proven** (and were
+  already covered by shell_test BACK-4/BACK-5 through the same
+  system route): non-Home roots switch to Home with no exit
+  requested; at the Home root the shell requests the platform
+  exit via SystemNavigator.pop — the guard releases by asking
+  the OS, never by popping a route out from under the user.
+- **Rung 1 (modal dialog) — FIXED. The audit's one escape.**
+  With the Profiles "New profile" name dialog open, system
+  back DID dismiss the dialog (the correct rung) — but the
+  dismissal threw **`TextEditingController used after being
+  disposed`**, cascading into overlay assertions and tearing
+  down the screen state in debug/profile builds. Root cause:
+  `_nameDialog` created its controller outside the dialog and
+  disposed it from the dialog future's `whenComplete`, which
+  fires while the route's exit transition still builds the
+  field. The bug was dismissal-path independent — the Cancel
+  button threw identically (both probed). **Fix:** the dialog
+  is now a StatefulWidget (`_ProfileNameDialog`) that owns its
+  controller and disposes it in `State.dispose`, which runs
+  only when the route's subtree unmounts, after the transition
+  finishes. All copy, styling, and behavior (trim-disabled
+  confirm, submit-on-enter) are byte-identical.
+  The **My Notes note-editor sheet** carried the identical
+  anti-pattern (`_editNote`'s controller +
+  `whenComplete(controller.dispose)`) and was fixed by the same
+  construction (`_NoteEditorSheet` owns its controller; Save
+  semantics unchanged). Its dismissal could not be probe-run in
+  this harness — MyNotesScreen's list load never completes
+  under the widget-test binding (probed standalone: it stays at
+  "Loading your notes…"; no existing suite loads its list
+  either) — so the sheet fix is verified by construction and by
+  the dialog's proven pattern, and that limitation is stated
+  here rather than papered over. Note the reader's own toolbar
+  note editor was never at risk: its controller is owned by the
+  reader State.
+
+**Tests** (`flutter/test/system_back_test.dart`, 10 tests, all
+through `handlePopRoute` — no in-app Back buttons, no direct
+`handlePriorityBack()` calls): rung 1 toolbar (including the
+ordering proof: the *next* back is the one that consumes
+history), sheet, note editor; rung 1 dialog by system back AND
+by Cancel (both assert `takeException()` is null and the user
+is still on Profiles — the system-back case is
+mutation-verified: it fails on the pre-fix profiles screen);
+rung 2 history; rung 3 Library grid, reader route pop, and the
+three-level conference browse pop; rungs 4+5 with a mocked
+platform channel asserting the exit is requested only at the
+Home root. Suite total: **202 tests, all passing**;
+`flutter analyze` clean; web release build green.
+
+**No ladder code changed.** `ShellController.handleBack`,
+`handlePriorityBack`, the PopScope wiring, and every navigator
+are exactly as shipped in run 7/8 — Item 4's entire code change
+is the two controller-ownership refactors above, which is what
+the audit evidence supports: prove what works, fix only what
+escapes.
+
 ## Deviations — stated from `git diff` (lesson 29)
 
 Read off the final diff, not from memory:
@@ -246,10 +341,16 @@ Read off the final diff, not from memory:
    (Defect 1 only), `flutter/lib/widgets/arc_stage.dart`
    (Defect 2 only), `flutter/lib/data/conference_data.dart`,
    `flutter/lib/screens/conference_screens.dart`,
-   `flutter/lib/screens/profiles_screen.dart` (one copy string),
+   `flutter/lib/screens/profiles_screen.dart` (Item 3: one copy
+   string; Item 4: the name dialog extracted to the
+   controller-owning `_ProfileNameDialog`),
+   `flutter/lib/screens/my_notes_screen.dart` (Item 4: the note
+   editor sheet extracted to the controller-owning
+   `_NoteEditorSheet`),
    `flutter/assets/conference.json` (rebuilt, one line),
-   `flutter/test/` (new geometry suite; conference suites +
-   fixture updated), `flutter/tool/` (new evidence generator),
+   `flutter/test/` (new geometry suite; new system-back suite;
+   conference suites + fixture updated), `flutter/tool/` (new
+   evidence generator),
    `tools/conference/` (harvester, builder, README),
    `team/specs/` (spec amendment, this report, evidence folder),
    `team/memory/` (decision record, lessons 30–32).

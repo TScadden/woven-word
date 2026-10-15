@@ -300,3 +300,18 @@ rounds Rusty ran before the studio was founded).
     fields come from the source's own published link structure
     (the Index's getTalk ids and its frontend's resolution of
     them), documented at the point of harvest.
+
+33. **Probe the real event path before rewriting the handler —
+    and never dispose a controller from a route future.** The
+    Item 4 audit drove system back through `handlePopRoute()`
+    from eight states before touching code: the run-7 ladder was
+    already correct at every rung except one modal, whose dialog
+    threw "TextEditingController used after being disposed" on
+    EVERY dismissal (back, barrier, Cancel — all probed). The
+    future returned by showDialog/showModalBottomSheet completes
+    while the route's exit transition still builds the field, so
+    `whenComplete(controller.dispose)` is always a lifetime bug;
+    a dialog/sheet owns its controller in its State and disposes
+    it in `dispose()`, when the subtree unmounts. Rewriting the
+    ladder on suspicion would have churned correct code and
+    missed the actual escape.

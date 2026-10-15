@@ -572,3 +572,29 @@ rounds Rusty ran before the studio was founded).
     chat-safe files come from their release split builds, and
     Woven Word already ships that form; no ABI savings remain
     to harvest here.
+55. **A zip listing has two size columns; quote the compressed
+    one — and a baseline that passes retires the flake defence
+    (data diet package, Oct 15, 2026).** (a) The package was
+    briefed off a table of UNCOMPRESSED asset sizes (24 MB of
+    texts, 8.5 MB of cross-references), but the APK zip already
+    deflates plain JSON to roughly gzip size: the eight datasets
+    sat in the shipped file at 8,643,781 bytes, so pre-gzipping
+    at level 9 saved only the level-9 delta (~101–176 KB at the
+    APK level) against the source tree's 24,093,479. Any size
+    table drawn from `unzip -l` is the Length column lying by
+    omission; measure `-lv`'s compressed column or the staged
+    file itself (lesson 54's rule, enforced one level deeper).
+    (b) The package's local suite failed 3 conference_shell
+    tests in 3/3 full runs; the coordinator's same-environment
+    pristine-HEAD baseline ran 438/438 GREEN, which retired the
+    lesson-41 pre-existing-flake defence and forced the real
+    read: the CI log's stack named a latent lifetime bug —
+    ShellController async loaders notifying after dispose —
+    that the package's added load latency had pushed across
+    the teardown line (CI 38819000110 failed identically;
+    the fix is a `_disposed` guard after every await in the
+    controller's load continuations, after which the identical
+    tree runs 446/446 twice). A red delta against a green
+    baseline is a regression until the mechanism is named;
+    "the file is flaky" is a claim that needs its own baseline
+    evidence, every time.

@@ -88,6 +88,7 @@ class ShellController extends ChangeNotifier
     dataFuture = (dataLoader ?? BibleData.load)();
     dataFuture
         .then((d) {
+          if (_disposed) return;
           data = d;
           _loadPrefs();
         })
@@ -98,10 +99,12 @@ class ShellController extends ChangeNotifier
     _textsFuture = (textsLoader ?? ScriptureText.load)();
     _textsFuture!
         .then((t) {
+          if (_disposed) return;
           _texts = t;
           notifyListeners();
         })
         .catchError((_) {
+          if (_disposed) return;
           _textsFailed = true;
           notifyListeners();
         });
@@ -116,6 +119,18 @@ class ShellController extends ChangeNotifier
   final Future<DeuterocanonData> Function()? deuteroLoader;
   late final Future<BibleData> dataFuture;
   BibleData? data;
+
+  /// Set first thing in [dispose]: the async lazy loaders and
+  /// load continuations check it after every await and bail out
+  /// silently, so a load that completes after teardown never
+  /// writes state or notifies on a disposed controller.
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 
   // ------------------------------------------------- conference layer
 
@@ -142,6 +157,7 @@ class ShellController extends ChangeNotifier
   /// share one in-flight load; a call after a failure retries.
   /// Never throws.
   Future<void> ensureConferenceLoaded() async {
+    if (_disposed) return;
     if (conferenceData != null) return;
     final inFlight = _conferenceLoad;
     if (inFlight != null) return inFlight;
@@ -149,13 +165,17 @@ class ShellController extends ChangeNotifier
     if (d == null) return;
     final load = () async {
       try {
-        conferenceData = await (conferenceLoader ?? ConferenceData.load)(d);
+        final loaded = await (conferenceLoader ?? ConferenceData.load)(d);
+        if (_disposed) return;
+        conferenceData = loaded;
       } catch (e) {
+        if (_disposed) return;
         debugPrint('Woven Word: conference layer failed to load: $e');
         conferenceData = null;
       } finally {
         _conferenceLoad = null;
       }
+      if (_disposed) return;
       notifyListeners();
     }();
     _conferenceLoad = load;
@@ -222,8 +242,10 @@ class ShellController extends ChangeNotifier
     }
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (_disposed) return;
       await prefs.setString(traditionPrefsKey, next.storedValue);
     } catch (_) {}
+    if (_disposed) return;
     await _kickTraditionLoads();
   }
 
@@ -269,6 +291,7 @@ class ShellController extends ChangeNotifier
   /// calls share one in-flight load, a call after a failure
   /// retries. Never throws (the conference loader's pattern).
   Future<void> ensureSefariaLoaded() async {
+    if (_disposed) return;
     if (sefariaData != null) return;
     final inFlight = _sefariaLoad;
     if (inFlight != null) return inFlight;
@@ -276,13 +299,17 @@ class ShellController extends ChangeNotifier
     if (d == null) return;
     final load = () async {
       try {
-        sefariaData = await (sefariaLoader ?? SefariaData.load)(d);
+        final loaded = await (sefariaLoader ?? SefariaData.load)(d);
+        if (_disposed) return;
+        sefariaData = loaded;
       } catch (e) {
+        if (_disposed) return;
         debugPrint('Woven Word: Sefaria layer failed to load: $e');
         sefariaData = null;
       } finally {
         _sefariaLoad = null;
       }
+      if (_disposed) return;
       notifyListeners();
     }();
     _sefariaLoad = load;
@@ -291,6 +318,7 @@ class ShellController extends ChangeNotifier
 
   /// Loads the confessions dataset on first use (same pattern).
   Future<void> ensureConfessionLoaded() async {
+    if (_disposed) return;
     if (confessionData != null) return;
     final inFlight = _confessionLoad;
     if (inFlight != null) return inFlight;
@@ -298,13 +326,17 @@ class ShellController extends ChangeNotifier
     if (d == null) return;
     final load = () async {
       try {
-        confessionData = await (confessionLoader ?? ConfessionData.load)(d);
+        final loaded = await (confessionLoader ?? ConfessionData.load)(d);
+        if (_disposed) return;
+        confessionData = loaded;
       } catch (e) {
+        if (_disposed) return;
         debugPrint('Woven Word: confessions layer failed to load: $e');
         confessionData = null;
       } finally {
         _confessionLoad = null;
       }
+      if (_disposed) return;
       notifyListeners();
     }();
     _confessionLoad = load;
@@ -316,18 +348,23 @@ class ShellController extends ChangeNotifier
   /// notes count and My Notes count deuterocanon notes wherever
   /// they were written.
   Future<void> ensureDeuteroLoaded() async {
+    if (_disposed) return;
     if (deuterocanonData != null) return;
     final inFlight = _deuteroLoad;
     if (inFlight != null) return inFlight;
     final load = () async {
       try {
-        deuterocanonData = await (deuteroLoader ?? DeuterocanonData.load)();
+        final loaded = await (deuteroLoader ?? DeuterocanonData.load)();
+        if (_disposed) return;
+        deuterocanonData = loaded;
       } catch (e) {
+        if (_disposed) return;
         debugPrint('Woven Word: deuterocanon failed to load: $e');
         deuterocanonData = null;
       } finally {
         _deuteroLoad = null;
       }
+      if (_disposed) return;
       notifyListeners();
     }();
     _deuteroLoad = load;
@@ -379,7 +416,10 @@ class ShellController extends ChangeNotifier
   Future<void> _loadPlans() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _plansStore = await PlansStore.load(prefs);
+      if (_disposed) return;
+      final loaded = await PlansStore.load(prefs);
+      if (_disposed) return;
+      _plansStore = loaded;
       notifyListeners();
     } catch (_) {}
   }
@@ -408,8 +448,10 @@ class ShellController extends ChangeNotifier
     if (d == null) return;
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (_disposed) return;
       // §10: the retired scope key is removed on first launch.
       await prefs.remove('ww_home_scope');
+      if (_disposed) return;
       final savedTab = prefs.getString('ww_shell_tab');
       if (savedTab == 'home' ||
           savedTab == 'library' ||
@@ -421,6 +463,7 @@ class ShellController extends ChangeNotifier
       // never restored from. Reading places restore from the
       // screens document below, as shipped.
       await prefs.remove('ww_home_selected');
+      if (_disposed) return;
       final (parsed, active) = parseWwScreens(
         prefs.getString('ww_screens_v1'),
         d,
@@ -458,6 +501,7 @@ class ShellController extends ChangeNotifier
       // they were written).
       ensureDeuteroLoaded();
     } catch (_) {
+      if (_disposed) return;
       if (screens.isEmpty) {
         final ch = selection ?? 0;
         screens = [
@@ -466,16 +510,20 @@ class ShellController extends ChangeNotifier
         activeScreenIndex = 0;
       }
     }
+    if (_disposed) return;
     notifyListeners();
   }
 
   Future<void> _loadUserData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (_disposed) return;
       final store = await UserDataStore.load(prefs);
+      if (_disposed) return;
       userData = store.data;
       notifyListeners();
     } catch (_) {}
+    if (_disposed) return;
     // The Home plan cards key off the active profile; the plans
     // snapshot follows the user data (§7.2).
     await _loadPlans();
@@ -632,6 +680,7 @@ class ShellController extends ChangeNotifier
           ),
         )
         .then((_) {
+          if (_disposed) return;
           readerOpen = false;
           notifyListeners();
         });
@@ -1075,6 +1124,7 @@ class ShellController extends ChangeNotifier
         ),
       ),
     );
+    if (_disposed) return;
     _loadUserData();
   }
 
@@ -1112,6 +1162,7 @@ class ShellController extends ChangeNotifier
         ),
       ),
     );
+    if (_disposed) return;
     _loadUserData();
   }
 
@@ -1133,6 +1184,7 @@ class ShellController extends ChangeNotifier
         ),
       ),
     );
+    if (_disposed) return;
     _loadUserData();
   }
 
@@ -1156,6 +1208,7 @@ class ShellController extends ChangeNotifier
         ),
       ),
     );
+    if (_disposed) return;
     _loadPlans();
   }
 

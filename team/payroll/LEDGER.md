@@ -30,3 +30,4 @@ Its craft lessons (#5, #6) remain in team memory, scoped.
 | Date | Feature | Crew | Amount | Status |
 |---|---|---|---|---|
 | 2026-10-15 | Text-selection highlighting: exact-span highlights, per-translation highlights + notes, canon dormancy (board run 10) | Studio crew | $1,000 | Accrued — pays on founder verification |
+| 2026-10-15 | Reader theme choice: Paper / Dark, Dark default (reader theme package) | Studio crew | $1,000 | Accrued — pays on founder verification |

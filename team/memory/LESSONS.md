@@ -427,3 +427,42 @@ rounds Rusty ran before the studio was founded).
     over the cap. Rule: bound by construction, then measure the
     raster's drift against the bound and guard for the drift
     you measured.
+
+43. **A new always-visible control is a layout-budget change
+    (reader theme package, Oct 15, 2026).** Adding one 48dp
+    button to the reader top bar overflowed it by 8.5px at the
+    largest translation count at scale 1.0 and by 12px with two
+    options at scale 2.0 — invisible at the default configuration
+    the builder tests first. Measure the bar across the full
+    control-count × text-scale matrix BEFORE and AFTER adding a
+    control (a probe test that prints sizes, run once), and pay
+    for the new control out of the bar's own budget: the fix
+    tightened the segmented toggle's segment padding 12→6dp
+    and let the toggle take its existing chip form at measured
+    thresholds (3 options from scale 1.3, any options from 1.6).
+    Rule: every control carries a price in the 360dp budget
+    (lesson 37 prices counts; this prices the bar itself);
+    never let a title or label silently absorb it below its
+    legible width (the 3-option toggle measured 204.5dp under
+    test metrics, leaving the chapter title 20dp).
+
+44. **Host-provided vs stored values resolve at build time,
+    from separate fields (reader theme package, Oct 15, 2026).**
+    The deuterocanon reader held its theme in one field that
+    both the shell (via widget parameter) and its own async
+    stored-preference load wrote: the stored Dark landed after
+    the shell's Paper and the reader rendered Dark despite the
+    explicit choice — the run 9 Catholic-navigation bug's shape
+    in a new field. Precedence host > stored > default must be
+    a GETTER over separate fields (`_local ?? widget.x ??
+    _stored ?? default`), never an assignment race. Any widget
+    that both receives a value and can load one has this bug
+    until the fields are split.
+
+45. **Re-parameterizing a widget breaks its const call sites
+    (reader theme package, Oct 15, 2026).** Adding a required
+    palette parameter to the note editors invalidated `const`
+    constructor calls three files away; the analyzer names
+    them, but the cheap pre-check is a grep for `const <Widget>`
+    before the first compile. Rule: when a shared widget gains
+    a parameter, grep its const call sites in the same edit.

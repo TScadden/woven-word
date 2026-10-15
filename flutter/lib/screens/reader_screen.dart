@@ -8,6 +8,7 @@ import '../data/bible_data.dart';
 import '../data/confession_data.dart';
 import '../data/conference_data.dart';
 import '../data/screen_state.dart';
+import '../data/reader_theme.dart';
 import '../data/scripture_text.dart';
 import '../data/sefaria_data.dart';
 import '../data/tradition.dart';
@@ -75,6 +76,16 @@ abstract class TraditionHost {
   /// Opens a tradition link outside the app (a work on Sefaria,
   /// a confession at its host).
   void openExternalLink(String url);
+}
+
+/// Reader theme services a host may carry (reader theme package).
+/// Generalized the way [TraditionHost] was: the shell implements
+/// it and owns the persisted choice; a host that does not leaves
+/// the reader resolving the theme from the preference itself,
+/// defaulting to Dark.
+abstract class ReaderThemeHost {
+  WwReaderTheme get readerTheme;
+  void setReaderTheme(WwReaderTheme theme);
 }
 
 /// The reader: one screen's view of one book, PAGED (board run 7
@@ -263,6 +274,12 @@ class ReaderScreenState extends State<ReaderScreen>
         _translation = WwTranslation.fromStored(
           prefs.getString(ReaderScreen.translationKey),
         );
+        // The reader theme, for a host that does not carry it
+        // (reader theme package): the stored choice, Dark when
+        // nothing is stored.
+        _ownTheme = WwReaderTheme.fromStored(
+          prefs.getString(readerThemePrefsKey),
+        );
       } catch (_) {}
       try {
         final prefs = await SharedPreferences.getInstance();
@@ -306,6 +323,43 @@ class ReaderScreenState extends State<ReaderScreen>
   TraditionHost? get _traditionHost {
     final host = widget.host;
     return host is TraditionHost ? host as TraditionHost : null;
+  }
+
+  /// The reader theme this reader renders under (reader theme
+  /// package): the host's live choice when it carries one (the
+  /// shell owns the persisted setting), else the reader's own
+  /// stored read. Dark whenever nothing has ever been stored.
+  WwReaderTheme _ownTheme = WwReaderTheme.dark;
+
+  WwReaderTheme get _readerTheme {
+    final host = widget.host;
+    return host is ReaderThemeHost
+        ? (host as ReaderThemeHost).readerTheme
+        : _ownTheme;
+  }
+
+  /// The palette every surface in this reader renders from.
+  ReaderPalette get _palette => _readerTheme == WwReaderTheme.dark
+      ? ReaderPalette.dark
+      : ReaderPalette.paper;
+
+  /// The top bar's quick switch: the same write Profiles makes —
+  /// through the host when it carries the setting (it persists and
+  /// notifies, and this reader re-renders from its getter), else
+  /// the reader's own state + preference write, the seam the
+  /// translation choice already uses.
+  Future<void> _setReaderTheme(WwReaderTheme next) async {
+    if (next == _readerTheme) return;
+    final host = widget.host;
+    if (host is ReaderThemeHost) {
+      (host as ReaderThemeHost).setReaderTheme(next);
+      return;
+    }
+    setState(() => _ownTheme = next);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(readerThemePrefsKey, next.storedValue);
+    } catch (_) {}
   }
 
   /// The translations the toggle offers on the current book:
@@ -378,13 +432,7 @@ class ReaderScreenState extends State<ReaderScreen>
   String? _noteFor(int ch, int v) =>
       _userData.note(_profileId, _tKey, _verseKeyFor(ch, v));
 
-  Color _tintFor(HlColor color) => switch (color) {
-    HlColor.gold => WwColors.hlGold,
-    HlColor.green => WwColors.hlGreen,
-    HlColor.blue => WwColors.hlBlue,
-    HlColor.pink => WwColors.hlPink,
-    HlColor.purple => WwColors.hlPurple,
-  };
+  Color _tintFor(HlColor color) => _palette.tintAt(color.index);
 
   Future<void> _persistUserData() async {
     final store = _userStore;
@@ -919,7 +967,7 @@ class ReaderScreenState extends State<ReaderScreen>
         tradition == WwTradition.protestant;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: WwColors.paper,
+      backgroundColor: _palette.bg,
       isScrollControlled: true,
       sheetAnimationStyle: wwSheetAnimationStyle(context),
       shape: const RoundedRectangleBorder(
@@ -947,11 +995,14 @@ class ReaderScreenState extends State<ReaderScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(data.refName(tc, tv), style: WwType.refLabel),
+                        Text(
+                          data.refName(tc, tv),
+                          style: _palette.refLabelStyle,
+                        ),
                         const SizedBox(height: 2),
                         Text(
                           texts.verseText(translation, data, tc, tv),
-                          style: WwType.snippet,
+                          style: _palette.snippetStyle,
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                           textDirection: translation.isRtl
@@ -988,11 +1039,7 @@ class ReaderScreenState extends State<ReaderScreen>
                     );
                   }
                 },
-                icon: const Icon(
-                  Icons.open_in_new,
-                  size: 18,
-                  color: WwColors.goldTextOnPaper,
-                ),
+                icon: Icon(Icons.open_in_new, size: 18, color: _palette.accent),
                 constraints: const BoxConstraints(
                   minWidth: WwSpace.minTarget,
                   minHeight: WwSpace.minTarget,
@@ -1032,14 +1079,14 @@ class ReaderScreenState extends State<ReaderScreen>
                     children: [
                       Text(
                         talk.title,
-                        style: WwType.bodyOnPaper.copyWith(
+                        style: _palette.smallBodyStyle.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         '${talk.speaker} · ${talk.conferenceLabel}',
-                        style: WwType.captionOnPaper,
+                        style: _palette.captionStyle,
                       ),
                     ],
                   ),
@@ -1078,14 +1125,14 @@ class ReaderScreenState extends State<ReaderScreen>
                     children: [
                       Text(
                         title,
-                        style: WwType.bodyOnPaper.copyWith(
+                        style: _palette.smallBodyStyle.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         count == 1 ? '1 link' : '$count links',
-                        style: WwType.captionOnPaper,
+                        style: _palette.captionStyle,
                       ),
                     ],
                   ),
@@ -1125,14 +1172,14 @@ class ReaderScreenState extends State<ReaderScreen>
                     children: [
                       Text(
                         doc?.title ?? '',
-                        style: WwType.bodyOnPaper.copyWith(
+                        style: _palette.smallBodyStyle.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         '${section.label} · proof text',
-                        style: WwType.captionOnPaper,
+                        style: _palette.captionStyle,
                       ),
                     ],
                   ),
@@ -1143,11 +1190,11 @@ class ReaderScreenState extends State<ReaderScreen>
         }
 
         final header = <Widget>[
-          Text(data.refName(ch, v), style: WwType.sheetRefTitle),
+          Text(data.refName(ch, v), style: _palette.sheetTitleStyle),
           const SizedBox(height: 8),
           Text(
             texts.verseText(translation, data, ch, v),
-            style: WwType.readerSheetVerse,
+            style: _palette.sheetVerseStyle,
             textDirection: translation.isRtl ? TextDirection.rtl : null,
           ),
           const SizedBox(height: 12),
@@ -1166,12 +1213,12 @@ class ReaderScreenState extends State<ReaderScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ...header,
-                  const Text('Connections', style: WwType.refLabel),
+                  Text('Connections', style: _palette.refLabelStyle),
                   const SizedBox(height: 8),
                   if (conns.isEmpty)
-                    const Text(
+                    Text(
                       'No cross references are recorded for this verse.',
-                      style: WwType.captionOnPaper,
+                      style: _palette.captionStyle,
                     )
                   else
                     Flexible(
@@ -1179,7 +1226,7 @@ class ReaderScreenState extends State<ReaderScreen>
                         shrinkWrap: true,
                         itemCount: conns.length,
                         separatorBuilder: (_, _) =>
-                            const Divider(height: 1, color: WwColors.line),
+                            Divider(height: 1, color: _palette.hairline),
                         itemBuilder: (_, i) =>
                             connectionRow(conns[i][0], conns[i][1]),
                       ),
@@ -1194,45 +1241,45 @@ class ReaderScreenState extends State<ReaderScreen>
         // header, holding Connections then Conference talks —
         // never two independently scrolling lists in one sheet.
         final scrollChildren = <Widget>[
-          const Text('Connections', style: WwType.refLabel),
+          Text('Connections', style: _palette.refLabelStyle),
           const SizedBox(height: 8),
           if (conns.isEmpty)
-            const Text(
+            Text(
               'No cross references are recorded for this verse.',
-              style: WwType.captionOnPaper,
+              style: _palette.captionStyle,
             )
           else
             for (var i = 0; i < conns.length; i++) ...[
-              if (i > 0) const Divider(height: 1, color: WwColors.line),
+              if (i > 0) Divider(height: 1, color: _palette.hairline),
               connectionRow(conns[i][0], conns[i][1]),
             ],
           if (confOn) ...[
             const SizedBox(height: 16),
-            const Text('Conference talks', style: WwType.refLabel),
+            Text('Conference talks', style: _palette.refLabelStyle),
             const SizedBox(height: 8),
             if (talks.isEmpty)
-              const Text(
+              Text(
                 'No conference talks are recorded for this verse.',
-                style: WwType.captionOnPaper,
+                style: _palette.captionStyle,
               )
             else
               for (var i = 0; i < talks.length; i++) ...[
-                if (i > 0) const Divider(height: 1, color: WwColors.line),
+                if (i > 0) Divider(height: 1, color: _palette.hairline),
                 talkRow(talks[i]),
               ],
           ],
           if (tradition == WwTradition.jewish) ...[
             const SizedBox(height: 16),
-            const Text('On Sefaria', style: WwType.refLabel),
+            Text('On Sefaria', style: _palette.refLabelStyle),
             const SizedBox(height: 8),
             if (sefariaWorks.isEmpty)
-              const Text(
+              Text(
                 'No Sefaria links are recorded for this verse.',
-                style: WwType.captionOnPaper,
+                style: _palette.captionStyle,
               )
             else ...[
               for (var i = 0; i < sefariaWorks.length; i++) ...[
-                if (i > 0) const Divider(height: 1, color: WwColors.line),
+                if (i > 0) Divider(height: 1, color: _palette.hairline),
                 sefariaRow(sefariaWorks[i]),
               ],
               // A capped verse (the pipeline keeps the 25
@@ -1241,7 +1288,7 @@ class ReaderScreenState extends State<ReaderScreen>
               // lives — never a silent truncation.
               if ((tradHost?.sefariaData?.verseWorkTotal(ch, v) ?? 0) >
                   sefariaWorks.length) ...[
-                const Divider(height: 1, color: WwColors.line),
+                Divider(height: 1, color: _palette.hairline),
                 Semantics(
                   container: true,
                   button: true,
@@ -1262,7 +1309,7 @@ class ReaderScreenState extends State<ReaderScreen>
                         child: Text(
                           'See all ${tradHost?.sefariaData?.verseWorkTotal(ch, v)} '
                           'links on Sefaria',
-                          style: WwType.bodyOnPaper.copyWith(
+                          style: _palette.smallBodyStyle.copyWith(
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -1275,16 +1322,16 @@ class ReaderScreenState extends State<ReaderScreen>
           ],
           if (tradition == WwTradition.protestant) ...[
             const SizedBox(height: 16),
-            const Text('Confession proofs', style: WwType.refLabel),
+            Text('Confession proofs', style: _palette.refLabelStyle),
             const SizedBox(height: 8),
             if (confessionSections.isEmpty)
-              const Text(
+              Text(
                 'No confession proofs are recorded for this verse.',
-                style: WwType.captionOnPaper,
+                style: _palette.captionStyle,
               )
             else
               for (var i = 0; i < confessionSections.length; i++) ...[
-                if (i > 0) const Divider(height: 1, color: WwColors.line),
+                if (i > 0) Divider(height: 1, color: _palette.hairline),
                 confessionRow(confessionSections[i]),
               ],
           ],
@@ -1320,7 +1367,7 @@ class ReaderScreenState extends State<ReaderScreen>
     final data = widget.data;
     if (_error != null) {
       return Scaffold(
-        backgroundColor: WwColors.paper,
+        backgroundColor: _palette.bg,
         body: SafeArea(
           child: Column(
             children: [
@@ -1330,9 +1377,9 @@ class ReaderScreenState extends State<ReaderScreen>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
+                      Text(
                         'The text could not be loaded.',
-                        style: WwType.bodyOnPaper,
+                        style: _palette.smallBodyStyle,
                       ),
                       const SizedBox(height: 16),
                       TextButton(
@@ -1340,9 +1387,9 @@ class ReaderScreenState extends State<ReaderScreen>
                         style: TextButton.styleFrom(
                           minimumSize: const Size(64, WwSpace.minTarget),
                         ),
-                        child: const Text(
+                        child: Text(
                           'Try again',
-                          style: WwType.paperButtonLabelGold,
+                          style: _palette.buttonLabelAccentStyle,
                         ),
                       ),
                     ],
@@ -1357,16 +1404,16 @@ class ReaderScreenState extends State<ReaderScreen>
     final texts = _texts;
     if (texts == null) {
       return Scaffold(
-        backgroundColor: WwColors.paper,
+        backgroundColor: _palette.bg,
         body: SafeArea(
           child: Column(
             children: [
               _topBar(data, showToggle: false),
-              const Expanded(
+              Expanded(
                 child: Center(
                   child: Text(
                     'Loading the text…',
-                    style: WwType.captionOnPaper,
+                    style: _palette.captionStyle,
                   ),
                 ),
               ),
@@ -1376,7 +1423,7 @@ class ReaderScreenState extends State<ReaderScreen>
       );
     }
     return Scaffold(
-      backgroundColor: WwColors.paper,
+      backgroundColor: _palette.bg,
       body: SafeArea(
         child: Column(
           children: [
@@ -1390,14 +1437,18 @@ class ReaderScreenState extends State<ReaderScreen>
                     behavior: HitTestBehavior.translucent,
                     onTap: _dismissToolbar,
                     child: TextSelectionTheme(
-                      // Spec §3.4 (board run 10): the selection
-                      // chrome on paper — overlay hlGold at 0.50
-                      // (worst ink ratio 12.48), handles and
-                      // cursor goldTextOnPaper (4.62:1 on paper).
+                      // Spec §3.4 (board run 10) as themed (reader
+                      // theme package): the selection chrome comes
+                      // from the palette — paper keeps its shipped
+                      // values (overlay hlGold at 0.50, handles and
+                      // cursor goldTextOnPaper, worst ink ratio
+                      // 12.48); dark uses gold at 0.20 with
+                      // goldBright handles (gate: worst navInk
+                      // ratio 4.94, handles 3.08).
                       data: TextSelectionThemeData(
-                        selectionColor: WwColors.hlGold.withValues(alpha: 0.50),
-                        selectionHandleColor: WwColors.goldTextOnPaper,
-                        cursorColor: WwColors.goldTextOnPaper,
+                        selectionColor: _palette.selectionOverlay,
+                        selectionHandleColor: _palette.accent,
+                        cursorColor: _palette.accent,
                       ),
                       child: _pager(data, texts),
                     ),
@@ -1420,16 +1471,16 @@ class ReaderScreenState extends State<ReaderScreen>
       key: const ValueKey('readerTopBar'),
       height: 49,
       padding: const EdgeInsets.symmetric(horizontal: WwSpace.screenMargin),
-      decoration: const BoxDecoration(
-        color: WwColors.paper,
-        border: Border(bottom: BorderSide(color: WwColors.line)),
+      decoration: BoxDecoration(
+        color: _palette.chrome,
+        border: Border(bottom: BorderSide(color: _palette.hairline)),
       ),
       child: Row(
         children: [
           IconButton(
             tooltip: 'Back',
             onPressed: _handleBack,
-            icon: const Icon(Icons.arrow_back, color: WwColors.ink),
+            icon: Icon(Icons.arrow_back, color: _palette.ink),
             constraints: const BoxConstraints(
               minWidth: WwSpace.minTarget,
               minHeight: WwSpace.minTarget,
@@ -1438,7 +1489,7 @@ class ReaderScreenState extends State<ReaderScreen>
           const SizedBox(width: 8),
           Expanded(
             child: PopupMenuButton<String>(
-              color: WwColors.paper,
+              color: _palette.cardBg,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(WwRadius.chip),
               ),
@@ -1453,15 +1504,15 @@ class ReaderScreenState extends State<ReaderScreen>
                 }
               },
               itemBuilder: (_) => [
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'library',
                   height: 48,
-                  child: Text('Library', style: WwType.bodyOnPaper),
+                  child: Text('Library', style: _palette.smallBodyStyle),
                 ),
                 PopupMenuItem(
                   value: 'testament',
                   height: 48,
-                  child: Text(testament, style: WwType.bodyOnPaper),
+                  child: Text(testament, style: _palette.smallBodyStyle),
                 ),
                 PopupMenuItem(
                   value: 'book',
@@ -1469,26 +1520,25 @@ class ReaderScreenState extends State<ReaderScreen>
                   enabled: false,
                   child: Row(
                     children: [
-                      const Icon(
-                        Icons.check,
-                        size: 20,
-                        color: WwColors.mutedOnPaper,
-                      ),
+                      Icon(Icons.check, size: 20, color: _palette.muted),
                       const SizedBox(width: 8),
                       Text(
                         bookName,
-                        style: WwType.bodyOnPaper.copyWith(
-                          color: WwColors.mutedOnPaper,
+                        style: _palette.smallBodyStyle.copyWith(
+                          color: _palette.muted,
                         ),
                       ),
                     ],
                   ),
                 ),
                 const PopupMenuDivider(),
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'jump',
                   height: 48,
-                  child: Text('Jump to reference…', style: WwType.bodyOnPaper),
+                  child: Text(
+                    'Jump to reference…',
+                    style: _palette.smallBodyStyle,
+                  ),
                 ),
               ],
               child: ConstrainedBox(
@@ -1498,22 +1548,48 @@ class ReaderScreenState extends State<ReaderScreen>
                     Flexible(
                       child: Text(
                         data.chapterName(_currentChapter),
-                        style: WwType.readerTitle,
+                        style: _palette.titleStyle,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const Icon(
+                    Icon(
                       Icons.keyboard_arrow_down,
                       size: 20,
-                      color: WwColors.mutedOnPaper,
+                      color: _palette.muted,
                     ),
                   ],
                 ),
               ),
             ),
           ),
+          _themeSwitch(),
           if (showToggle) ...[const SizedBox(width: 8), _translationToggle()],
         ],
+      ),
+    );
+  }
+
+  /// The reader theme quick switch (reader theme package): one
+  /// 48dp target in the top bar, present in every reader state.
+  /// The icon names the theme a tap switches TO; the tooltip
+  /// states the current theme and the action. The write goes
+  /// through the same path as the Profiles setting (§1 of the
+  /// package spec) — there is one stored choice, two switches.
+  Widget _themeSwitch() {
+    final theme = _readerTheme;
+    final next = theme.other;
+    return IconButton(
+      tooltip: 'Reader theme: ${theme.label}. Switch to ${next.label} theme',
+      onPressed: () => _setReaderTheme(next),
+      icon: Icon(
+        next == WwReaderTheme.dark
+            ? Icons.dark_mode_outlined
+            : Icons.light_mode_outlined,
+        color: _palette.accent,
+      ),
+      constraints: const BoxConstraints(
+        minWidth: WwSpace.minTarget,
+        minHeight: WwSpace.minTarget,
       ),
     );
   }
@@ -1527,14 +1603,22 @@ class ReaderScreenState extends State<ReaderScreen>
     // translation, opening the app's menu pattern with the full
     // labels. Three or fewer options keep the shipped segmented
     // construction, with compact labels (WwTranslation.toggleLabel).
-    if (available.length > 3) {
+    // Reader theme package: beside the theme switch, the
+    // segmented form outgrows the bar's 360dp budget at large
+    // text scales (lesson 37; measured: three options overflow
+    // from scale 1.3, two from 1.6), so it takes the same chip
+    // form there — same control, same menu, full labels.
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    if (available.length > 3 ||
+        (available.length == 3 && textScale >= 1.3) ||
+        (available.length > 1 && textScale >= 1.6)) {
       return Container(
         decoration: BoxDecoration(
-          border: Border.all(color: WwColors.line),
+          border: Border.all(color: _palette.line),
           borderRadius: BorderRadius.circular(WwRadius.chip),
         ),
         child: PopupMenuButton<WwTranslation>(
-          color: WwColors.paper,
+          color: _palette.cardBg,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(WwRadius.chip),
           ),
@@ -1548,15 +1632,11 @@ class ReaderScreenState extends State<ReaderScreen>
                 child: Row(
                   children: [
                     if (t == _effT)
-                      const Icon(
-                        Icons.check,
-                        size: 20,
-                        color: WwColors.goldTextOnPaper,
-                      )
+                      Icon(Icons.check, size: 20, color: _palette.accent)
                     else
                       const SizedBox(width: 20),
                     const SizedBox(width: 8),
-                    Text(t.label, style: WwType.bodyOnPaper),
+                    Text(t.label, style: _palette.smallBodyStyle),
                   ],
                 ),
               ),
@@ -1570,11 +1650,11 @@ class ReaderScreenState extends State<ReaderScreen>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(_effT.toggleLabel, style: WwType.goldButtonLabel),
-                const Icon(
+                Text(_effT.toggleLabel, style: _palette.chipLabelStyle),
+                Icon(
                   Icons.keyboard_arrow_down,
                   size: 20,
-                  color: WwColors.mutedOnPaper,
+                  color: _palette.muted,
                 ),
               ],
             ),
@@ -1584,7 +1664,7 @@ class ReaderScreenState extends State<ReaderScreen>
     }
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: WwColors.line),
+        border: Border.all(color: _palette.line),
         borderRadius: BorderRadius.circular(WwRadius.chip),
       ),
       child: Row(
@@ -1592,7 +1672,7 @@ class ReaderScreenState extends State<ReaderScreen>
         children: [
           for (final t in available)
             Material(
-              color: t == _effT ? WwColors.goldBright : Colors.transparent,
+              color: t == _effT ? _palette.goldFill : Colors.transparent,
               borderRadius: BorderRadius.circular(WwRadius.chip),
               child: InkWell(
                 borderRadius: BorderRadius.circular(WwRadius.chip),
@@ -1603,12 +1683,12 @@ class ReaderScreenState extends State<ReaderScreen>
                     minHeight: WwSpace.minTarget,
                   ),
                   alignment: Alignment.center,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
                   child: Text(
                     t.toggleLabel,
                     style: t == _effT
                         ? WwType.goldButtonLabel
-                        : WwType.translationUnselected,
+                        : _palette.toggleUnselectedStyle,
                   ),
                 ),
               ),
@@ -1670,7 +1750,7 @@ class ReaderScreenState extends State<ReaderScreen>
     final isLast = ch == data.books[book].start + data.books[book].chapters - 1;
     final c = data.chapters[ch];
     return Container(
-      color: WwColors.paper,
+      color: _palette.bg,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1680,15 +1760,15 @@ class ReaderScreenState extends State<ReaderScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(data.chapterName(ch), style: WwType.readerTitle),
+                Text(data.chapterName(ch), style: _palette.titleStyle),
                 const SizedBox(height: 4),
                 Text(
                   '${c.v} verses · ${data.chapterConnCount[ch]} connections',
-                  style: WwType.captionOnPaper,
+                  style: _palette.captionStyle,
                 ),
                 if (_webcFallbackNote(book) != null) ...[
                   const SizedBox(height: 4),
-                  Text(_webcFallbackNote(book)!, style: WwType.captionOnPaper),
+                  Text(_webcFallbackNote(book)!, style: _palette.captionStyle),
                 ],
               ],
             ),
@@ -1699,7 +1779,7 @@ class ReaderScreenState extends State<ReaderScreen>
             icon: Icon(
               Icons.chevron_left,
               size: 20,
-              color: isFirst ? WwColors.mutedOnPaper : WwColors.ink,
+              color: isFirst ? _palette.muted : _palette.ink,
             ),
             constraints: const BoxConstraints(
               minWidth: WwSpace.minTarget,
@@ -1712,7 +1792,7 @@ class ReaderScreenState extends State<ReaderScreen>
             icon: Icon(
               Icons.chevron_right,
               size: 20,
-              color: isLast ? WwColors.mutedOnPaper : WwColors.ink,
+              color: isLast ? _palette.muted : _palette.ink,
             ),
             constraints: const BoxConstraints(
               minWidth: WwSpace.minTarget,
@@ -1757,7 +1837,7 @@ class ReaderScreenState extends State<ReaderScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('End of ${book.name}', style: WwType.sheetRefTitle),
+          Text('End of ${book.name}', style: _palette.sheetTitleStyle),
           if (hasNext) ...[
             const SizedBox(height: 12),
             ElevatedButton(
@@ -1766,7 +1846,7 @@ class ReaderScreenState extends State<ReaderScreen>
                 widget.host.openChapter(next.start);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: WwColors.goldBright,
+                backgroundColor: _palette.goldFill,
                 foregroundColor: WwColors.onGold,
                 minimumSize: const Size.fromHeight(WwSpace.minTarget),
                 shape: RoundedRectangleBorder(
@@ -1780,10 +1860,7 @@ class ReaderScreenState extends State<ReaderScreen>
             ),
           ] else ...[
             const SizedBox(height: 4),
-            const Text(
-              'The last book of the Bible.',
-              style: WwType.captionOnPaper,
-            ),
+            Text('The last book of the Bible.', style: _palette.captionStyle),
           ],
         ],
       ),
@@ -1814,10 +1891,7 @@ class ReaderScreenState extends State<ReaderScreen>
     final fullTint = fullColor == null ? null : _tintFor(fullColor);
     final hasNote = _noteFor(ch, v) != null;
     final background = selected
-        ? Color.alphaBlend(
-            WwColors.hlGold.withValues(alpha: 0.45),
-            fullTint ?? WwColors.paper,
-          )
+        ? _palette.selectedBackground(fullTint)
         : (fullTint ?? Colors.transparent);
     final restingPlain = !selected && spans.isEmpty;
     return Padding(
@@ -1836,7 +1910,7 @@ class ReaderScreenState extends State<ReaderScreen>
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(WwRadius.row),
               border: selected
-                  ? Border.all(color: WwColors.goldTextOnPaper, width: 2)
+                  ? Border.all(color: _palette.accent, width: 2)
                   : null,
             ),
             child: Row(
@@ -1850,8 +1924,8 @@ class ReaderScreenState extends State<ReaderScreen>
                         '$v',
                         textAlign: TextAlign.center,
                         style: restingPlain
-                            ? WwType.verseNumber
-                            : WwType.verseNumberInk,
+                            ? _palette.verseNumberStyle
+                            : _palette.verseNumberOnTintStyle,
                       ),
                       if (hasConns) ...[
                         const SizedBox(height: 4),
@@ -1860,19 +1934,15 @@ class ReaderScreenState extends State<ReaderScreen>
                           height: 6,
                           decoration: BoxDecoration(
                             color: restingPlain
-                                ? WwColors.gold
-                                : WwColors.goldTextOnPaper,
+                                ? _palette.dotResting
+                                : _palette.accent,
                             shape: BoxShape.circle,
                           ),
                         ),
                       ],
                       if (hasNote) ...[
                         const SizedBox(height: 4),
-                        const Icon(
-                          Icons.notes,
-                          size: 16,
-                          color: WwColors.goldTextOnPaper,
-                        ),
+                        Icon(Icons.notes, size: 16, color: _palette.accent),
                       ],
                     ],
                   ),
@@ -1894,7 +1964,7 @@ class ReaderScreenState extends State<ReaderScreen>
                             ),
                           ),
                           key: ValueKey('vtext-$ch-$v-$_selGen'),
-                          style: WwType.readerBody,
+                          style: _palette.bodyStyle,
                           textDirection: _effT.isRtl ? TextDirection.rtl : null,
                           contextMenuBuilder: (menuContext, state) =>
                               _selectionMenu(menuContext, state, ch, v, text),
@@ -1907,7 +1977,7 @@ class ReaderScreenState extends State<ReaderScreen>
                               suppressBg: fullColor != null,
                             ),
                           ),
-                          style: WwType.readerBody,
+                          style: _palette.bodyStyle,
                           textDirection: _effT.isRtl ? TextDirection.rtl : null,
                         ),
                 ),
@@ -2002,12 +2072,12 @@ class ReaderScreenState extends State<ReaderScreen>
           left: left,
           top: top,
           child: Material(
-            color: WwColors.paper,
+            color: _palette.cardBg,
             borderRadius: BorderRadius.circular(WwRadius.sheet),
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                border: Border.all(color: WwColors.line),
+                border: Border.all(color: _palette.line),
                 borderRadius: BorderRadius.circular(WwRadius.sheet),
               ),
               child: Row(
@@ -2077,7 +2147,7 @@ class ReaderScreenState extends State<ReaderScreen>
               child: Icon(
                 icon,
                 size: 20,
-                color: enabled ? WwColors.ink : WwColors.mutedOnPaper,
+                color: enabled ? _palette.ink : _palette.muted,
               ),
             ),
           ),
@@ -2156,9 +2226,9 @@ class ReaderScreenState extends State<ReaderScreen>
       width: width,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: WwColors.paper,
+        color: _palette.cardBg,
         borderRadius: BorderRadius.circular(WwRadius.sheet),
-        border: Border.all(color: WwColors.mutedOnPaper),
+        border: Border.all(color: _palette.cardBorder),
       ),
       child: _toolbarEditing
           ? _noteEditorView(data, ch, v)
@@ -2184,12 +2254,12 @@ class ReaderScreenState extends State<ReaderScreen>
         Row(
           children: [
             Expanded(
-              child: Text(data.refName(ch, v), style: WwType.sheetRefTitle),
+              child: Text(data.refName(ch, v), style: _palette.sheetTitleStyle),
             ),
             IconButton(
               tooltip: 'Close',
               onPressed: _dismissToolbar,
-              icon: const Icon(Icons.close, size: 20, color: WwColors.ink),
+              icon: Icon(Icons.close, size: 20, color: _palette.ink),
               constraints: const BoxConstraints(
                 minWidth: WwSpace.minTarget,
                 minHeight: WwSpace.minTarget,
@@ -2200,7 +2270,7 @@ class ReaderScreenState extends State<ReaderScreen>
         if (currentNote != null) ...[
           Text(
             currentNote,
-            style: WwType.snippet,
+            style: _palette.snippetStyle,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -2241,14 +2311,14 @@ class ReaderScreenState extends State<ReaderScreen>
                 },
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(0, WwSpace.minTarget),
-                  side: const BorderSide(color: WwColors.mutedOnPaper),
+                  side: BorderSide(color: _palette.cardBorder),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(WwRadius.chip),
                   ),
                 ),
                 child: Text(
                   currentNote != null ? 'Edit note' : 'Add note',
-                  style: WwType.paperButtonLabel,
+                  style: _palette.buttonLabelStyle,
                 ),
               ),
             ),
@@ -2258,14 +2328,14 @@ class ReaderScreenState extends State<ReaderScreen>
                 onPressed: () => _openConnections(ch, v),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(0, WwSpace.minTarget),
-                  side: const BorderSide(color: WwColors.mutedOnPaper),
+                  side: BorderSide(color: _palette.cardBorder),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(WwRadius.chip),
                   ),
                 ),
                 child: Text(
                   'Connections · $connCount',
-                  style: WwType.paperButtonLabel,
+                  style: _palette.buttonLabelStyle,
                 ),
               ),
             ),
@@ -2281,41 +2351,38 @@ class ReaderScreenState extends State<ReaderScreen>
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(data.refName(ch, v), style: WwType.sheetRefTitle),
+        Text(data.refName(ch, v), style: _palette.sheetTitleStyle),
         const SizedBox(height: 8),
-        const Text('Note', style: WwType.refLabel),
+        Text('Note', style: _palette.refLabelStyle),
         const SizedBox(height: 8),
         TextField(
           controller: _noteCtl,
-          style: WwType.bodyOnPaper,
+          style: _palette.smallBodyStyle,
           minLines: 3,
           maxLines: 8,
           decoration: InputDecoration(
             filled: true,
-            fillColor: WwColors.paper,
+            fillColor: _palette.fieldFill,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 12,
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(WwRadius.input),
-              borderSide: const BorderSide(color: WwColors.line),
+              borderSide: BorderSide(color: _palette.line),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(WwRadius.input),
-              borderSide: const BorderSide(color: WwColors.line),
+              borderSide: BorderSide(color: _palette.line),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(WwRadius.input),
-              borderSide: const BorderSide(color: WwColors.goldTextOnPaper),
+              borderSide: BorderSide(color: _palette.accent),
             ),
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
-          'Saving an empty note removes it.',
-          style: WwType.captionOnPaper,
-        ),
+        Text('Saving an empty note removes it.', style: _palette.captionStyle),
         const SizedBox(height: 16),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
@@ -2325,7 +2392,7 @@ class ReaderScreenState extends State<ReaderScreen>
               style: TextButton.styleFrom(
                 minimumSize: const Size(64, WwSpace.minTarget),
               ),
-              child: const Text('Cancel', style: WwType.paperButtonLabel),
+              child: Text('Cancel', style: _palette.buttonLabelStyle),
             ),
             const SizedBox(width: 8),
             TextButton(
@@ -2334,7 +2401,7 @@ class ReaderScreenState extends State<ReaderScreen>
                 setState(() => _toolbarEditing = false);
               },
               style: TextButton.styleFrom(
-                backgroundColor: WwColors.goldBright,
+                backgroundColor: _palette.goldFill,
                 minimumSize: const Size(64, WwSpace.minTarget),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(WwRadius.chip),
@@ -2381,12 +2448,12 @@ class ReaderScreenState extends State<ReaderScreen>
                   color: _tintFor(color),
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: active ? WwColors.goldTextOnPaper : WwColors.line,
+                    color: active ? _palette.accent : _palette.line,
                     width: active ? 2 : 1,
                   ),
                 ),
                 child: active
-                    ? const Icon(Icons.check, size: 20, color: WwColors.ink)
+                    ? Icon(Icons.check, size: 20, color: _palette.ink)
                     : null,
               ),
             ),
@@ -2415,17 +2482,17 @@ class ReaderScreenState extends State<ReaderScreen>
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: WwColors.paper,
+                  color: _palette.cardBg,
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: active ? WwColors.goldTextOnPaper : WwColors.line,
+                    color: active ? _palette.accent : _palette.line,
                     width: active ? 2 : 1,
                   ),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.do_not_disturb_alt,
                   size: 20,
-                  color: WwColors.ink,
+                  color: _palette.ink,
                 ),
               ),
             ),

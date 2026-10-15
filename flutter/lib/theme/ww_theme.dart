@@ -51,6 +51,17 @@ class WwColors {
   static const hlPink = Color(0xFFF6CFDD);
   static const hlPurple = Color(0xFFDDD0F2);
 
+  // Dark-reader highlight palette (reader theme package): the
+  // deep, saturated counterparts of the paper pastels, computed to
+  // carry navInk body text on the black surface family — gold
+  // 5.84:1, green 6.51:1, blue 7.54:1, pink 7.74:1, purple 8.27:1
+  // (gate: team/specs/reader-theme-gate.md).
+  static const hlGoldDark = Color(0xFF6E560F);
+  static const hlGreenDark = Color(0xFF3E5A24);
+  static const hlBlueDark = Color(0xFF2F4A6E);
+  static const hlPinkDark = Color(0xFF6E3548);
+  static const hlPurpleDark = Color(0xFF4E3A66);
+
   static const danger = Color(0xFFFFB9C0);
   static const dangerFill = Color(0xFF4A1F24);
 }
@@ -423,6 +434,216 @@ AnimationStyle? wwSheetAnimationStyle(BuildContext context) =>
         reverseDuration: Duration.zero,
       )
     : null;
+
+/// One reader palette (reader theme package, founder ruling
+/// Oct 15, 2026): every color and text-style role a reader surface
+/// uses, resolved for one theme. Reader surfaces — both readers,
+/// the verse toolbar, the selection bar and mode, the connections
+/// sheet, the note editors — read roles from the palette and never
+/// from a raw paper token, so a surface cannot stay paper-styled
+/// inside a dark reader or vice versa.
+///
+/// The paper palette is the shipped design, value for value: its
+/// roles are the shipped tokens and its selected-verse wash is the
+/// shipped construction, so the paper reader renders identically.
+/// The dark palette is a real token set on the app's black surface
+/// family, computed from tokens before building (gate:
+/// team/specs/reader-theme-gate.md): body ink is navInk, small
+/// gold text is goldBright, and each highlight tint has a deep
+/// counterpart above that carries navInk text (5.84–8.27:1), so
+/// body text uses the ink role on the page AND on every tint in
+/// both themes — no per-segment color switch exists.
+class ReaderPalette {
+  const ReaderPalette({
+    required this.isDark,
+    required this.bg,
+    required this.chrome,
+    required this.cardBg,
+    required this.ink,
+    required this.muted,
+    required this.hairline,
+    required this.line,
+    required this.cardBorder,
+    required this.accent,
+    required this.goldFill,
+    required this.onGoldFill,
+    required this.fieldFill,
+    required this.disabledText,
+    required this.selectionOverlay,
+    required this.dotResting,
+    required this.toggleUnselected,
+    required this.chipLabel,
+    required this.wash,
+    required this.washAlpha,
+    required this.washOverTint,
+    required this.tints,
+  });
+
+  final bool isDark;
+
+  /// Page background; also the connections sheet's background.
+  final Color bg;
+
+  /// Top chrome: the reader top bar, the deutero action bar.
+  final Color chrome;
+
+  /// Floating cards on the page: verse toolbar, selection bar,
+  /// note editors (all three), popup menus.
+  final Color cardBg;
+
+  /// Body text on bg/chrome/cardBg — and on every tint.
+  final Color ink;
+
+  /// Secondary text (captions, hints, quiet labels).
+  final Color muted;
+
+  /// Hairlines: chrome edges, sheet dividers.
+  final Color hairline;
+
+  /// Idle borders: cards, fields, toggles, swatches.
+  final Color line;
+
+  /// The verse toolbar card's border (stronger than [line] on
+  /// paper, where the shipped card carries a muted border).
+  final Color cardBorder;
+
+  /// Small gold text and meaningful gold icons: reference labels,
+  /// the resting verse number, selection handles and cursor, the
+  /// selected verse's 2dp outline, note icons.
+  final Color accent;
+
+  /// Gold fills: the selected translation toggle, primary buttons.
+  final Color goldFill;
+
+  /// Label color on [goldFill].
+  final Color onGoldFill;
+
+  /// Note-editor field fill (one step off the editor's card).
+  final Color fieldFill;
+
+  /// Disabled action labels.
+  final Color disabledText;
+
+  /// Selection-mode overlay (run 10 §3.4's role, per theme).
+  final Color selectionOverlay;
+
+  /// The connection dot on a resting, untinted verse.
+  final Color dotResting;
+
+  /// The unselected translation toggle label's color.
+  final Color toggleUnselected;
+
+  /// The translation chip's label color (on [chrome]).
+  final Color chipLabel;
+
+  /// The selected verse's wash color and strength, and whether
+  /// the wash applies over a tinted verse. Paper washes over tints
+  /// (the shipped construction); dark does not — a tinted verse's
+  /// fill is unchanged by selection and the outline carries it,
+  /// the same end state paper reaches on a same-color tint.
+  final Color wash;
+  final double washAlpha;
+  final bool washOverTint;
+
+  /// Highlight tints, aligned with the highlight color order
+  /// (gold, green, blue, pink, purple).
+  final List<Color> tints;
+
+  Color tintAt(int index) => tints[index];
+
+  /// The selected verse's background: the wash over the verse's
+  /// tint (or the page), per [washOverTint].
+  Color selectedBackground(Color? tint) {
+    if (tint != null && !washOverTint) return tint;
+    return Color.alphaBlend(wash.withValues(alpha: washAlpha), tint ?? bg);
+  }
+
+  // Text roles (WwType bases, palette colors).
+  TextStyle get titleStyle => WwType.readerTitle.copyWith(color: ink);
+  TextStyle get bodyStyle => WwType.readerBody.copyWith(color: ink);
+  TextStyle get sheetVerseStyle => WwType.readerSheetVerse.copyWith(color: ink);
+  TextStyle get sheetTitleStyle => WwType.sheetRefTitle.copyWith(color: ink);
+  TextStyle get refLabelStyle => WwType.refLabel.copyWith(color: accent);
+  TextStyle get snippetStyle => WwType.snippet.copyWith(color: ink);
+  TextStyle get captionStyle => WwType.captionOnPaper.copyWith(color: muted);
+  TextStyle get smallBodyStyle => WwType.bodyOnPaper.copyWith(color: ink);
+  TextStyle get buttonLabelStyle =>
+      WwType.paperButtonLabel.copyWith(color: ink);
+  TextStyle get buttonLabelAccentStyle =>
+      WwType.paperButtonLabelGold.copyWith(color: accent);
+  TextStyle get buttonLabelDisabledStyle =>
+      WwType.paperButtonLabelDisabled.copyWith(color: disabledText);
+  TextStyle get toggleUnselectedStyle =>
+      WwType.translationUnselected.copyWith(color: toggleUnselected);
+  TextStyle get chipLabelStyle =>
+      WwType.goldButtonLabel.copyWith(color: chipLabel);
+  TextStyle get verseNumberStyle => WwType.verseNumber.copyWith(color: accent);
+  TextStyle get verseNumberOnTintStyle =>
+      WwType.verseNumberInk.copyWith(color: ink);
+  TextStyle get cancelStyle => isDark ? WwType.buttonLabel : buttonLabelStyle;
+
+  static final ReaderPalette paper = ReaderPalette(
+    isDark: false,
+    bg: WwColors.paper,
+    chrome: WwColors.paper,
+    cardBg: WwColors.paper,
+    ink: WwColors.ink,
+    muted: WwColors.mutedOnPaper,
+    hairline: WwColors.line,
+    line: WwColors.line,
+    cardBorder: WwColors.mutedOnPaper,
+    accent: WwColors.goldTextOnPaper,
+    goldFill: WwColors.goldBright,
+    onGoldFill: WwColors.onGold,
+    fieldFill: WwColors.paper,
+    disabledText: WwColors.mutedOnPaper,
+    selectionOverlay: WwColors.hlGold.withValues(alpha: 0.50),
+    dotResting: WwColors.gold,
+    toggleUnselected: WwColors.goldTextOnPaper,
+    chipLabel: WwColors.onGold,
+    wash: WwColors.hlGold,
+    washAlpha: 0.45,
+    washOverTint: true,
+    tints: [
+      WwColors.hlGold,
+      WwColors.hlGreen,
+      WwColors.hlBlue,
+      WwColors.hlPink,
+      WwColors.hlPurple,
+    ],
+  );
+
+  static final ReaderPalette dark = ReaderPalette(
+    isDark: true,
+    bg: WwColors.surface,
+    chrome: WwColors.nav,
+    cardBg: WwColors.surfaceHigh,
+    ink: WwColors.navInk,
+    muted: WwColors.mutedOnDark,
+    hairline: WwColors.borderDarkSoft,
+    line: WwColors.borderDark,
+    cardBorder: WwColors.borderDark,
+    accent: WwColors.goldBright,
+    goldFill: WwColors.goldBright,
+    onGoldFill: WwColors.onGold,
+    fieldFill: WwColors.surface,
+    disabledText: WwColors.mutedOnDark,
+    selectionOverlay: WwColors.gold.withValues(alpha: 0.20),
+    dotResting: WwColors.goldBright,
+    toggleUnselected: WwColors.mutedOnDark,
+    chipLabel: WwColors.goldBright,
+    wash: WwColors.gold,
+    washAlpha: 0.25,
+    washOverTint: false,
+    tints: [
+      WwColors.hlGoldDark,
+      WwColors.hlGreenDark,
+      WwColors.hlBlueDark,
+      WwColors.hlPinkDark,
+      WwColors.hlPurpleDark,
+    ],
+  );
+}
 
 ThemeData wwTheme() {
   return ThemeData(

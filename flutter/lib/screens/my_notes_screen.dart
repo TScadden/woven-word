@@ -5,6 +5,7 @@ import '../data/bible_data.dart';
 import '../data/deuterocanon.dart';
 import '../data/scripture_text.dart';
 import '../data/tradition.dart';
+import '../data/reader_theme.dart';
 import '../data/user_data.dart';
 import '../theme/ww_theme.dart';
 import 'reader_screen.dart';
@@ -95,6 +96,16 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
   ScriptureText? _texts;
   DeuterocanonData? _deutero;
   WwTranslation _translation = WwTranslation.kjv;
+
+  /// The reader theme (reader theme package): the note editor is
+  /// a reader surface and follows it. Read with the translation,
+  /// refreshed on every reload; Dark when nothing is stored.
+  WwReaderTheme _readerTheme = WwReaderTheme.dark;
+
+  ReaderPalette get _palette => _readerTheme == WwReaderTheme.dark
+      ? ReaderPalette.dark
+      : ReaderPalette.paper;
+
   bool _loaded = false;
 
   @override
@@ -118,6 +129,9 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
       final prefs = await SharedPreferences.getInstance();
       _translation = WwTranslation.fromStored(
         prefs.getString(ReaderScreen.translationKey),
+      );
+      _readerTheme = WwReaderTheme.fromStored(
+        prefs.getString(readerThemePrefsKey),
       );
     } catch (_) {
       // The default translation stands.
@@ -148,6 +162,9 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
         _store = store;
         _userData = store.data;
         _profileId = store.data.activeProfileId;
+        _readerTheme = WwReaderTheme.fromStored(
+          prefs.getString(readerThemePrefsKey),
+        );
       });
     } catch (_) {
       // Keep the session copy.
@@ -174,13 +191,14 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
     _reloadUserData();
   }
 
-  /// The note editor: the same paper sheet as the reader's (board
-  /// run 4), carrying the same local border law — line idle,
-  /// goldTextOnPaper focused, never the theme's goldBright border.
+  /// The note editor: the same sheet as the reader's (board
+  /// run 4), rendered from the reader palette (reader theme
+  /// package) — on paper it is the shipped paper sheet, value for
+  /// value; in the dark theme it follows the reader.
   void _editNote(String key, String refLabel) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: WwColors.paper,
+      backgroundColor: _palette.cardBg,
       isScrollControlled: true,
       sheetAnimationStyle: wwSheetAnimationStyle(context),
       shape: const RoundedRectangleBorder(
@@ -194,6 +212,7 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
       // the future can complete while the exit transition still
       // builds the field. See _NoteEditorSheet.
       builder: (_) => _NoteEditorSheet(
+        palette: _palette,
         refLabel: refLabel,
         initialText: _userData.note(_profileId, _translation.name, key) ?? '',
         onSave: (text) {
@@ -489,11 +508,15 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
 /// name dialog's whenComplete disposal.
 class _NoteEditorSheet extends StatefulWidget {
   const _NoteEditorSheet({
+    required this.palette,
     required this.refLabel,
     required this.initialText,
     required this.onSave,
   });
 
+  /// The reader palette the sheet renders from (reader theme
+  /// package).
+  final ReaderPalette palette;
   final String refLabel;
   final String initialText;
   final void Function(String text) onSave;
@@ -526,41 +549,41 @@ class _NoteEditorSheetState extends State<_NoteEditorSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(widget.refLabel, style: WwType.sheetRefTitle),
+          Text(widget.refLabel, style: widget.palette.sheetTitleStyle),
           const SizedBox(height: 8),
-          const Text('Note', style: WwType.refLabel),
+          Text('Note', style: widget.palette.refLabelStyle),
           const SizedBox(height: 8),
           TextField(
             controller: _controller,
-            style: WwType.bodyOnPaper,
+            style: widget.palette.smallBodyStyle,
             minLines: 3,
             maxLines: 8,
             autofocus: true,
             decoration: InputDecoration(
               filled: true,
-              fillColor: WwColors.paper,
+              fillColor: widget.palette.fieldFill,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
                 vertical: 12,
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(WwRadius.input),
-                borderSide: const BorderSide(color: WwColors.line),
+                borderSide: BorderSide(color: widget.palette.line),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(WwRadius.input),
-                borderSide: const BorderSide(color: WwColors.line),
+                borderSide: BorderSide(color: widget.palette.line),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(WwRadius.input),
-                borderSide: const BorderSide(color: WwColors.goldTextOnPaper),
+                borderSide: BorderSide(color: widget.palette.accent),
               ),
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Saving an empty note removes it.',
-            style: WwType.captionOnPaper,
+            style: widget.palette.captionStyle,
           ),
           const SizedBox(height: 16),
           Row(
@@ -571,7 +594,7 @@ class _NoteEditorSheetState extends State<_NoteEditorSheet> {
                 style: TextButton.styleFrom(
                   minimumSize: const Size(64, WwSpace.minTarget),
                 ),
-                child: const Text('Cancel', style: WwType.paperButtonLabel),
+                child: Text('Cancel', style: widget.palette.cancelStyle),
               ),
               const SizedBox(width: 8),
               TextButton(
@@ -580,7 +603,7 @@ class _NoteEditorSheetState extends State<_NoteEditorSheet> {
                   Navigator.of(context).pop();
                 },
                 style: TextButton.styleFrom(
-                  backgroundColor: WwColors.goldBright,
+                  backgroundColor: widget.palette.goldFill,
                   minimumSize: const Size(64, WwSpace.minTarget),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(WwRadius.chip),

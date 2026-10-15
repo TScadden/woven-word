@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/reader_theme.dart';
 import '../data/tradition.dart';
 import '../data/user_data.dart';
 import '../theme/ww_theme.dart';
@@ -33,6 +34,16 @@ const Map<WwTradition, String> _traditionDescriptions = {
       'not included yet.',
 };
 
+/// What each reader theme is, in the row's own words (reader
+/// theme package): Dark is the standard the app opens in; Paper
+/// is the original page, unchanged.
+const Map<WwReaderTheme, String> _readerThemeDescriptions = {
+  WwReaderTheme.dark:
+      'Cream ink on black, with gold accents. The standard '
+      'reader.',
+  WwReaderTheme.paper: 'The original cream paper page.',
+};
+
 /// Profiles screen: on-device profiles, managed in place.
 ///
 /// A profile is a named bucket of highlights and notes (board run 4's
@@ -51,6 +62,8 @@ class ProfilesScreen extends StatefulWidget {
     this.shareBackup,
     this.tradition = WwTradition.none,
     this.onTraditionChanged,
+    this.readerTheme = WwReaderTheme.dark,
+    this.onReaderThemeChanged,
   });
 
   /// Picks a backup file and returns its bytes; a null return is a
@@ -70,6 +83,16 @@ class ProfilesScreen extends StatefulWidget {
   /// the owner.
   final ValueChanged<WwTradition>? onTraditionChanged;
 
+  /// The reader theme when this screen opens (reader theme
+  /// package). The shell owns the preference; the founder's
+  /// default — Dark — is this prop's default, so a standalone
+  /// pump shows the standard reader selected.
+  final WwReaderTheme readerTheme;
+
+  /// Called with the new selection the moment a reader theme row
+  /// is tapped — the tradition callback's contract, exactly.
+  final ValueChanged<WwReaderTheme>? onReaderThemeChanged;
+
   /// Shares the exported backup JSON. Defaults to the system share
   /// sheet. Tests inject a fake through this seam.
   final Future<void> Function(String json)? shareBackup;
@@ -83,11 +106,13 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   UserData _data = UserData();
   bool _loaded = false;
   late WwTradition _tradition;
+  late WwReaderTheme _readerTheme;
 
   @override
   void initState() {
     super.initState();
     _tradition = widget.tradition;
+    _readerTheme = widget.readerTheme;
     _load();
   }
 
@@ -97,6 +122,14 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     if (value == _tradition) return;
     setState(() => _tradition = value);
     widget.onTraditionChanged?.call(value);
+  }
+
+  /// The reader theme selection: the tradition selection's one
+  /// action, for the theme rows.
+  void _selectReaderTheme(WwReaderTheme value) {
+    if (value == _readerTheme) return;
+    setState(() => _readerTheme = value);
+    widget.onReaderThemeChanged?.call(value);
   }
 
   Future<void> _load() async {
@@ -516,6 +549,20 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
           const SizedBox(height: 8),
         ],
         const SizedBox(height: 16),
+        const Text('Reader theme', style: WwType.selectionTitle),
+        const SizedBox(height: 4),
+        const Text(
+          'How the reading pages are dressed. Every reader '
+          'surface follows it \u2014 the chapter pages, the '
+          'deuterocanon, the verse toolbar, and your note editor. '
+          'Your highlights and notes never change.',
+          style: WwType.captionOnDark,
+        ),
+        const SizedBox(height: 16),
+        _readerThemeRow(WwReaderTheme.dark),
+        const SizedBox(height: 8),
+        _readerThemeRow(WwReaderTheme.paper),
+        const SizedBox(height: 16),
         const Text('Backup', style: WwType.selectionTitle),
         const SizedBox(height: 4),
         const Text(
@@ -644,6 +691,67 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                         const SizedBox(height: 2),
                         Text(
                           _traditionDescriptions[t]!,
+                          style: WwType.captionOnDark,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// One reader theme selection row (reader theme package):
+  /// the tradition row's construction exactly — the whole row is
+  /// the tap target, selection carried by a check and by
+  /// semantics, one node whose label is exactly the theme's name.
+  Widget _readerThemeRow(WwReaderTheme theme) {
+    final selected = theme == _readerTheme;
+    return Semantics(
+      container: true,
+      button: true,
+      selected: selected,
+      label: theme.label,
+      child: ExcludeSemantics(
+        child: Material(
+          color: WwColors.surface,
+          borderRadius: BorderRadius.circular(WwRadius.row),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(WwRadius.row),
+            onTap: () => _selectReaderTheme(theme),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(
+                    selected
+                        ? Icons.check_circle
+                        : Icons.radio_button_unchecked,
+                    size: 20,
+                    color: selected
+                        ? WwColors.goldBright
+                        : WwColors.mutedOnDark,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          theme.label,
+                          style: WwType.controlLabel.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _readerThemeDescriptions[theme]!,
                           style: WwType.captionOnDark,
                         ),
                       ],

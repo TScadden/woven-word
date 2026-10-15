@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/bible_data.dart';
 import '../data/confession_data.dart';
 import '../data/deuterocanon.dart';
+import '../data/reader_theme.dart';
 import '../data/scripture_text.dart';
 import '../data/user_data.dart';
 import '../theme/ww_theme.dart';
@@ -663,6 +664,8 @@ class DeuteroReaderScreen extends StatefulWidget {
     this.initialVerse,
     required this.onBack,
     this.textsLoader,
+    this.readerTheme,
+    this.onReaderThemeChanged,
   });
 
   final DeuterocanonData deutero;
@@ -675,6 +678,13 @@ class DeuteroReaderScreen extends StatefulWidget {
 
   /// Loads the scripture texts; defaults to [ScriptureText.load].
   final Future<ScriptureText> Function()? textsLoader;
+
+  /// The reader theme (reader theme package): the shell passes
+  /// its live choice and its setter. Both are optional — a
+  /// standalone pump resolves the theme from the preference
+  /// itself, defaulting to Dark.
+  final WwReaderTheme? readerTheme;
+  final ValueChanged<WwReaderTheme>? onReaderThemeChanged;
 
   @override
   State<DeuteroReaderScreen> createState() => _DeuteroReaderScreenState();
@@ -698,6 +708,33 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
   // applied tint.
   (int, int)? _selVerse;
   int _selGen = 0;
+
+  // The reader theme (reader theme package): a local switch
+  // (this top bar's own) wins once made; before that the passed
+  // choice, then the stored preference, then Dark.
+  WwReaderTheme? _localTheme;
+  WwReaderTheme? _storedTheme;
+
+  WwReaderTheme get _readerTheme =>
+      _localTheme ?? widget.readerTheme ?? _storedTheme ?? WwReaderTheme.dark;
+
+  ReaderPalette get _palette => _readerTheme == WwReaderTheme.dark
+      ? ReaderPalette.dark
+      : ReaderPalette.paper;
+
+  Future<void> _setReaderTheme(WwReaderTheme next) async {
+    if (next == _readerTheme) return;
+    setState(() => _localTheme = next);
+    final callback = widget.onReaderThemeChanged;
+    if (callback != null) {
+      callback(next);
+      return;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(readerThemePrefsKey, next.storedValue);
+    } catch (_) {}
+  }
 
   @override
   void initState() {
@@ -724,6 +761,9 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       store = await UserDataStore.load(prefs);
+      _storedTheme = WwReaderTheme.fromStored(
+        prefs.getString(readerThemePrefsKey),
+      );
     } catch (_) {
       store = null;
     }
@@ -738,13 +778,7 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
     }
   }
 
-  Color _tintFor(HlColor color) => switch (color) {
-    HlColor.gold => WwColors.hlGold,
-    HlColor.green => WwColors.hlGreen,
-    HlColor.blue => WwColors.hlBlue,
-    HlColor.pink => WwColors.hlPink,
-    HlColor.purple => WwColors.hlPurple,
-  };
+  Color _tintFor(HlColor color) => _palette.tintAt(color.index);
 
   void _goToChapter(int chapterInBook) {
     final target = chapterInBook.clamp(1, widget.book.chapters);
@@ -848,13 +882,14 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
       context: context,
       isScrollControlled: true,
       sheetAnimationStyle: wwSheetAnimationStyle(context),
-      backgroundColor: WwColors.paper,
+      backgroundColor: _palette.cardBg,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (_) => _DeuteroNoteEditor(
         title: widget.deutero.refLabel(widget.book.bookIndex, sel.$1, sel.$2),
         initial: store.data.note(_profileId, 'webc', key) ?? '',
+        palette: _palette,
       ),
     );
     if (saved == null || !mounted) return;
@@ -868,19 +903,20 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
   Widget build(BuildContext context) {
     final book = widget.book;
     return Scaffold(
-      backgroundColor: WwColors.paper,
+      backgroundColor: _palette.bg,
       body: SafeArea(
         child: Column(
           children: [
             _topBar(),
             Expanded(
               child: TextSelectionTheme(
-                // Spec §3.4 (board run 10): the core reader's
-                // selection chrome, identical values.
+                // Spec §3.4 (board run 10) as themed (reader
+                // theme package): the core reader's selection
+                // chrome, from the palette — identical values.
                 data: TextSelectionThemeData(
-                  selectionColor: WwColors.hlGold.withValues(alpha: 0.50),
-                  selectionHandleColor: WwColors.goldTextOnPaper,
-                  cursorColor: WwColors.goldTextOnPaper,
+                  selectionColor: _palette.selectionOverlay,
+                  selectionHandleColor: _palette.accent,
+                  cursorColor: _palette.accent,
                 ),
                 child: PageView.builder(
                   controller: _pager,
@@ -911,26 +947,47 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
     return Container(
       constraints: const BoxConstraints(minHeight: WwSpace.topBarHeight),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: WwColors.line)),
+      decoration: BoxDecoration(
+        color: _palette.chrome,
+        border: Border(bottom: BorderSide(color: _palette.hairline)),
       ),
       child: Row(
         children: [
           IconButton(
             onPressed: widget.onBack,
-            icon: const Icon(Icons.arrow_back, color: WwColors.ink),
+            icon: Icon(Icons.arrow_back, color: _palette.ink),
             tooltip: 'Back',
           ),
           Expanded(
             child: Text(
               '${widget.book.name} $_currentChapter',
-              style: WwType.readerTitle,
+              style: _palette.titleStyle,
               maxLines: 2,
             ),
           ),
-          const Text('WEB Catholic', style: WwType.translationUnselected),
+          _themeSwitch(),
+          const SizedBox(width: 8),
+          Text('WEB Catholic', style: _palette.toggleUnselectedStyle),
           const SizedBox(width: 8),
         ],
+      ),
+    );
+  }
+
+  /// The reader theme quick switch (reader theme package):
+  /// the core reader top bar's control, same construction — one
+  /// 48dp target whose icon names the theme a tap switches to.
+  Widget _themeSwitch() {
+    final theme = _readerTheme;
+    final next = theme.other;
+    return IconButton(
+      tooltip: 'Reader theme: ${theme.label}. Switch to ${next.label} theme',
+      onPressed: () => _setReaderTheme(next),
+      icon: Icon(
+        next == WwReaderTheme.dark
+            ? Icons.dark_mode_outlined
+            : Icons.light_mode_outlined,
+        color: _palette.accent,
       ),
     );
   }
@@ -977,8 +1034,8 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: current == color
-                            ? WwColors.goldTextOnPaper
-                            : WwColors.mutedOnPaper,
+                            ? _palette.accent
+                            : _palette.muted,
                         width: current == color ? 2 : 1,
                       ),
                     ),
@@ -1004,7 +1061,7 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
               constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
               padding: const EdgeInsets.symmetric(horizontal: 12),
               alignment: Alignment.center,
-              child: const Text('None', style: WwType.translationUnselected),
+              child: Text('None', style: _palette.toggleUnselectedStyle),
             ),
           ),
         ),
@@ -1014,9 +1071,9 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
     // 48dp swatch targets and None cannot share one row with
     // the Note action and a close control at phone widths.
     return Container(
-      decoration: const BoxDecoration(
-        color: WwColors.paper,
-        border: Border(top: BorderSide(color: WwColors.line)),
+      decoration: BoxDecoration(
+        color: _palette.chrome,
+        border: Border(top: BorderSide(color: _palette.hairline)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Column(
@@ -1030,21 +1087,17 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
                 icon: const Icon(Icons.notes, size: 18),
                 label: Text(hasNote ? 'Edit note' : 'Note'),
                 style: TextButton.styleFrom(
-                  foregroundColor: WwColors.goldTextOnPaper,
+                  foregroundColor: _palette.accent,
                   minimumSize: const Size(0, WwSpace.minTarget),
                   textStyle: WwType.controlLabel.copyWith(
-                    color: WwColors.goldTextOnPaper,
+                    color: _palette.accent,
                   ),
                 ),
               ),
               const Spacer(),
               IconButton(
                 onPressed: () => setState(() => _selected = null),
-                icon: const Icon(
-                  Icons.close,
-                  size: 20,
-                  color: WwColors.mutedOnPaper,
-                ),
+                icon: Icon(Icons.close, size: 20, color: _palette.muted),
                 tooltip: 'Close verse actions',
               ),
             ],
@@ -1085,7 +1138,7 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
               Expanded(
                 child: Text(
                   '${book.name} $chapterInBook',
-                  style: WwType.readerTitle,
+                  style: _palette.titleStyle,
                 ),
               ),
               IconButton(
@@ -1093,8 +1146,8 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
                     ? () => _goToChapter(chapterInBook - 1)
                     : null,
                 icon: const Icon(Icons.chevron_left),
-                color: WwColors.goldTextOnPaper,
-                disabledColor: WwColors.line,
+                color: _palette.accent,
+                disabledColor: _palette.line,
                 tooltip: 'Previous chapter',
               ),
               IconButton(
@@ -1102,23 +1155,23 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
                     ? () => _goToChapter(chapterInBook + 1)
                     : null,
                 icon: const Icon(Icons.chevron_right),
-                color: WwColors.goldTextOnPaper,
-                disabledColor: WwColors.line,
+                color: _palette.accent,
+                disabledColor: _palette.line,
                 tooltip: 'Next chapter',
               ),
             ],
           ),
           Text(
             verseCount == 1 ? '1 verse' : '$verseCount verses',
-            style: WwType.captionOnPaper,
+            style: _palette.captionStyle,
           ),
           if (chapterInBook == 1) ...[
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Part of the Catholic canon. The woven web does not '
               'yet cover the deuterocanon, so no cross references '
               'are recorded for these chapters.',
-              style: WwType.captionOnPaper,
+              style: _palette.captionStyle,
             ),
           ],
         ],
@@ -1132,11 +1185,11 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('End of ${widget.book.name}', style: WwType.readerTitle),
+          Text('End of ${widget.book.name}', style: _palette.titleStyle),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Read in the World English Bible, Catholic Edition.',
-            style: WwType.captionOnPaper,
+            style: _palette.captionStyle,
           ),
         ],
       ),
@@ -1156,12 +1209,12 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
     final selected = _selected == (chapterInBook, verse);
     var bg = Colors.transparent;
     if (selected) {
-      // The core reader's audited selected construction (run 4):
-      // hlGold @ 0.45 over the highlight tint or paper, so the note
-      // icon and the 2dp outline keep their 3.0+ inside adjacency.
-      bg = Color.alphaBlend(
-        WwColors.hlGold.withValues(alpha: 0.45),
-        fullColor != null ? _tintFor(fullColor) : WwColors.paper,
+      // The core reader's audited selected construction (run 4),
+      // from the palette (reader theme package): paper keeps the
+      // shipped wash; dark keeps the tint and washes the plain
+      // verse, the outline carrying selection either way.
+      bg = _palette.selectedBackground(
+        fullColor != null ? _tintFor(fullColor) : null,
       );
     } else if (fullColor != null) {
       bg = _tintFor(fullColor);
@@ -1173,7 +1226,7 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
           side: BorderSide(
-            color: selected ? WwColors.goldTextOnPaper : Colors.transparent,
+            color: selected ? _palette.accent : Colors.transparent,
             width: 2,
           ),
         ),
@@ -1205,16 +1258,12 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
                           Text(
                             '$verse',
                             style: spans.isNotEmpty || selected
-                                ? WwType.verseNumberInk
-                                : WwType.verseNumber,
+                                ? _palette.verseNumberOnTintStyle
+                                : _palette.verseNumberStyle,
                             textAlign: TextAlign.center,
                           ),
                           if (hasNote)
-                            const Icon(
-                              Icons.notes,
-                              size: 16,
-                              color: WwColors.goldTextOnPaper,
-                            ),
+                            Icon(Icons.notes, size: 16, color: _palette.accent),
                         ],
                       ),
                     ),
@@ -1236,7 +1285,7 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
                               key: ValueKey(
                                 'dtext-$chapterInBook-$verse-$_selGen',
                               ),
-                              style: WwType.readerBody,
+                              style: _palette.bodyStyle,
                               contextMenuBuilder: (menuContext, state) =>
                                   _selectionMenu(menuContext, state, key, text),
                             )
@@ -1248,7 +1297,7 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
                                   suppressBg: fullColor != null,
                                 ),
                               ),
-                              style: WwType.readerBody,
+                              style: _palette.bodyStyle,
                             ),
                     ),
                   ],
@@ -1363,9 +1412,7 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
                     color: _tintFor(color),
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: active
-                          ? WwColors.goldTextOnPaper
-                          : WwColors.mutedOnPaper,
+                      color: active ? _palette.accent : _palette.muted,
                       width: active ? 2 : 1,
                     ),
                   ),
@@ -1396,7 +1443,7 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
                 child: Icon(
                   icon,
                   size: 20,
-                  color: enabled ? WwColors.ink : WwColors.mutedOnPaper,
+                  color: enabled ? _palette.ink : _palette.muted,
                 ),
               ),
             ),
@@ -1411,12 +1458,12 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
           left: left,
           top: top,
           child: Material(
-            color: WwColors.paper,
+            color: _palette.cardBg,
             borderRadius: BorderRadius.circular(WwRadius.sheet),
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                border: Border.all(color: WwColors.line),
+                border: Border.all(color: _palette.line),
                 borderRadius: BorderRadius.circular(WwRadius.sheet),
               ),
               child: Row(
@@ -1503,10 +1550,19 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
 /// future (LESSONS #33: a controller disposed from a sheet's
 /// whenComplete throws while the exit transition still runs).
 class _DeuteroNoteEditor extends StatefulWidget {
-  const _DeuteroNoteEditor({required this.title, required this.initial});
+  const _DeuteroNoteEditor({
+    required this.title,
+    required this.initial,
+    required this.palette,
+  });
 
   final String title;
   final String initial;
+
+  /// The reader palette this sheet renders from (reader theme
+  /// package): the note editor follows the reader theme in both
+  /// readers and in My Notes.
+  final ReaderPalette palette;
 
   @override
   State<_DeuteroNoteEditor> createState() => _DeuteroNoteEditorState();
@@ -1540,45 +1596,48 @@ class _DeuteroNoteEditorState extends State<_DeuteroNoteEditor> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(widget.title, style: WwType.sheetRefTitle),
+          Text(widget.title, style: widget.palette.sheetTitleStyle),
           const SizedBox(height: 12),
           TextField(
             controller: _ctl,
             autofocus: true,
             minLines: 3,
             maxLines: 6,
-            style: WwType.bodyOnPaper,
+            style: widget.palette.smallBodyStyle,
             // Every surface set explicitly, as in both shipped note
-            // editors: the theme's input fill is tuned for dark
-            // surfaces and would render this paper sheet's typed
-            // text unreadable (ink on surfaceHigh = 1.02:1).
+            // editors: the app theme's input fill is tuned for dark
+            // surfaces and would render this sheet's typed text
+            // unreadable under the paper palette (ink on
+            // surfaceHigh = 1.02:1). The palette carries the
+            // sheet's own fill, borders, and focus color in both
+            // themes (reader theme package).
             decoration: InputDecoration(
               hintText: 'Write a note',
-              hintStyle: WwType.captionOnPaper,
+              hintStyle: widget.palette.captionStyle,
               filled: true,
-              fillColor: WwColors.paper,
+              fillColor: widget.palette.fieldFill,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
                 vertical: 12,
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(WwRadius.input),
-                borderSide: const BorderSide(color: WwColors.line),
+                borderSide: BorderSide(color: widget.palette.line),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(WwRadius.input),
-                borderSide: const BorderSide(color: WwColors.line),
+                borderSide: BorderSide(color: widget.palette.line),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(WwRadius.input),
-                borderSide: const BorderSide(color: WwColors.goldTextOnPaper),
+                borderSide: BorderSide(color: widget.palette.accent),
               ),
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Saving an empty note removes it.',
-            style: WwType.captionOnPaper,
+            style: widget.palette.captionStyle,
           ),
           const SizedBox(height: 12),
           Row(
@@ -1589,17 +1648,14 @@ class _DeuteroNoteEditorState extends State<_DeuteroNoteEditor> {
                 style: TextButton.styleFrom(
                   minimumSize: const Size(0, WwSpace.minTarget),
                 ),
-                child: const Text(
-                  'Cancel',
-                  style: WwType.translationUnselected,
-                ),
+                child: Text('Cancel', style: widget.palette.cancelStyle),
               ),
               const SizedBox(width: 8),
               ElevatedButton(
                 onPressed: () => Navigator.of(context).pop(_ctl.text),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: WwColors.goldBright,
-                  foregroundColor: WwColors.onGold,
+                  backgroundColor: widget.palette.goldFill,
+                  foregroundColor: widget.palette.onGoldFill,
                   minimumSize: const Size(0, WwSpace.minTarget),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(WwRadius.chip),

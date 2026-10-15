@@ -9,6 +9,7 @@ import '../data/bible_data.dart';
 import '../data/confession_data.dart';
 import '../data/conference_data.dart';
 import '../data/deuterocanon.dart';
+import '../data/reader_theme.dart';
 import '../data/highlights_index.dart';
 import '../data/plans.dart';
 import '../data/screen_state.dart';
@@ -74,7 +75,8 @@ class ShellController extends ChangeNotifier
         ConferenceHost,
         ConferenceLayerState,
         TraditionHost,
-        TraditionLayerState {
+        TraditionLayerState,
+        ReaderThemeHost {
   ShellController({
     required this.dataLoader,
     required this.textsLoader,
@@ -181,6 +183,17 @@ class ShellController extends ChangeNotifier
   @override
   WwTradition tradition = WwTradition.none;
 
+  /// The reader theme (reader theme package, founder ruling
+  /// Oct 15, 2026): Dark is the default — [WwReaderTheme.fromStored]
+  /// maps an absent or unrecognized stored value to Dark, so a
+  /// fresh install, and every install that has never stored a
+  /// choice, opens the reader in Dark. Persisted under
+  /// [readerThemePrefsKey]; restored in [_loadPrefs]. A theme
+  /// switch touches no user data: spans, notes, profiles,
+  /// tradition, and translation are byte-identical across it.
+  @override
+  WwReaderTheme readerTheme = WwReaderTheme.dark;
+
   /// The loaded layer datasets, or null while their tradition is
   /// not selected, still loading, or after a failed load (a
   /// failed asset load degrades to "the layer shows nothing" —
@@ -212,6 +225,24 @@ class ShellController extends ChangeNotifier
       await prefs.setString(traditionPrefsKey, next.storedValue);
     } catch (_) {}
     await _kickTraditionLoads();
+  }
+
+  /// Sets and persists the reader theme (reader theme package).
+  /// Both readers resolve their palette from this value at build
+  /// time, so the notify re-renders every open reader surface;
+  /// the awaited write is the setTradition contract (lesson 38):
+  /// a caller that awaits the selection can rely on the stored
+  /// choice surviving relaunch.
+  @override
+  Future<void> setReaderTheme(WwReaderTheme next) async {
+    if (readerTheme != next) {
+      readerTheme = next;
+      notifyListeners();
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(readerThemePrefsKey, next.storedValue);
+    } catch (_) {}
   }
 
   /// Starts the active tradition's dataset load (the conference
@@ -416,6 +447,12 @@ class ShellController extends ChangeNotifier
       // the Home notes count's per-translation visibility.
       translation = WwTranslation.fromStored(
         prefs.getString(translationPrefsKey),
+      );
+      // The reader theme (reader theme package) restores from
+      // its own key: Dark when absent or unrecognized — the
+      // founder's default for fresh and existing installs alike.
+      readerTheme = WwReaderTheme.fromStored(
+        prefs.getString(readerThemePrefsKey),
       );
       // The deuterocanon table loads under every tradition (the
       // Home notes count and My Notes count its notes wherever
@@ -941,6 +978,8 @@ class ShellController extends ChangeNotifier
           initialVerse: verse,
           textsLoader: textsLoader,
           onBack: () => nav.pop(),
+          readerTheme: readerTheme,
+          onReaderThemeChanged: setReaderTheme,
         ),
       ),
     );
@@ -1034,6 +1073,8 @@ class ShellController extends ChangeNotifier
         builder: (_) => ProfilesScreen(
           tradition: tradition,
           onTraditionChanged: setTradition,
+          readerTheme: readerTheme,
+          onReaderThemeChanged: setReaderTheme,
         ),
       ),
     );

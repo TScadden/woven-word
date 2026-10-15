@@ -530,3 +530,23 @@ rounds Rusty ran before the studio was founded).
     the whole package. Rule: any tree a verification claim
     rests on lives in durable storage, and a long test run
     writes its log to that same storage.
+52. **Spec the pause matrix before building any
+    self-running UI.** The ambient stage needed six pause
+    conditions (tab invisible, app backgrounded, route
+    covering Home, any descendant scrolling, pointer held,
+    reduced motion) and every one was cheap because it was
+    specced first: a Ticker (muted by TickerMode under
+    covering routes, dead with the State) plus plain flags
+    for tab/lifecycle/scroll/pointer. One framework fact
+    cost a spec correction: a RouteObserver asserts
+    `observer.navigator == null`, so one observer cannot
+    serve three navigators — it lives on the Home
+    navigator only.
+53. **Write the lesson-40 translation register into the
+    spec, then let the suite correct it.** The register
+    said shell STORE-3 would be "kept as-is"; the suite
+    proved its Home assertion landmarked the deleted
+    panel's title, not Continue reading. The register is a
+    hypothesis — suite evidence outranks it, the register
+    gets amended with the evidence cited, and no shipped
+    assertion is ever dropped silently.

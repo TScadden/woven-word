@@ -34,3 +34,4 @@ Its craft lessons (#5, #6) remain in team memory, scoped.
 | 2026-10-15 | Verse of the Day (board run 11) | Studio crew | $1,000 | Accrued — pays on founder verification |
 | 2026-10-15 | Study Plans (board run 11) | Studio crew | $1,000 | Accrued — pays on founder verification |
 | 2026-10-15 | Study Tools + All Highlights (board run 11) | Studio crew | $1,000 | Accrued — pays on founder verification |
+| 2026-10-15 | Home arch goes ambient: rotating featured chapter + caption, panel removed, chapter partners in the reader (arch ambient home package) | Studio crew | $1,000 | Accrued — pays on founder verification |

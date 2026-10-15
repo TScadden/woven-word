@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:woven_word/data/deuterocanon.dart';
+import 'package:woven_word/data/reader_theme.dart';
 import 'package:woven_word/data/scripture_text.dart';
 import 'package:woven_word/data/tradition.dart';
 import 'package:woven_word/screens/my_notes_screen.dart';
@@ -48,11 +49,14 @@ void main() {
     ]),
   );
 
-  Future<void> pumpReader(WidgetTester tester) async {
+  Future<void> pumpReader(
+    WidgetTester tester, {
+    Map<String, Object> prefs = const {},
+  }) async {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues(prefs);
     await tester.pumpWidget(
       MaterialApp(
         theme: wwTheme(),
@@ -113,7 +117,10 @@ void main() {
 
   testWidgets('the note editor saves through the shared store '
       'and dismisses cleanly on Cancel too', (tester) async {
-    await pumpReader(tester);
+    // Reader theme package: this test asserts the paper sheet's
+    // explicit fill (the run 9 gate P0 law, now the palette's
+    // paper values), so it opens under the stored Paper choice.
+    await pumpReader(tester, prefs: {readerThemePrefsKey: 'paper'});
     await tester.tap(find.text('Tobit verse one'));
     await tester.pump();
     await tester.tap(find.text('Note'));

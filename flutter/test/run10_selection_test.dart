@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:woven_word/data/bible_data.dart';
 import 'package:woven_word/data/deuterocanon.dart';
+import 'package:woven_word/data/reader_theme.dart';
 import 'package:woven_word/data/scripture_text.dart';
 import 'package:woven_word/data/tradition.dart';
 import 'package:woven_word/data/user_data.dart';
@@ -140,7 +141,12 @@ void main() {
         tester,
         data: data,
         texts: texts,
-        prefs: {UserDataStore.storageKey: jsonEncode(doc.toJson())},
+        prefs: {
+          UserDataStore.storageKey: jsonEncode(doc.toJson()),
+          // Reader theme package: these assertions render the
+          // paper palette (the founder default is now Dark).
+          readerThemePrefsKey: 'paper',
+        },
       );
       // At rest the verse text is a rich Text whose segment for
       // 'beginning' carries the gold tint; the block itself does
@@ -202,7 +208,12 @@ void main() {
         tester,
         data: data,
         texts: texts,
-        prefs: {UserDataStore.storageKey: jsonEncode(doc.toJson())},
+        prefs: {
+          UserDataStore.storageKey: jsonEncode(doc.toJson()),
+          // Reader theme package: these assertions render the
+          // paper palette (the founder default is now Dark).
+          readerThemePrefsKey: 'paper',
+        },
       );
       bool hasTint(String tag) {
         final w = tester.widget<Text>(

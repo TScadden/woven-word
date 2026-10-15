@@ -598,3 +598,22 @@ rounds Rusty ran before the studio was founded).
     baseline is a regression until the mechanism is named;
     "the file is flaky" is a claim that needs its own baseline
     evidence, every time.
+56. **The website is a pipeline output, not a folder — ask the
+    server what it publishes before changing anything (Pages
+    deploy package, Oct 15, 2026).** Pages served the repo root
+    (legacy, branch `main`, path `/`) for the entire Flutter
+    era, so the public site stayed the v1 web app while eleven
+    board runs shipped to the phone — one `gh api …/pages` call
+    named the actual state (build_type legacy, source main /)
+    before anything was touched. The fix was switching the
+    publisher, not copying files: build_type → workflow, the CI
+    web job builds with `--base-href=/woven-word/` (a project
+    page lives under its repo path; the placeholder in
+    flutter/web/index.html proves nothing — the BUILT
+    index.html was inspected and carries the base), and a
+    `pages` job deploys the artifact on every app-changing
+    push. v1 was preserved by leaving its files untouched at
+    the root and flipping the publisher away from them;
+    rollback is the same setting reversed. Rule: a served
+    surface's source of truth is the host's configuration,
+    read live — never the repo layout you assume it serves.

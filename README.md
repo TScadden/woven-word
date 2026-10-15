@@ -18,6 +18,19 @@ something you can explore and read:
   server), highlight verses in five colors, and attach notes. Everything is
   stored in your browser's local storage, per profile.
 
+## Live site
+
+[tscadden.github.io/woven-word](https://tscadden.github.io/woven-word/) serves
+the **Flutter app** (the same build as the phone app), deployed by GitHub
+Actions: every app-changing push to `main` rebuilds the web target from
+`flutter/` and publishes it to GitHub Pages (the `pages` job in
+`.github/workflows/flutter.yml`).
+
+The files at this repo's root (`index.html`, `app.js`, `data.json`,
+`kjv.json`, `web.json`, `manifest.json`, `icon-512.png`) are the **original
+v1 web app**, preserved in place for the record. They are no longer served;
+the v1 build steps below apply to that archive only.
+
 ## Data and credits
 
 - Cross references: [OpenBible.info](https://www.openbible.info/labs/cross-references/)
@@ -28,7 +41,7 @@ something you can explore and read:
 - Inspiration: Chris Harrison and Christoph Römhild's Bible cross-reference
   visualization.
 
-## Build
+## Build (v1 archive)
 
 `data.json` and `kjv.json` are generated from the source files:
 
@@ -36,7 +49,9 @@ something you can explore and read:
 python3 build_data.py   # cross_references.txt -> data.json
 ```
 
-Then serve the folder statically (GitHub Pages works as is).
+Then serve the folder statically. (This reproduces the archived v1 app;
+the current app builds from `flutter/` — `flutter build web --release
+--base-href=/woven-word/` is exactly what CI deploys.)
 
 ## License
 

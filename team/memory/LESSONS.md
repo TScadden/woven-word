@@ -550,3 +550,25 @@ rounds Rusty ran before the studio was founded).
     hypothesis — suite evidence outranks it, the register
     gets amended with the evidence cited, and no shipped
     assertion is ever dropped silently.
+54. **The staged deliverable is the arm64-v8a split — and this
+    app's weight is data, not ABIs (arm64 deliverable package,
+    Oct 15, 2026).** CI has built `flutter build apk --release
+    --split-per-abi` and staged `app-arm64-v8a-release.apk` all
+    along; zip inspection of the staged ambient build proves
+    `lib/` carries arm64-v8a ONLY (libapp, libflutter,
+    libdartjni, libdatastore_shared_counter) — there was never
+    a universal APK in the ship path, whatever the ship
+    records called it. The 32,076,557 bytes are bundled data,
+    measured from the zip listing: cross-reference data.json
+    8.5MB, the five translation texts ~24MB, sefaria.json.gz
+    4.8MB, conference.json 2.3MB (uncompressed), against
+    ~17.5MB of arm64 native libs. Rule: every package stages
+    its founder deliverable as the arm64-v8a split APK under
+    the package name with the `_arm64_` marker, and every
+    ship report states the staged file's ABI contents from a
+    zip inspection plus its exact byte size — never an assumed
+    "universal." A size claim is a measurement (lesson 27's
+    discipline applied to release engineering): Tabs' smaller
+    chat-safe files come from their release split builds, and
+    Woven Word already ships that form; no ABI savings remain
+    to harvest here.

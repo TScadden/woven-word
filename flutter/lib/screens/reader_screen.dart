@@ -102,7 +102,7 @@ class ReaderScreen extends StatefulWidget {
   /// Tests inject a fake through this seam (§12).
   final Future<ScriptureText> Function()? textsLoader;
 
-  static const translationKey = 'ww_translation';
+  static const translationKey = translationPrefsKey;
 
   @override
   State<ReaderScreen> createState() => ReaderScreenState();
@@ -150,6 +150,19 @@ class ReaderScreenState extends State<ReaderScreen>
   int? _toolbarChapter;
   int? _toolbarVerse;
   bool _toolbarEditing = false;
+
+  // Text selection (board run 10): selection is a MODE, entered
+  // by long-press on a verse — only the verse in selection mode
+  // renders as a SelectableText. (An always-on SelectableText
+  // installs an eager horizontal-drag recognizer on Android
+  // that would claim page-turn swipes starting on text; outside
+  // the mode the verse text is the shipped plain Text and every
+  // shipped gesture — tap, paging, scroll — is untouched.)
+  // _selGen is bumped on every selection-bar write so the
+  // verse's SelectableText is recreated: its platform selection
+  // collapses and the applied tint shows clean.
+  (int, int)? _selVerse;
+  int _selGen = 0;
   final _noteCtl = TextEditingController();
   final _cardKey = GlobalKey();
   final _stackKey = GlobalKey();
@@ -353,11 +366,17 @@ class ReaderScreenState extends State<ReaderScreen>
     return verseKey(chapter.b, chapter.c, v);
   }
 
-  HlColor? _highlightFor(int ch, int v) =>
-      _userData.highlight(_profileId, _verseKeyFor(ch, v));
+  /// The per-translation set key of the translation actually
+  /// rendered (board run 10): highlights and notes live in the
+  /// set of the translation they were made in, and a span's
+  /// offsets only ever render against that translation.
+  String get _tKey => _effT.name;
+
+  List<HighlightSpan> _spansFor(int ch, int v) =>
+      _userData.spansFor(_profileId, _tKey, _verseKeyFor(ch, v));
 
   String? _noteFor(int ch, int v) =>
-      _userData.note(_profileId, _verseKeyFor(ch, v));
+      _userData.note(_profileId, _tKey, _verseKeyFor(ch, v));
 
   Color _tintFor(HlColor color) => switch (color) {
     HlColor.gold => WwColors.hlGold,
@@ -375,13 +394,35 @@ class ReaderScreenState extends State<ReaderScreen>
     } catch (_) {}
   }
 
-  void _applyHighlight(String key, HlColor? color) {
-    setState(() => _userData.setHighlight(_profileId, key, color));
+  /// The verse toolbar's color write (board run 10): a full-verse
+  /// span in the current translation's set. A null [color] (the
+  /// None swatch, or tapping the active full-verse color again)
+  /// clears ALL of the verse's spans in this translation — the
+  /// shipped None meaning, span edition.
+  void _applyVerseColor(String key, String verseText, HlColor? color) {
+    setState(() {
+      if (color == null) {
+        _userData.clearVerseSpans(_profileId, _tKey, key);
+      } else {
+        _userData.applySpan(
+          _profileId,
+          _tKey,
+          HighlightSpan(
+            verseKey: key,
+            start: 0,
+            end: -1,
+            anchor: verseText,
+            color: color,
+          ),
+          verseText: verseText,
+        );
+      }
+    });
     _persistUserData();
   }
 
   void _applyNote(String key, String text) {
-    setState(() => _userData.setNote(_profileId, key, text));
+    setState(() => _userData.setNote(_profileId, _tKey, key, text));
     _persistUserData();
   }
 
@@ -643,6 +684,7 @@ class ReaderScreenState extends State<ReaderScreen>
       _currentChapter = global;
       _selectedChapter = null;
       _selectedVerse = null;
+      _selVerse = null;
       _toolbarChapter = null;
       _toolbarVerse = null;
       _toolbarEditing = false;
@@ -678,6 +720,16 @@ class ReaderScreenState extends State<ReaderScreen>
 
   void _onVerseTap(int ch, int v) {
     _flashTimer?.cancel();
+    // A tap while this verse is in selection mode leaves the
+    // mode and does nothing else (board run 10): selection taps
+    // belong to the selection, and the mode's own exit must be
+    // one predictable gesture. A tap on any other verse clears
+    // the mode and proceeds as the shipped tap.
+    if (_selVerse == (ch, v)) {
+      setState(() => _selVerse = null);
+      return;
+    }
+    if (_selVerse != null) setState(() => _selVerse = null);
     if (_toolbarVerse == v && _toolbarChapter == ch) {
       _dismissToolbar();
       return;
@@ -747,8 +799,15 @@ class ReaderScreenState extends State<ReaderScreen>
   }
 
   void _dismissToolbar() {
+    // The outside-tap dismiss also leaves selection mode (board
+    // run 10): one surface, one dismiss.
+    if (_selVerse != null && _toolbarVerse == null) {
+      setState(() => _selVerse = null);
+      return;
+    }
     if (_toolbarVerse == null) return;
     setState(() {
+      _selVerse = null;
       if (_selectedChapter == _toolbarChapter &&
           _selectedVerse == _toolbarVerse) {
         _selectedChapter = null;
@@ -758,6 +817,28 @@ class ReaderScreenState extends State<ReaderScreen>
       _toolbarVerse = null;
       _toolbarEditing = false;
       _toolbarPos = null;
+    });
+  }
+
+  /// Long-press on a verse enters selection mode for it (board
+  /// run 10): the verse toolbar closes (the selection bar is the
+  /// surface while selecting) and the verse's text becomes a
+  /// SelectableText; the user's drag or second long-press on it
+  /// takes the exact words.
+  void _enterSelection(int ch, int v) {
+    setState(() {
+      if (_toolbarVerse != null) {
+        if (_selectedChapter == _toolbarChapter &&
+            _selectedVerse == _toolbarVerse) {
+          _selectedChapter = null;
+          _selectedVerse = null;
+        }
+        _toolbarChapter = null;
+        _toolbarVerse = null;
+        _toolbarEditing = false;
+        _toolbarPos = null;
+      }
+      _selVerse = (ch, v);
     });
   }
 
@@ -1308,7 +1389,18 @@ class ReaderScreenState extends State<ReaderScreen>
                   GestureDetector(
                     behavior: HitTestBehavior.translucent,
                     onTap: _dismissToolbar,
-                    child: _pager(data, texts),
+                    child: TextSelectionTheme(
+                      // Spec §3.4 (board run 10): the selection
+                      // chrome on paper — overlay hlGold at 0.50
+                      // (worst ink ratio 12.48), handles and
+                      // cursor goldTextOnPaper (4.62:1 on paper).
+                      data: TextSelectionThemeData(
+                        selectionColor: WwColors.hlGold.withValues(alpha: 0.50),
+                        selectionHandleColor: WwColors.goldTextOnPaper,
+                        cursorColor: WwColors.goldTextOnPaper,
+                      ),
+                      child: _pager(data, texts),
+                    ),
                   ),
                   if (_toolbarVerse != null) _toolbarOverlay(data),
                 ],
@@ -1596,10 +1688,7 @@ class ReaderScreenState extends State<ReaderScreen>
                 ),
                 if (_webcFallbackNote(book) != null) ...[
                   const SizedBox(height: 4),
-                  Text(
-                    _webcFallbackNote(book)!,
-                    style: WwType.captionOnPaper,
-                  ),
+                  Text(_webcFallbackNote(book)!, style: WwType.captionOnPaper),
                 ],
               ],
             ),
@@ -1716,16 +1805,21 @@ class ReaderScreenState extends State<ReaderScreen>
         hasConns = tradHost.confessionData?.verseHasProofs(ch, v) ?? false;
       }
     }
-    final highlight = _highlightFor(ch, v);
-    final tint = highlight == null ? null : _tintFor(highlight);
+    final spans = _spansFor(ch, v);
+    final fullColor = _userData.fullVerseColor(
+      _profileId,
+      _tKey,
+      _verseKeyFor(ch, v),
+    );
+    final fullTint = fullColor == null ? null : _tintFor(fullColor);
     final hasNote = _noteFor(ch, v) != null;
     final background = selected
         ? Color.alphaBlend(
             WwColors.hlGold.withValues(alpha: 0.45),
-            tint ?? WwColors.paper,
+            fullTint ?? WwColors.paper,
           )
-        : (tint ?? Colors.transparent);
-    final restingPlain = !selected && highlight == null;
+        : (fullTint ?? Colors.transparent);
+    final restingPlain = !selected && spans.isEmpty;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: WwSpace.screenMargin),
       child: Material(
@@ -1735,6 +1829,7 @@ class ReaderScreenState extends State<ReaderScreen>
           key: _keyForVerse(ch, v),
           borderRadius: BorderRadius.circular(WwRadius.row),
           onTap: () => _onVerseTap(ch, v),
+          onLongPress: () => _enterSelection(ch, v),
           child: Container(
             constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -1784,11 +1879,37 @@ class ReaderScreenState extends State<ReaderScreen>
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    text,
-                    style: WwType.readerBody,
-                    textDirection: _effT.isRtl ? TextDirection.rtl : null,
-                  ),
+                  // Board run 10: in selection mode the verse text
+                  // is a SelectableText — drag or long-press takes
+                  // the exact words, the handles extend, and the
+                  // §2.2 bar colors the span. Outside the mode it
+                  // is the shipped plain Text.
+                  child: _selVerse == (ch, v)
+                      ? SelectableText.rich(
+                          TextSpan(
+                            children: _verseSegments(
+                              text,
+                              spans,
+                              suppressBg: fullColor != null,
+                            ),
+                          ),
+                          key: ValueKey('vtext-$ch-$v-$_selGen'),
+                          style: WwType.readerBody,
+                          textDirection: _effT.isRtl ? TextDirection.rtl : null,
+                          contextMenuBuilder: (menuContext, state) =>
+                              _selectionMenu(menuContext, state, ch, v, text),
+                        )
+                      : Text.rich(
+                          TextSpan(
+                            children: _verseSegments(
+                              text,
+                              spans,
+                              suppressBg: fullColor != null,
+                            ),
+                          ),
+                          style: WwType.readerBody,
+                          textDirection: _effT.isRtl ? TextDirection.rtl : null,
+                        ),
                 ),
               ],
             ),
@@ -1796,6 +1917,230 @@ class ReaderScreenState extends State<ReaderScreen>
         ),
       ),
     );
+  }
+
+  /// The verse text as segments (board run 10, spec §3.1): the
+  /// disjoint span walk — unspanned runs carry no background,
+  /// spanned runs carry their tint. When the verse carries a
+  /// full-verse span the BLOCK carries the tint (the shipped
+  /// run-4 construction), so the segments render bare
+  /// ([suppressBg]).
+  List<TextSpan> _verseSegments(
+    String text,
+    List<HighlightSpan> spans, {
+    required bool suppressBg,
+  }) {
+    if (suppressBg || spans.isEmpty) return [TextSpan(text: text)];
+    final out = <TextSpan>[];
+    var cursor = 0;
+    for (final span in spans) {
+      final s = span.start.clamp(0, text.length);
+      final e = (span.end == -1 ? text.length : span.end).clamp(0, text.length);
+      if (e <= s) continue;
+      if (s > cursor) out.add(TextSpan(text: text.substring(cursor, s)));
+      out.add(
+        TextSpan(
+          text: text.substring(s, e),
+          style: TextStyle(backgroundColor: _tintFor(span.color)),
+        ),
+      );
+      cursor = e;
+    }
+    if (cursor < text.length) out.add(TextSpan(text: text.substring(cursor)));
+    if (out.isEmpty) out.add(TextSpan(text: text));
+    return out;
+  }
+
+  /// The selection action bar (board run 10, spec §2.2): the
+  /// app's own paper card in place of the platform menu — the
+  /// five swatches (the toolbar's exact construction), Clear
+  /// (the selection's range only), and Copy. Anchored at the
+  /// selection; a collapsed selection shows no bar.
+  Widget _selectionMenu(
+    BuildContext menuContext,
+    EditableTextState state,
+    int ch,
+    int v,
+    String verseText,
+  ) {
+    final selection = state.currentTextEditingValue.selection;
+    if (!selection.isValid || selection.isCollapsed) {
+      return const SizedBox.shrink();
+    }
+    final len = verseText.length;
+    final start = selection.start.clamp(0, len);
+    final end = selection.end.clamp(0, len);
+    if (end <= start) return const SizedBox.shrink();
+    final key = _verseKeyFor(ch, v);
+    final spans = _userData.spansFor(_profileId, _tKey, key);
+    HlColor? covering;
+    var overlaps = false;
+    for (final span in spans) {
+      final rs = span.start.clamp(0, len);
+      final re = span.end == -1 ? len : span.end.clamp(0, len);
+      if (rs < end && re > start) overlaps = true;
+      if (rs <= start && re >= end) covering = span.color;
+    }
+    final anchors = state.contextMenuAnchors;
+    final media = MediaQuery.sizeOf(menuContext);
+    // Layout budget at 360dp (lesson 37): five 48dp swatches,
+    // two 48dp icon actions, 8dp card padding each side = 352dp.
+    const barWidth = 352.0;
+    const barHeight = 64.0;
+    var left = anchors.primaryAnchor.dx - barWidth / 2;
+    if (left < 8) left = 8;
+    if (left > media.width - barWidth - 8) {
+      left = media.width - barWidth - 8;
+    }
+    var top = anchors.primaryAnchor.dy - barHeight - 12;
+    if (top < 8) {
+      top = (anchors.secondaryAnchor?.dy ?? anchors.primaryAnchor.dy) + 12;
+    }
+    return Stack(
+      children: [
+        Positioned(
+          left: left,
+          top: top,
+          child: Material(
+            color: WwColors.paper,
+            borderRadius: BorderRadius.circular(WwRadius.sheet),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                border: Border.all(color: WwColors.line),
+                borderRadius: BorderRadius.circular(WwRadius.sheet),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final color in HlColor.values)
+                    _swatch(
+                      color: color,
+                      active: covering == color,
+                      onTap: () => _applySelectionColor(
+                        state,
+                        key,
+                        verseText,
+                        start,
+                        end,
+                        color,
+                      ),
+                    ),
+                  _menuAction(
+                    icon: Icons.format_color_reset,
+                    label: 'Clear highlight on selected text',
+                    enabled: overlaps,
+                    onTap: () =>
+                        _clearSelection(state, key, verseText, start, end),
+                  ),
+                  _menuAction(
+                    icon: Icons.copy,
+                    label: 'Copy selected text',
+                    enabled: true,
+                    onTap: () {
+                      state.copySelection(SelectionChangedCause.toolbar);
+                      state.hideToolbar();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// One 48dp icon action of the selection bar, with its
+  /// semantics label as its name (lesson 25).
+  Widget _menuAction({
+    required IconData icon,
+    required String label,
+    required bool enabled,
+    required VoidCallback onTap,
+  }) {
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: enabled,
+      label: label,
+      child: ExcludeSemantics(
+        child: Material(
+          color: Colors.transparent,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: enabled ? onTap : null,
+            child: SizedBox(
+              width: WwSpace.minTarget,
+              height: WwSpace.minTarget,
+              child: Icon(
+                icon,
+                size: 20,
+                color: enabled ? WwColors.ink : WwColors.mutedOnPaper,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// A selection-bar color write: the exact selected span, in
+  /// the current translation's set. The menu hides first; the
+  /// generation bump then recreates the verse's selectable text,
+  /// collapsing the platform selection so the tint shows clean.
+  void _applySelectionColor(
+    EditableTextState state,
+    String key,
+    String verseText,
+    int start,
+    int end,
+    HlColor color,
+  ) {
+    state.hideToolbar();
+    setState(() {
+      _selGen++;
+      _selVerse = null;
+      _userData.applySpan(
+        _profileId,
+        _tKey,
+        HighlightSpan(
+          verseKey: key,
+          start: start,
+          end: end,
+          anchor: verseText.substring(start, end),
+          color: color,
+        ),
+        verseText: verseText,
+      );
+    });
+    _persistUserData();
+  }
+
+  /// The selection bar's Clear: only the selected range loses
+  /// coverage (the toolbar's None is the verse-wide clear).
+  void _clearSelection(
+    EditableTextState state,
+    String key,
+    String verseText,
+    int start,
+    int end,
+  ) {
+    state.hideToolbar();
+    setState(() {
+      _selGen++;
+      _selVerse = null;
+      _userData.clearSpanRange(
+        _profileId,
+        _tKey,
+        key,
+        start,
+        end,
+        verseText: verseText,
+      );
+    });
+    _persistUserData();
   }
 
   // --------------------------------------------------------------- toolbar
@@ -1827,8 +2172,9 @@ class ReaderScreenState extends State<ReaderScreen>
 
   Widget _toolbarActionsView(BibleData data, int ch, int v) {
     final key = _verseKeyFor(ch, v);
-    final currentHighlight = _userData.highlight(_profileId, key);
-    final currentNote = _userData.note(_profileId, key);
+    final currentHighlight = _userData.fullVerseColor(_profileId, _tKey, key);
+    final currentNote = _userData.note(_profileId, _tKey, key);
+    final verseText = _texts?.verseText(_effT, data, ch, v) ?? '';
     final connCount = data.verseConnections(ch, v).length;
     final narrow = MediaQuery.sizeOf(context).width < 344;
     return Column(
@@ -1870,14 +2216,15 @@ class ReaderScreenState extends State<ReaderScreen>
                   _swatch(
                     color: color,
                     active: color == currentHighlight,
-                    onTap: () => _applyHighlight(
+                    onTap: () => _applyVerseColor(
                       key,
+                      verseText,
                       color == currentHighlight ? null : color,
                     ),
                   ),
                 _noneSwatch(
-                  active: currentHighlight == null,
-                  onTap: () => _applyHighlight(key, null),
+                  active: _spansFor(ch, v).isEmpty,
+                  onTap: () => _applyVerseColor(key, verseText, null),
                 ),
               ],
             ),

@@ -156,8 +156,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
 
   Future<void> _delete(String id) async {
     final profile = _data.profiles[id];
-    final highlights = profile?.highlights.length ?? 0;
-    final notes = profile?.notes.length ?? 0;
+    final highlights = profile?.spanCount ?? 0;
+    final notes = profile?.noteCount ?? 0;
     final name = _data.profileName(id);
     final confirmed = await wwShowDialog<bool>(
       context: context,
@@ -276,7 +276,19 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       await _showImportError(BackupImportError.notJson);
       return;
     }
-    final result = UserDataStore.validateImport(source);
+    // Board run 10: a legacy backup (no per-translation sets)
+    // imports into the translation active at import — the same
+    // assignment rule as the in-place upgrade migration.
+    var legacyKey = translationKeyForLabel(null);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      legacyKey = translationKeyForLabel(prefs.getString(translationPrefsKey));
+    } catch (_) {}
+    if (!mounted) return;
+    final result = UserDataStore.validateImport(
+      source,
+      legacyTranslation: legacyKey,
+    );
     if (!mounted) return;
     final error = result.error;
     if (error != null) {
@@ -320,7 +332,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       'profiles',
     );
     final currentHighlights = _counted(
-      _data.totalHighlights,
+      _data.totalSpans,
       'highlight',
       'highlights',
     );
@@ -331,7 +343,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       'profiles',
     );
     final fileHighlights = _counted(
-      incoming.totalHighlights,
+      incoming.totalSpans,
       'highlight',
       'highlights',
     );
@@ -507,10 +519,11 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         const Text('Backup', style: WwType.selectionTitle),
         const SizedBox(height: 4),
         const Text(
-          'Export saves every profile, highlight, and note on this '
-          'device as one JSON file. Import replaces everything here '
-          'with the contents of a backup file. Nothing leaves this '
-          'device unless you export it.',
+          'Export saves every profile \u2014 with every '
+          'translation\u2019s highlights and notes \u2014 as one JSON '
+          'file. Import replaces everything here with the contents '
+          'of a backup file. Nothing leaves this device unless you '
+          'export it.',
           style: WwType.captionOnDark,
         ),
         const SizedBox(height: 16),
@@ -652,8 +665,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   }) {
     final name = _data.profileName(id);
     final profile = _data.profiles[id];
-    final highlights = profile?.highlights.length ?? 0;
-    final notes = profile?.notes.length ?? 0;
+    final highlights = profile?.spanCount ?? 0;
+    final notes = profile?.noteCount ?? 0;
     final counts = highlights == 0 && notes == 0
         ? 'No highlights or notes yet'
         : '$highlights ${highlights == 1 ? 'highlight' : 'highlights'} · '

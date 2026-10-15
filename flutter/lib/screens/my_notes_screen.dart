@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/bible_data.dart';
 import '../data/deuterocanon.dart';
 import '../data/scripture_text.dart';
+import '../data/tradition.dart';
 import '../data/user_data.dart';
 import '../theme/ww_theme.dart';
 import 'reader_screen.dart';
@@ -53,9 +54,18 @@ class MyNotesScreen extends StatefulWidget {
     this.onOpenVerse,
     this.deuteroLoader,
     this.textsLoader,
+    this.tradition = WwTradition.none,
   });
 
   final BibleData data;
+
+  /// The tradition the app currently presents (board run 10,
+  /// canon dormancy): notes whose book sits outside this
+  /// tradition's canon are dormant here — stored untouched,
+  /// hidden, and back when the tradition presents their book
+  /// again. The shell always passes its current tradition;
+  /// standalone pumps default to Bible only.
+  final WwTradition tradition;
 
   /// Opens a note's verse through the shell's one open-chapter
   /// procedure (board run 7 part B, §7.4): (bookIndex,
@@ -185,11 +195,13 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
       // builds the field. See _NoteEditorSheet.
       builder: (_) => _NoteEditorSheet(
         refLabel: refLabel,
-        initialText: _userData.note(_profileId, key) ?? '',
+        initialText: _userData.note(_profileId, _translation.name, key) ?? '',
         onSave: (text) {
           // UserData.setNote semantics (board run 4):
           // empty-after-trim removes the note.
-          setState(() => _userData.setNote(_profileId, key, text));
+          setState(
+            () => _userData.setNote(_profileId, _translation.name, key, text),
+          );
           _persist();
         },
       ),
@@ -230,7 +242,7 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    setState(() => _userData.setNote(_profileId, key, ''));
+    setState(() => _userData.setNote(_profileId, _translation.name, key, ''));
     _persist();
   }
 
@@ -282,23 +294,58 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
   }
 
   Widget _body() {
-    // Defensive: notes are written only for real chapters, but a
-    // hand-edited or corrupt store could hold a parseable key
-    // outside the canon — those rows cannot open anywhere, so
-    // they are filtered rather than crashing the list.
+    // Visibility (board run 10): the ACTIVE TRANSLATION's notes
+    // (per-translation sets — the founder's ruling), filtered to
+    // real canon positions, then by canon dormancy — a note whose
+    // book the current tradition does not present is dormant:
+    // stored untouched, hidden here, and back when the tradition
+    // presents its book again. Storage is never filtered.
     final notes = _userData
-        .notesFor(_profileId)
+        .notesFor(_profileId, _translation.name)
         .where(
-          (n) => notePositionInCanon(
-            widget.data,
-            n.book,
-            n.chapter,
-            n.verse,
-            deutero: _deutero,
-          ),
+          (n) =>
+              notePositionInCanon(
+                widget.data,
+                n.book,
+                n.chapter,
+                n.verse,
+                deutero: _deutero,
+              ) &&
+              canonContainsBook(widget.tradition, widget.data, n.book),
         )
         .toList();
     if (notes.isEmpty) {
+      // The profile holds notes — in other translations, or for
+      // books outside this canon — but none are visible here.
+      // Say so honestly; never claim the cupboard is bare.
+      if (_userData.noteCountFor(_profileId) > 0) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: WwSpace.screenMargin,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'No notes to show here',
+                  style: WwType.selectionTitle,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Notes are saved per translation and shown for the '
+                  'books in your current tradition. Notes saved in '
+                  'another translation, or for a book outside this '
+                  'canon, are kept and return when you switch back.',
+                  style: WwType.captionOnDark,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        );
+      }
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: WwSpace.screenMargin),
@@ -327,7 +374,8 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
       padding: const EdgeInsets.all(WwSpace.screenMargin),
       children: [
         Text(
-          'Notes in ${_userData.profileName(_profileId)}',
+          'Notes in ${_userData.profileName(_profileId)} · '
+          '${_translation.label}',
           style: WwType.captionOnDark,
         ),
         const SizedBox(height: 16),

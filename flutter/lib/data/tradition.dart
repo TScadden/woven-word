@@ -1,4 +1,5 @@
 import 'bible_data.dart';
+import 'deuterocanon.dart';
 import 'scripture_text.dart';
 
 /// The founder's tradition selection (board run 9): "you clicking
@@ -173,4 +174,24 @@ class CanonView {
       if (nt.isNotEmpty) CanonSection('New Testament', nt),
     ]);
   }
+}
+
+/// Canon dormancy (founder clarification, Oct 15, 2026): whether
+/// [bookIndex] is in the canon [tradition] presents. This is a
+/// VIEW predicate only — tradition is never a data scope. A
+/// highlight or note whose book fails this predicate (or whose
+/// translation set is not the active one) is dormant: stored
+/// untouched, invisible, and restored exactly when the conditions
+/// hold again. Core books defer to the tradition's [CanonView];
+/// deuterocanon indices (≥ [DeuteroBook.bookIndexBase]) belong to
+/// the Catholic canon only.
+bool canonContainsBook(
+  WwTradition tradition,
+  BibleData data,
+  int bookIndex,
+) {
+  if (bookIndex >= DeuteroBook.bookIndexBase) {
+    return tradition == WwTradition.catholic;
+  }
+  return CanonView.forTradition(tradition, data).nameFor(bookIndex) != null;
 }

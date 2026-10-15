@@ -304,6 +304,12 @@ class ShellController extends ChangeNotifier
   int activeScreenIndex = 0;
   int? selection;
   UserData userData = UserData();
+
+  /// The stored translation choice, refreshed at load (board
+  /// run 10): the Home notes count and My Notes show the active
+  /// translation's set, so the shell reads the reader's
+  /// preference alongside its own.
+  WwTranslation translation = WwTranslation.kjv;
   bool readerOpen = false;
   int _nextScreenId = 2;
 
@@ -358,6 +364,11 @@ class ShellController extends ChangeNotifier
       }
       conferenceEnabled = tradition == WwTradition.lds;
       unawaited(_kickTraditionLoads());
+      // The reader's translation choice (board run 10): read for
+      // the Home notes count's per-translation visibility.
+      translation = WwTranslation.fromStored(
+        prefs.getString(translationPrefsKey),
+      );
       // The deuterocanon table loads under every tradition (the
       // Home notes count and My Notes count its notes wherever
       // they were written).
@@ -986,6 +997,7 @@ class ShellController extends ChangeNotifier
       WwPageRoute(
         builder: (_) => MyNotesScreen(
           data: d,
+          tradition: tradition,
           textsLoader: textsLoader,
           deuteroLoader: () async {
             await ensureDeuteroLoaded();
@@ -1181,16 +1193,22 @@ class _WwShellState extends State<WwShell> {
     }
     var notesCount = 0;
     if (d != null) {
+      // The My Notes card counts what My Notes would show (board
+      // run 10): the active translation's notes, in positions the
+      // canon carries, whose books the current tradition presents
+      // — dormant notes are stored, never counted here.
       notesCount = _ctl.userData
-          .notesFor(_ctl.userData.activeProfileId)
+          .notesFor(_ctl.userData.activeProfileId, _ctl.translation.name)
           .where(
-            (n) => notePositionInCanon(
-              d,
-              n.book,
-              n.chapter,
-              n.verse,
-              deutero: _ctl.deuterocanonData,
-            ),
+            (n) =>
+                notePositionInCanon(
+                  d,
+                  n.book,
+                  n.chapter,
+                  n.verse,
+                  deutero: _ctl.deuterocanonData,
+                ) &&
+                canonContainsBook(_ctl.tradition, d, n.book),
           )
           .length;
     }

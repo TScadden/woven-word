@@ -689,6 +689,16 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
   (int, int)? _selected; // (chapterInBook, verse)
   final Map<String, GlobalKey> _verseKeys = {};
 
+  // Text selection (board run 10): selection is a MODE, entered
+  // by long-press — only the verse in selection mode renders as
+  // a SelectableText (an always-on one would claim the pager's
+  // horizontal swipes on Android). _selGen is bumped on every
+  // selection-bar write so the verse's SelectableText is
+  // recreated and the platform selection collapses onto the
+  // applied tint.
+  (int, int)? _selVerse;
+  int _selGen = 0;
+
   @override
   void initState() {
     super.initState();
@@ -770,19 +780,61 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
   }
 
   void _select(int chapterInBook, int verse) {
-    setState(
-      () => _selected = _selected == (chapterInBook, verse)
+    // A tap on the verse in selection mode leaves the mode and
+    // does nothing else (board run 10); a tap elsewhere clears
+    // the mode and proceeds as the shipped tap.
+    if (_selVerse == (chapterInBook, verse)) {
+      setState(() => _selVerse = null);
+      return;
+    }
+    setState(() {
+      _selVerse = null;
+      _selected = _selected == (chapterInBook, verse)
           ? null
-          : (chapterInBook, verse),
-    );
+          : (chapterInBook, verse);
+    });
   }
 
+  /// Long-press enters selection mode for the verse; the action
+  /// bar closes (the selection bar is the surface while
+  /// selecting).
+  void _enterSelection(int chapterInBook, int verse) {
+    setState(() {
+      _selected = null;
+      _selVerse = (chapterInBook, verse);
+    });
+  }
+
+  /// The action bar's color write (board run 10): a full-verse
+  /// span in the `webc` set — the only text this reader renders.
+  /// A null color (None) clears all of the verse's spans.
   Future<void> _setHighlight(HlColor? color) async {
     final sel = _selected;
     final store = _store;
     if (sel == null || store == null) return;
     final key = verseKey(widget.book.bookIndex, sel.$1, sel.$2);
-    store.data.setHighlight(_profileId, key, color);
+    final verses =
+        _texts?.extraChapterVerses(widget.book.slug, sel.$1) ??
+        const <String>[];
+    final text = (sel.$2 >= 1 && sel.$2 <= verses.length)
+        ? verses[sel.$2 - 1]
+        : '';
+    if (color == null) {
+      store.data.clearVerseSpans(_profileId, 'webc', key);
+    } else {
+      store.data.applySpan(
+        _profileId,
+        'webc',
+        HighlightSpan(
+          verseKey: key,
+          start: 0,
+          end: -1,
+          anchor: text,
+          color: color,
+        ),
+        verseText: text,
+      );
+    }
     await store.save();
     if (mounted) setState(() {});
   }
@@ -802,12 +854,12 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
       ),
       builder: (_) => _DeuteroNoteEditor(
         title: widget.deutero.refLabel(widget.book.bookIndex, sel.$1, sel.$2),
-        initial: store.data.note(_profileId, key) ?? '',
+        initial: store.data.note(_profileId, 'webc', key) ?? '',
       ),
     );
     if (saved == null || !mounted) return;
     // UserData.setNote semantics: empty-after-trim removes.
-    store.data.setNote(_profileId, key, saved);
+    store.data.setNote(_profileId, 'webc', key, saved);
     await store.save();
     if (mounted) setState(() {});
   }
@@ -822,16 +874,26 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
           children: [
             _topBar(),
             Expanded(
-              child: PageView.builder(
-                controller: _pager,
-                itemCount: book.chapters,
-                onPageChanged: (page) {
-                  setState(() {
-                    _currentChapter = page + 1;
-                    _selected = null;
-                  });
-                },
-                itemBuilder: (context, page) => _chapterPage(page + 1),
+              child: TextSelectionTheme(
+                // Spec §3.4 (board run 10): the core reader's
+                // selection chrome, identical values.
+                data: TextSelectionThemeData(
+                  selectionColor: WwColors.hlGold.withValues(alpha: 0.50),
+                  selectionHandleColor: WwColors.goldTextOnPaper,
+                  cursorColor: WwColors.goldTextOnPaper,
+                ),
+                child: PageView.builder(
+                  controller: _pager,
+                  itemCount: book.chapters,
+                  onPageChanged: (page) {
+                    setState(() {
+                      _currentChapter = page + 1;
+                      _selected = null;
+                      _selVerse = null;
+                    });
+                  },
+                  itemBuilder: (context, page) => _chapterPage(page + 1),
+                ),
               ),
             ),
             if (_selected != null && _selected!.$1 == _currentChapter)
@@ -882,8 +944,8 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
     final sel = _selected!;
     final key = verseKey(widget.book.bookIndex, sel.$1, sel.$2);
     final store = _store;
-    final current = store?.data.highlight(_profileId, key);
-    final hasNote = store?.data.note(_profileId, key) != null;
+    final current = store?.data.fullVerseColor(_profileId, 'webc', key);
+    final hasNote = store?.data.note(_profileId, 'webc', key) != null;
     final children = <Widget>[];
     for (final color in HlColor.values) {
       final name = switch (color) {
@@ -1084,8 +1146,13 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
   Widget _verseBlock(int chapterInBook, int verse, String text) {
     final store = _store;
     final key = verseKey(widget.book.bookIndex, chapterInBook, verse);
-    final hl = store?.data.highlight(_profileId, key);
-    final hasNote = store?.data.note(_profileId, key) != null;
+    // Board run 10: spans in the webc set (the only text here).
+    final spans =
+        store?.data.spansFor(_profileId, 'webc', key) ??
+        const <HighlightSpan>[];
+    final fullColor = store?.data.fullVerseColor(_profileId, 'webc', key);
+    final hl = fullColor ?? (spans.isNotEmpty ? spans.first.color : null);
+    final hasNote = store?.data.note(_profileId, 'webc', key) != null;
     final selected = _selected == (chapterInBook, verse);
     var bg = Colors.transparent;
     if (selected) {
@@ -1094,10 +1161,10 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
       // icon and the 2dp outline keep their 3.0+ inside adjacency.
       bg = Color.alphaBlend(
         WwColors.hlGold.withValues(alpha: 0.45),
-        hl != null ? _tintFor(hl) : WwColors.paper,
+        fullColor != null ? _tintFor(fullColor) : WwColors.paper,
       );
-    } else if (hl != null) {
-      bg = _tintFor(hl);
+    } else if (fullColor != null) {
+      bg = _tintFor(fullColor);
     }
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: WwSpace.screenMargin),
@@ -1124,6 +1191,7 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
           child: InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: () => _select(chapterInBook, verse),
+            onLongPress: () => _enterSelection(chapterInBook, verse),
             child: ExcludeSemantics(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -1136,7 +1204,7 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
                         children: [
                           Text(
                             '$verse',
-                            style: hl != null || selected
+                            style: spans.isNotEmpty || selected
                                 ? WwType.verseNumberInk
                                 : WwType.verseNumber,
                             textAlign: TextAlign.center,
@@ -1150,7 +1218,39 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
                         ],
                       ),
                     ),
-                    Expanded(child: Text(text, style: WwType.readerBody)),
+                    Expanded(
+                      // Board run 10: in selection mode the verse
+                      // text is a SelectableText — drag or
+                      // long-press takes the exact words and the
+                      // selection bar colors the span. Outside the
+                      // mode it is the shipped plain Text.
+                      child: _selVerse == (chapterInBook, verse)
+                          ? SelectableText.rich(
+                              TextSpan(
+                                children: _segments(
+                                  text,
+                                  spans,
+                                  suppressBg: fullColor != null,
+                                ),
+                              ),
+                              key: ValueKey(
+                                'dtext-$chapterInBook-$verse-$_selGen',
+                              ),
+                              style: WwType.readerBody,
+                              contextMenuBuilder: (menuContext, state) =>
+                                  _selectionMenu(menuContext, state, key, text),
+                            )
+                          : Text.rich(
+                              TextSpan(
+                                children: _segments(
+                                  text,
+                                  spans,
+                                  suppressBg: fullColor != null,
+                                ),
+                              ),
+                              style: WwType.readerBody,
+                            ),
+                    ),
                   ],
                 ),
               ),
@@ -1159,6 +1259,242 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
         ),
       ),
     );
+  }
+
+  /// The verse text as segments (board run 10, spec §3.1): the
+  /// core reader's disjoint span walk.
+  List<TextSpan> _segments(
+    String text,
+    List<HighlightSpan> spans, {
+    required bool suppressBg,
+  }) {
+    if (suppressBg || spans.isEmpty) return [TextSpan(text: text)];
+    final out = <TextSpan>[];
+    var cursor = 0;
+    for (final span in spans) {
+      final s = span.start.clamp(0, text.length);
+      final e = (span.end == -1 ? text.length : span.end).clamp(0, text.length);
+      if (e <= s) continue;
+      if (s > cursor) out.add(TextSpan(text: text.substring(cursor, s)));
+      out.add(
+        TextSpan(
+          text: text.substring(s, e),
+          style: TextStyle(backgroundColor: _tintFor(span.color)),
+        ),
+      );
+      cursor = e;
+    }
+    if (cursor < text.length) out.add(TextSpan(text: text.substring(cursor)));
+    if (out.isEmpty) out.add(TextSpan(text: text));
+    return out;
+  }
+
+  /// The selection action bar (board run 10, spec §2.2): the core
+  /// reader's paper card — five swatches, Clear (selection range
+  /// only), Copy — writing spans in the webc set.
+  Widget _selectionMenu(
+    BuildContext menuContext,
+    EditableTextState state,
+    String key,
+    String verseText,
+  ) {
+    final selection = state.currentTextEditingValue.selection;
+    if (!selection.isValid || selection.isCollapsed) {
+      return const SizedBox.shrink();
+    }
+    final len = verseText.length;
+    final start = selection.start.clamp(0, len);
+    final end = selection.end.clamp(0, len);
+    if (end <= start) return const SizedBox.shrink();
+    final store = _store;
+    final spans =
+        store?.data.spansFor(_profileId, 'webc', key) ??
+        const <HighlightSpan>[];
+    HlColor? covering;
+    var overlaps = false;
+    for (final span in spans) {
+      final rs = span.start.clamp(0, len);
+      final re = span.end == -1 ? len : span.end.clamp(0, len);
+      if (rs < end && re > start) overlaps = true;
+      if (rs <= start && re >= end) covering = span.color;
+    }
+    final anchors = state.contextMenuAnchors;
+    final media = MediaQuery.sizeOf(menuContext);
+    const barWidth = 352.0;
+    const barHeight = 64.0;
+    var left = anchors.primaryAnchor.dx - barWidth / 2;
+    if (left < 8) left = 8;
+    if (left > media.width - barWidth - 8) {
+      left = media.width - barWidth - 8;
+    }
+    var top = anchors.primaryAnchor.dy - barHeight - 12;
+    if (top < 8) {
+      top = (anchors.secondaryAnchor?.dy ?? anchors.primaryAnchor.dy) + 12;
+    }
+
+    Widget swatch(HlColor color, String name) {
+      final active = covering == color;
+      return Semantics(
+        container: true,
+        button: true,
+        selected: active,
+        label: '$name highlight',
+        child: ExcludeSemantics(
+          child: InkWell(
+            onTap: store == null
+                ? null
+                : () => _applySelectionSpan(
+                    state,
+                    key,
+                    verseText,
+                    start,
+                    end,
+                    color,
+                  ),
+            customBorder: const CircleBorder(),
+            child: SizedBox(
+              width: WwSpace.minTarget,
+              height: WwSpace.minTarget,
+              child: Center(
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: _tintFor(color),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: active
+                          ? WwColors.goldTextOnPaper
+                          : WwColors.mutedOnPaper,
+                      width: active ? 2 : 1,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget action(IconData icon, String label, bool enabled, VoidCallback fn) {
+      return Semantics(
+        container: true,
+        button: true,
+        enabled: enabled,
+        label: label,
+        child: ExcludeSemantics(
+          child: Material(
+            color: Colors.transparent,
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: enabled ? fn : null,
+              child: SizedBox(
+                width: WwSpace.minTarget,
+                height: WwSpace.minTarget,
+                child: Icon(
+                  icon,
+                  size: 20,
+                  color: enabled ? WwColors.ink : WwColors.mutedOnPaper,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Stack(
+      children: [
+        Positioned(
+          left: left,
+          top: top,
+          child: Material(
+            color: WwColors.paper,
+            borderRadius: BorderRadius.circular(WwRadius.sheet),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                border: Border.all(color: WwColors.line),
+                borderRadius: BorderRadius.circular(WwRadius.sheet),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  swatch(HlColor.gold, 'Gold'),
+                  swatch(HlColor.green, 'Green'),
+                  swatch(HlColor.blue, 'Blue'),
+                  swatch(HlColor.pink, 'Pink'),
+                  swatch(HlColor.purple, 'Purple'),
+                  action(
+                    Icons.format_color_reset,
+                    'Clear highlight on selected text',
+                    overlaps,
+                    () => _applySelectionSpan(
+                      state,
+                      key,
+                      verseText,
+                      start,
+                      end,
+                      null,
+                    ),
+                  ),
+                  action(Icons.copy, 'Copy selected text', true, () {
+                    state.copySelection(SelectionChangedCause.toolbar);
+                    state.hideToolbar();
+                  }),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// A deutero selection-bar write: [color] null clears the
+  /// selected range. The menu hides first; the generation bump
+  /// collapses the platform selection onto the applied tint.
+  void _applySelectionSpan(
+    EditableTextState state,
+    String key,
+    String verseText,
+    int start,
+    int end,
+    HlColor? color,
+  ) {
+    state.hideToolbar();
+    final store = _store;
+    if (store == null) return;
+    setState(() {
+      _selGen++;
+      _selVerse = null;
+      if (color == null) {
+        store.data.clearSpanRange(
+          _profileId,
+          'webc',
+          key,
+          start,
+          end,
+          verseText: verseText,
+        );
+      } else {
+        store.data.applySpan(
+          _profileId,
+          'webc',
+          HighlightSpan(
+            verseKey: key,
+            start: start,
+            end: end,
+            anchor: verseText.substring(start, end),
+            color: color,
+          ),
+          verseText: verseText,
+        );
+      }
+    });
+    store.save();
   }
 }
 
@@ -1235,9 +1571,7 @@ class _DeuteroNoteEditorState extends State<_DeuteroNoteEditor> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(WwRadius.input),
-                borderSide: const BorderSide(
-                  color: WwColors.goldTextOnPaper,
-                ),
+                borderSide: const BorderSide(color: WwColors.goldTextOnPaper),
               ),
             ),
           ),

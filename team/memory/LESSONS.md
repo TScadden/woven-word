@@ -402,3 +402,28 @@ rounds Rusty ran before the studio was founded).
     run the failing file on the untouched tree in the same
     environment — and never ship a "suite green" claim that
     hides a baseline failure inside it.
+
+## Ambient color & raster bounds (arch-ambient package, Oct 15, 2026)
+
+42. **Clamp each stroke's luminance and convex compositing bounds
+    the whole field — in full color.** The fix round bounded the
+    ambient web by construction with ONE color (lesson 31). The
+    founder then asked for the original's rainbow back, dimmer:
+    the same construction generalizes. srcOver over black is a
+    convex combination of the stroke colors, and luminance of a
+    convex combination cannot exceed the brightest stroke's — so
+    clamping every distance-sweep color to the cap
+    (`ambientLuminanceCap` 0.216) bounds every pixel, whatever
+    hues stack. Measured at Home parameters: mean 0.079974,
+    p99 0.173455, max 0.213268, 0% above 0.9 — inside the gold
+    render's envelope (0.103 / 0.196 / 0.216), with the full
+    palette restored. BUT the float bound is not the raster
+    bound: 8-bit premultiplied rounding across thousands of
+    draws drifted 31 of 420,000 pixels +0.0052 past an exact-cap
+    target. The clamp therefore targets cap − guard
+    (`_ambientRasterGuard` 0.008), the guard sized from the
+    MEASURED drift, never guessed; the gate corroborated the
+    same 31-pixel population sitting over the target and zero
+    over the cap. Rule: bound by construction, then measure the
+    raster's drift against the bound and guard for the drift
+    you measured.

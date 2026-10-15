@@ -3,15 +3,19 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../data/bible_data.dart';
+import '../data/plans.dart';
 import '../data/user_data.dart';
+import '../data/verse_of_day.dart';
 import '../theme/ww_theme.dart';
 import '../widgets/arc_stage.dart';
 
 /// The Home tab's root (board run 7 part B, §2): top bar with the
 /// profile chip, the pinned arc mini-map (display only), and a
-/// scroll area holding the resume card, the selection panel, and
-/// the Study section. The scope dropdown is retired — the map's
-/// range derives from the selection (§2.2).
+/// scroll area holding, in order (board run 11, §1): Continue
+/// reading, the selection panel, Verse of the Day, Study Plans,
+/// and Study Tools. The scope dropdown is retired — the map's
+/// range derives from the selection (§2.2). HomeTab renders the
+/// values it is handed; the shell computes them (§7.1).
 class HomeTab extends StatefulWidget {
   const HomeTab({
     super.key,
@@ -21,11 +25,17 @@ class HomeTab extends StatefulWidget {
     required this.resumeBound,
     required this.resumeSubtitle,
     required this.notesCount,
+    required this.verseOfDay,
+    required this.plans,
+    required this.highlightsCount,
     required this.onOpenChapter,
     required this.onClearSelection,
     required this.onResume,
     required this.onOpenProfiles,
     required this.onOpenMyNotes,
+    required this.onOpenVerseOfDay,
+    required this.onOpenPlan,
+    required this.onOpenHighlights,
     required this.onRetryLoad,
   });
 
@@ -35,11 +45,26 @@ class HomeTab extends StatefulWidget {
   final bool resumeBound;
   final String resumeSubtitle;
   final int notesCount;
+
+  /// The Verse of the Day card's data (§3.3); null = no card.
+  final VerseOfDayCardData? verseOfDay;
+
+  /// Offered plans only, in definition order (§7.1); empty = no
+  /// Study Plans section.
+  final List<PlanCardData> plans;
+
+  /// The visible span count behind the Highlights tool caption
+  /// (§5): exactly the rows the All Highlights tap reveals.
+  final int highlightsCount;
+
   final void Function(int ch) onOpenChapter;
   final VoidCallback onClearSelection;
   final VoidCallback onResume;
   final VoidCallback onOpenProfiles;
   final VoidCallback onOpenMyNotes;
+  final void Function(int chapter, int verse) onOpenVerseOfDay;
+  final void Function(String planId) onOpenPlan;
+  final VoidCallback onOpenHighlights;
   final VoidCallback onRetryLoad;
 
   @override
@@ -170,8 +195,9 @@ class HomeTabState extends State<HomeTab> {
   }
 
   Widget _topBar() {
-    final profileName =
-        widget.userData.profileName(widget.userData.activeProfileId);
+    final profileName = widget.userData.profileName(
+      widget.userData.activeProfileId,
+    );
     final initial = profileName.trim().isEmpty
         ? '?'
         : profileName.trim()[0].toUpperCase();
@@ -310,8 +336,16 @@ class HomeTabState extends State<HomeTab> {
           const SizedBox(height: 16),
           _selectionPanel(data),
         ],
+        if (widget.verseOfDay != null) ...[
+          const SizedBox(height: 16),
+          _verseOfDayCard(),
+        ],
+        if (widget.plans.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _plansSection(data),
+        ],
         const SizedBox(height: 16),
-        _studySection(),
+        _toolsSection(),
         const SizedBox(height: 24),
       ],
     );
@@ -376,28 +410,360 @@ class HomeTabState extends State<HomeTab> {
     );
   }
 
-  Widget _studySection() {
-    final count = widget.notesCount;
-    final subtitle = count == 0
-        ? 'No notes yet'
-        : count == 1
-        ? '1 note'
-        : '$count notes';
+  // ------------------------------------------------ Verse of the Day
+
+  /// The Verse of the Day card (run 11, §3.4): the whole card is
+  /// the one tap target, opening the reader at the pick via the
+  /// shell's callback. While the texts load (or after they fail)
+  /// the label, reference, and count render as usual and the
+  /// verse-text slot carries the pinned loading/failure string.
+  Widget _verseOfDayCard() {
+    final vod = widget.verseOfDay!;
+    final hasText = vod.text != null && vod.text!.isNotEmpty;
+    final bodyText = vod.text == null
+        ? "Loading today's verse…"
+        : vod.text!.isEmpty
+        ? "Today's verse text could not be loaded."
+        : vod.text!;
+    final countCaption = vod.connectionCount == 1
+        ? '1 connection'
+        : '${_fmt(vod.connectionCount)} connections';
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: WwSpace.screenMargin),
+      child: Semantics(
+        container: true,
+        button: true,
+        label: 'Verse of the Day, ${vod.reference}',
+        child: ExcludeSemantics(
+          child: Material(
+            key: const ValueKey('votd-card'),
+            color: WwColors.surface,
+            borderRadius: BorderRadius.circular(WwRadius.row),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(WwRadius.row),
+              onTap: () => widget.onOpenVerseOfDay(vod.chapter, vod.verse),
+              child: Container(
+                padding: const EdgeInsets.all(WwSpace.screenMargin),
+                width: double.infinity,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('VERSE OF THE DAY', style: WwType.appSubtitle),
+                    const SizedBox(height: 8),
+                    Text(
+                      bodyText,
+                      style: hasText
+                          ? WwType.verseOfDayBody
+                          : WwType.captionOnDark,
+                      textDirection: hasText && vod.translation.isRtl
+                          ? TextDirection.rtl
+                          : null,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(vod.reference, style: WwType.refLabelOnDark),
+                    const SizedBox(height: 4),
+                    Text(countCaption, style: WwType.captionOnDark),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ------------------------------------------------------ Study Plans
+
+  Widget _plansSection(BibleData data) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: WwSpace.screenMargin),
-          child: Text('STUDY', style: WwType.appSubtitle),
+          child: Text('STUDY PLANS', style: WwType.appSubtitle),
         ),
         const SizedBox(height: 16),
-        _placeRow(
-          icon: Icons.notes,
-          title: 'My Notes',
-          subtitle: subtitle,
-          onTap: widget.onOpenMyNotes,
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: WwSpace.screenMargin),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < widget.plans.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 12),
+                  _planCard(data, widget.plans[i]),
+                ],
+              ],
+            ),
+          ),
         ),
       ],
+    );
+  }
+
+  /// One plan card (run 11, §4.4): a typographic cover (no
+  /// artwork), the title and caption under it, and — only when
+  /// the plan is started — the progress bar across the cover's
+  /// bottom edge. The whole card is one tap target.
+  Widget _planCard(BibleData data, PlanCardData card) {
+    final def = card.def;
+    final caption = !card.started
+        ? '${def.days} days · ${_fmt(card.totalChapters)} chapters'
+        : card.doneCount == card.totalChapters
+        ? 'Complete · 100%'
+        : 'Day ${card.currentDay} of ${def.days} · ${card.percent}%';
+    final List<String> bookLines;
+    if (def.bookIndices == null) {
+      bookLines = [data.books.first.name, '…', data.books.last.name];
+    } else {
+      bookLines = [for (final b in def.bookIndices!) data.books[b].name];
+    }
+    return Semantics(
+      container: true,
+      button: true,
+      label: '${def.name}, $caption',
+      child: ExcludeSemantics(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(WwRadius.row),
+            onTap: () => widget.onOpenPlan(def.id),
+            child: SizedBox(
+              width: 112,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // The cover is fixed-geometry artwork (112 × 144,
+                  // §4.4/§10): its book lines and meta are set in
+                  // the cover's own scale, clamped at 1.0, because
+                  // at text scale 2.0 four serif lines at the
+                  // ambient 1.43 height measure ~149dp against the
+                  // cover's 118dp inner height and overflow the
+                  // pinned box (§10's no-overflow rule). The plan
+                  // name and caption directly beneath the cover
+                  // carry the same words at the user's full scale.
+                  MediaQuery(
+                    data: MediaQuery.of(context).copyWith(
+                      textScaler: MediaQuery.of(context).textScaler
+                          .clamp(maxScaleFactor: 1.0),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(WwRadius.row),
+                      child: Stack(
+                        children: [
+                          Container(
+                            key: ValueKey('plan-cover-${def.id}'),
+                            width: 112,
+                            height: 144,
+                            decoration: BoxDecoration(
+                              color: WwColors.surfaceHigh,
+                              border: Border.all(color: WwColors.borderDark),
+                              borderRadius: BorderRadius.circular(WwRadius.row),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 24,
+                                    height: 2,
+                                    color: WwColors.gold,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  for (final line in bookLines)
+                                    Text(
+                                      line,
+                                      style: WwType.planCoverBook,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  const Expanded(child: SizedBox()),
+                                  Text(
+                                    '${_fmt(card.totalChapters)} chapters',
+                                    style: WwType.planCoverMeta,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          if (card.started)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              height: 4,
+                              child: Container(
+                                key: ValueKey('plan-progress-${def.id}'),
+                                child: Stack(
+                                  children: [
+                                    Container(color: WwColors.borderDark),
+                                    SizedBox(
+                                      width:
+                                          112 *
+                                          card.doneCount /
+                                          card.totalChapters,
+                                      height: 4,
+                                      child: Container(
+                                        color: WwColors.goldBright,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    def.name,
+                    style: WwType.controlLabel.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    caption,
+                    style: WwType.captionOnDark,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ------------------------------------------------------ Study Tools
+
+  Widget _toolsSection() {
+    final notes = widget.notesCount;
+    final notesCaption = notes == 0
+        ? 'No notes yet'
+        : notes == 1
+        ? '1 note'
+        : '$notes notes';
+    final highlights = widget.highlightsCount;
+    final highlightsCaption = highlights == 0
+        ? 'No highlights yet'
+        : highlights == 1
+        ? '1 highlight'
+        : '$highlights highlights';
+    final profileName = widget.userData.profileName(
+      widget.userData.activeProfileId,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: WwSpace.screenMargin),
+          child: Text('STUDY TOOLS', style: WwType.appSubtitle),
+        ),
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: WwSpace.screenMargin),
+          child: Material(
+            color: WwColors.surface,
+            borderRadius: BorderRadius.circular(WwRadius.row),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _toolEntry(
+                    key: const ValueKey('tool-my-notes'),
+                    icon: Icons.notes,
+                    label: 'My Notes',
+                    caption: notesCaption,
+                    onTap: widget.onOpenMyNotes,
+                  ),
+                  _toolEntry(
+                    key: const ValueKey('tool-highlights'),
+                    icon: Icons.highlight,
+                    label: 'Highlights',
+                    caption: highlightsCaption,
+                    onTap: widget.onOpenHighlights,
+                  ),
+                  _toolEntry(
+                    key: const ValueKey('tool-profiles'),
+                    icon: Icons.person_outline,
+                    label: 'Profiles',
+                    caption: profileName,
+                    captionMaxLines: 1,
+                    onTap: widget.onOpenProfiles,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// One Study Tools entry (run 11, §5): icon over label over
+  /// caption, centered in its third of the card; the entry's hit
+  /// area is its full column.
+  Widget _toolEntry({
+    required ValueKey<String> key,
+    required IconData icon,
+    required String label,
+    required String caption,
+    required VoidCallback onTap,
+    int captionMaxLines = 2,
+  }) {
+    return Expanded(
+      child: Semantics(
+        container: true,
+        button: true,
+        label: '$label, $caption',
+        child: ExcludeSemantics(
+          child: InkWell(
+            key: key,
+            borderRadius: BorderRadius.circular(WwRadius.row),
+            onTap: onTap,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 24, color: WwColors.goldBright),
+                  const SizedBox(height: 4),
+                  Text(
+                    label,
+                    style: WwType.controlLabel.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    caption,
+                    style: WwType.captionOnDark,
+                    textAlign: TextAlign.center,
+                    maxLines: captionMaxLines,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 

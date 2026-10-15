@@ -9,16 +9,21 @@ import '../data/bible_data.dart';
 import '../data/confession_data.dart';
 import '../data/conference_data.dart';
 import '../data/deuterocanon.dart';
+import '../data/highlights_index.dart';
+import '../data/plans.dart';
 import '../data/screen_state.dart';
 import '../data/scripture_text.dart';
 import '../data/sefaria_data.dart';
 import '../data/tradition.dart';
 import '../data/user_data.dart';
+import '../data/verse_of_day.dart';
 import '../theme/ww_theme.dart';
+import 'all_highlights_screen.dart';
 import 'conference_screens.dart';
 import 'home_tab.dart';
 import 'library_tab.dart';
 import 'my_notes_screen.dart';
+import 'plan_detail_screen.dart';
 import 'profiles_screen.dart';
 import 'reader_screen.dart';
 import 'screens_tab.dart';
@@ -85,6 +90,19 @@ class ShellController extends ChangeNotifier
           _loadPrefs();
         })
         .catchError((_) {});
+    // The memoized texts future for the Home Verse of the Day
+    // card (board run 11, §7.2): resolution stores the texts (or
+    // records the failure) and notifies; never throws into the UI.
+    _textsFuture = (textsLoader ?? ScriptureText.load)();
+    _textsFuture!
+        .then((t) {
+          _texts = t;
+          notifyListeners();
+        })
+        .catchError((_) {
+          _textsFailed = true;
+          notifyListeners();
+        });
     _loadUserData();
   }
 
@@ -305,6 +323,36 @@ class ShellController extends ChangeNotifier
   int? selection;
   UserData userData = UserData();
 
+  // ------------------------------------------------- home study (run 11)
+
+  /// The shell's memoized scripture-texts load (§7.2), feeding
+  /// the Verse of the Day card's text.
+  Future<ScriptureText>? _textsFuture;
+  ScriptureText? _texts;
+  bool _textsFailed = false;
+
+  /// The Verse of the Day pool cache (§3.1): rebuilt lazily when
+  /// the data or tradition differs from the cached pair, reused
+  /// otherwise.
+  List<VerseOfDayPick>? _votdPool;
+  WwTradition? _votdPoolTradition;
+
+  /// The plans store snapshot behind the Home cards (§7.2). The
+  /// plan detail screen loads its own instance; this snapshot is
+  /// reloaded after every plan-detail pop (§7.3).
+  PlansStore? _plansStore;
+
+  /// Loads (or reloads) the plans snapshot. Failure leaves an
+  /// empty snapshot (Home renders not-started cards), never a
+  /// crash.
+  Future<void> _loadPlans() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _plansStore = await PlansStore.load(prefs);
+      notifyListeners();
+    } catch (_) {}
+  }
+
   /// The stored translation choice, refreshed at load (board
   /// run 10): the Home notes count and My Notes show the active
   /// translation's set, so the shell reads the reader's
@@ -392,6 +440,9 @@ class ShellController extends ChangeNotifier
       userData = store.data;
       notifyListeners();
     } catch (_) {}
+    // The Home plan cards key off the active profile; the plans
+    // snapshot follows the user data (§7.2).
+    await _loadPlans();
   }
 
   @override
@@ -989,6 +1040,22 @@ class ShellController extends ChangeNotifier
     _loadUserData();
   }
 
+  /// The one list-to-reader verse routing (run 11, §7.3), shared
+  /// by My Notes and All Highlights: deuterocanon verses route
+  /// to the deuterocanon reader on the HOME stack; core verses
+  /// go through the §7.4 one open-chapter procedure.
+  void _openVerseFromList(int book, int chapterInBook, int verse) {
+    if (book >= DeuteroBook.bookIndexBase) {
+      final dBook = deuterocanonData?.byBookIndex(book);
+      if (dBook != null) {
+        _openDeuteroReader(homeNavKey, dBook, chapterInBook, verse);
+      }
+      return;
+    }
+    final global = data!.books[book].start + chapterInBook - 1;
+    openChapter(global, verse: verse);
+  }
+
   Future<void> _openMyNotes() async {
     final d = data;
     final nav = homeNavKey.currentState;
@@ -1003,21 +1070,55 @@ class ShellController extends ChangeNotifier
             await ensureDeuteroLoaded();
             return deuterocanonData;
           },
-          onOpenVerse: (book, chapterInBook, verse) {
-            if (book >= DeuteroBook.bookIndexBase) {
-              final dBook = deuterocanonData?.byBookIndex(book);
-              if (dBook != null) {
-                _openDeuteroReader(homeNavKey, dBook, chapterInBook, verse);
-              }
-              return;
-            }
-            final global = d.books[book].start + chapterInBook - 1;
-            openChapter(global, verse: verse);
-          },
+          onOpenVerse: _openVerseFromList,
         ),
       ),
     );
     _loadUserData();
+  }
+
+  Future<void> _openAllHighlights() async {
+    final d = data;
+    final nav = homeNavKey.currentState;
+    if (d == null || nav == null) return;
+    await nav.push(
+      WwPageRoute(
+        builder: (_) => AllHighlightsScreen(
+          data: d,
+          tradition: tradition,
+          textsLoader: textsLoader,
+          deuteroLoader: () async {
+            await ensureDeuteroLoaded();
+            return deuterocanonData;
+          },
+          onOpenVerse: _openVerseFromList,
+        ),
+      ),
+    );
+    _loadUserData();
+  }
+
+  Future<void> _openPlanDetail(String planId) async {
+    final d = data;
+    final nav = homeNavKey.currentState;
+    if (d == null || nav == null) return;
+    StudyPlanDef? def;
+    for (final candidate in wwStudyPlans) {
+      if (candidate.id == planId) def = candidate;
+    }
+    if (def == null) return;
+    final plan = def;
+    await nav.push(
+      WwPageRoute(
+        builder: (_) => PlanDetailScreen(
+          data: d,
+          plan: plan,
+          profileId: userData.activeProfileId,
+          onOpenChapter: (ch) => openChapter(ch),
+        ),
+      ),
+    );
+    _loadPlans();
   }
 
   void _resume() {
@@ -1192,6 +1293,9 @@ class _WwShellState extends State<WwShell> {
       }
     }
     var notesCount = 0;
+    var highlightsCount = 0;
+    VerseOfDayCardData? verseOfDay;
+    var planCards = const <PlanCardData>[];
     if (d != null) {
       // The My Notes card counts what My Notes would show (board
       // run 10): the active translation's notes, in positions the
@@ -1211,6 +1315,63 @@ class _WwShellState extends State<WwShell> {
                 canonContainsBook(_ctl.tradition, d, n.book),
           )
           .length;
+      // The Highlights caption counts exactly the rows the All
+      // Highlights screen shows (§5): the same visibility
+      // predicate over the active profile's spans in the active
+      // translation, under the active tradition.
+      highlightsCount = visibleSpansForIndex(
+        data: d,
+        deutero: _ctl.deuterocanonData,
+        spans:
+            _ctl.userData.profiles[_ctl.userData.activeProfileId]?.spans[_ctl
+                .translation
+                .name] ??
+            const [],
+        tradition: _ctl.tradition,
+      ).length;
+      // Verse of the Day (§3.3): the pool is cached per
+      // (data, tradition); the pick is recomputed on every build
+      // from the local date.
+      if (_ctl._votdPool == null || _ctl._votdPoolTradition != _ctl.tradition) {
+        _ctl._votdPool = buildVerseOfDayPool(d, _ctl.tradition);
+        _ctl._votdPoolTradition = _ctl.tradition;
+      }
+      final pick = verseOfDayFromPool(_ctl._votdPool!, DateTime.now());
+      if (pick != null) {
+        final String? text;
+        final WwTranslation effective;
+        if (_ctl._textsFailed) {
+          text = '';
+          effective = _ctl.translation;
+        } else if (_ctl._texts == null) {
+          text = null;
+          effective = _ctl.translation;
+        } else {
+          effective = translationForVerseOfDay(
+            stored: _ctl.translation,
+            tradition: _ctl.tradition,
+            otBook: d.chapters[pick.chapter].b < 39,
+            hasTranslation: _ctl._texts!.hasTranslation,
+          );
+          text = _ctl._texts!.verseText(effective, d, pick.chapter, pick.verse);
+        }
+        verseOfDay = VerseOfDayCardData(
+          chapter: pick.chapter,
+          verse: pick.verse,
+          reference: d.refName(pick.chapter, pick.verse),
+          connectionCount: pick.connectionCount,
+          text: text,
+          translation: effective,
+        );
+      }
+      // Study Plans (§7.2): offered plans only, in definition
+      // order, from the store snapshot.
+      final today = DateTime.now();
+      planCards = [
+        for (final def in wwStudyPlans)
+          if (planAvailable(def, _ctl.tradition, d))
+            _planCardData(_ctl, d, def, today),
+      ];
     }
     return HomeTab(
       key: _ctl.homeTabKey,
@@ -1220,17 +1381,54 @@ class _WwShellState extends State<WwShell> {
       resumeBound: activeBound,
       resumeSubtitle: resumeSubtitle,
       notesCount: notesCount,
+      verseOfDay: verseOfDay,
+      plans: planCards,
+      highlightsCount: highlightsCount,
       onOpenChapter: (ch) => _ctl.openChapter(ch),
       onClearSelection: _ctl.clearSelection,
       onResume: _ctl._resume,
       onOpenProfiles: _ctl._openProfiles,
       onOpenMyNotes: _ctl._openMyNotes,
+      onOpenVerseOfDay: (ch, v) => _ctl.openChapter(ch, verse: v),
+      onOpenPlan: _ctl._openPlanDetail,
+      onOpenHighlights: _ctl._openAllHighlights,
       onRetryLoad: () {
         // The data future is fixed at construction; a retry reloads
         // prefs/user data. (Load failure of the bundled asset is
         // not expected; the error surface matches §2.5.)
         _ctl._loadUserData();
       },
+    );
+  }
+
+  /// One Home plan card's data (§7.2): the plan's chapters
+  /// derived from the canon, its stored progress intersected
+  /// (§4.3), and its current day from the shell's clock.
+  PlanCardData _planCardData(
+    ShellController ctl,
+    BibleData data,
+    StudyPlanDef def,
+    DateTime today,
+  ) {
+    final chapters = planChapters(data, def);
+    final progress = ctl._plansStore?.progressFor(
+      ctl.userData.activeProfileId,
+      def.id,
+    );
+    final done = planDoneCount(progress, chapters);
+    return PlanCardData(
+      def: def,
+      totalChapters: chapters.length,
+      started: progress != null,
+      doneCount: done,
+      currentDay: progress == null
+          ? 0
+          : planDayFor(
+              startedOn: progress.startedOn,
+              today: today,
+              days: def.days,
+            ),
+      percent: planPercent(done, chapters.length),
     );
   }
 

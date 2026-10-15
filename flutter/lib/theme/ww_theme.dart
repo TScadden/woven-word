@@ -305,6 +305,32 @@ class WwType {
     fontWeight: FontWeight.w700,
     color: WwColors.ink,
   );
+
+  /// Verse of the Day text: the reader's serif metrics
+  /// (readerBody: serif 18, height 1.55) in the dark-surface
+  /// ink. Contrast in run-11 spec §9.
+  static const verseOfDayBody = TextStyle(
+    fontFamily: serif,
+    fontFamilyFallback: serifFallback,
+    fontSize: 18,
+    height: 1.55,
+    color: WwColors.navInk,
+  );
+
+  /// Plan cover book line: serif 13 navInk on surfaceHigh.
+  static const planCoverBook = TextStyle(
+    fontFamily: serif,
+    fontFamilyFallback: serifFallback,
+    fontSize: 13,
+    color: WwColors.navInk,
+  );
+
+  /// Plan cover meta line: 12sp w600 goldBright on surfaceHigh.
+  static const planCoverMeta = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+    color: WwColors.goldBright,
+  );
 }
 
 /// Spacing: 8dp grid, 16dp screen margin (audit §5).

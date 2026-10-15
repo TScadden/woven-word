@@ -188,7 +188,7 @@ start/stop only):
 |---|---|
 | Home tab not selected | Shell passes `ambientActive = (tab == 'home')` (Home lives in an IndexedStack; hidden ≠ disposed). |
 | App not foregrounded | `WidgetsBindingObserver`: only `AppLifecycleState.resumed` runs. |
-| A route is pushed above Home | `RouteAware` on Home's own route (observer registered on the shell's navigators): `didPushNext` pauses, `didPopNext` resumes. `TickerMode` muting is the structural backstop. |
+| A route is pushed above Home | `RouteAware` on Home's own route (the observer is registered on the shell's HOME navigator only — a `RouteObserver` attaches to exactly one `Navigator`, framework-asserted): `didPushNext` pauses, `didPopNext` resumes. `TickerMode` muting is the structural backstop. |
 | User scrolls Home | `ScrollStartNotification`/`ScrollEndNotification` from ANY descendant scrollable (main list, plan row) pause/resume. |
 | User touches/interacts | Pointer down anywhere in the Home body pauses until pointer up/cancel. |
 | Reduced motion | §4: never starts. |

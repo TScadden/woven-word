@@ -231,7 +231,7 @@ void main() {
       expect(slotSelected(tester, 'Gold highlight'), isTrue);
       var stored = await storedData();
       expect(
-        stored.highlight('default', verseKey(0, 1, 1)),
+        stored.fullVerseColor('default', 'kjv', verseKey(0, 1, 1)),
         HlColor.gold,
       );
       // Re-tap the active color removes it.
@@ -239,16 +239,16 @@ void main() {
       await tester.pump();
       expect(slotSelected(tester, 'None highlight'), isTrue);
       stored = await storedData();
-      expect(stored.highlight('default', verseKey(0, 1, 1)), isNull);
+      expect(stored.fullVerseColor('default', 'kjv', verseKey(0, 1, 1)), isNull);
       // Apply another color, then None removes it.
       await tester.tap(find.bySemanticsLabel('Blue highlight'));
       await tester.pump();
       stored = await storedData();
-      expect(stored.highlight('default', verseKey(0, 1, 1)), HlColor.blue);
+      expect(stored.fullVerseColor('default', 'kjv', verseKey(0, 1, 1)), HlColor.blue);
       await tester.tap(find.bySemanticsLabel('None highlight'));
       await tester.pump();
       stored = await storedData();
-      expect(stored.highlight('default', verseKey(0, 1, 1)), isNull);
+      expect(stored.fullVerseColor('default', 'kjv', verseKey(0, 1, 1)), isNull);
       expect(host.state.currentChapter, 0);
     });
 
@@ -270,7 +270,7 @@ void main() {
       await tester.pump();
       expect(find.text('Add note'), findsOneWidget);
       var stored = await storedData();
-      expect(stored.note('default', verseKey(0, 1, 3)), isNull);
+      expect(stored.note('default', 'kjv', verseKey(0, 1, 3)), isNull);
       // Save returns to the action view showing the preview; the
       // button becomes Edit note.
       await tester.tap(find.text('Add note'));
@@ -281,7 +281,7 @@ void main() {
       expect(find.text('Edit note'), findsOneWidget);
       expect(find.text('alpha note'), findsOneWidget);
       stored = await storedData();
-      expect(stored.note('default', verseKey(0, 1, 3)), 'alpha note');
+      expect(stored.note('default', 'kjv', verseKey(0, 1, 3)), 'alpha note');
       // Empty save removes the note.
       await tester.tap(find.text('Edit note'));
       await tester.pump();
@@ -290,7 +290,7 @@ void main() {
       await tester.pump();
       expect(find.text('Add note'), findsOneWidget);
       stored = await storedData();
-      expect(stored.note('default', verseKey(0, 1, 3)), isNull);
+      expect(stored.note('default', 'kjv', verseKey(0, 1, 3)), isNull);
       expect(host.state.currentChapter, 0);
     });
 
@@ -310,8 +310,8 @@ void main() {
       await tester.tap(find.bySemanticsLabel('None highlight'));
       await tester.pump();
       var stored = await storedData();
-      expect(stored.highlight('default', verseKey(0, 1, 1)), isNull);
-      expect(stored.note('default', verseKey(0, 1, 1)), 'keep me');
+      expect(stored.fullVerseColor('default', 'kjv', verseKey(0, 1, 1)), isNull);
+      expect(stored.note('default', 'kjv', verseKey(0, 1, 1)), 'keep me');
       expect(find.text('keep me'), findsOneWidget,
           reason: 'the toolbar still previews the kept note');
       // Verse 2: highlight, then empty the note via the editor —
@@ -332,8 +332,8 @@ void main() {
       await tester.tap(find.text('Save'));
       await tester.pump();
       stored = await storedData();
-      expect(stored.note('default', verseKey(0, 1, 2)), isNull);
-      expect(stored.highlight('default', verseKey(0, 1, 2)), HlColor.pink);
+      expect(stored.note('default', 'kjv', verseKey(0, 1, 2)), isNull);
+      expect(stored.fullVerseColor('default', 'kjv', verseKey(0, 1, 2)), HlColor.pink);
       expect(host.state.currentChapter, 0);
     });
 
@@ -421,7 +421,7 @@ void main() {
       await tester.pump();
       expect(find.text('Add note'), findsOneWidget);
       final stored = await storedData();
-      expect(stored.note('default', verseKey(0, 1, 1)), isNull);
+      expect(stored.note('default', 'kjv', verseKey(0, 1, 1)), isNull);
       // 0c: sheet open → back closes the sheet only; the toolbar
       // does not reopen and the verse is not re-flashed anew
       // (selection stays as the tap left it, sheet's verse only).

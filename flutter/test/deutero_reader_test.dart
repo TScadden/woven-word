@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:woven_word/data/deuterocanon.dart';
 import 'package:woven_word/data/scripture_text.dart';
+import 'package:woven_word/data/tradition.dart';
 import 'package:woven_word/screens/my_notes_screen.dart';
 import 'package:woven_word/screens/tradition_screens.dart';
 import 'package:woven_word/theme/ww_theme.dart';
@@ -98,9 +99,15 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     final stored =
         jsonDecode(prefs.getString('ww_user_data')!) as Map<String, dynamic>;
-    final highlights =
-        ((stored['profiles'] as Map)['default'] as Map)['highlights'] as Map;
-    expect(highlights, {'b1000c1v2': 'gold'});
+    // Board run 10: the write lands as a full-verse span in the
+    // webc set of the v3 document.
+    final spans =
+        ((stored['profiles'] as Map)['default'] as Map)['spans'] as Map;
+    expect(spans, {
+      'webc': [
+        {'v': 'b1000c1v2', 's': 0, 'e': -1, 'a': 'Tobit verse two', 'c': 'gold'},
+      ],
+    });
     semantics.dispose();
   });
 
@@ -126,8 +133,12 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     final stored =
         jsonDecode(prefs.getString('ww_user_data')!) as Map<String, dynamic>;
+    // Board run 10: the note lives in the webc set of the v3
+    // document (per-translation sets).
     final notes = ((stored['profiles'] as Map)['default'] as Map)['notes'] as Map;
-    expect(notes, {'b1000c1v1': 'a tobit note'});
+    expect(notes, {
+      'webc': {'b1000c1v1': 'a tobit note'},
+    });
 
     // Reopen and cancel: no crash, no change (the controller's
     // lifetime is the sheet State's, LESSONS #33). The verse is
@@ -149,16 +160,24 @@ void main() {
   ) async {
     final data = fakeReaderData();
     final opened = <(int, int, int)>[];
+    // Board run 10 seed: the Tobit note lives in the WEBC set
+    // (where the deutero reader writes), the Genesis note in the
+    // KJV set; WEBC is the active translation and the tradition
+    // is Catholic, so the Tobit note is the visible one.
     SharedPreferences.setMockInitialValues({
+      'ww_translation': 'WEBC',
       'ww_user_data': jsonEncode({
-        'version': 2,
+        'version': 3,
         'activeProfileId': 'default',
         'names': {'default': 'My Profile'},
         'seq': 0,
         'profiles': {
           'default': {
-            'highlights': <String, String>{},
-            'notes': {'b1000c1v2': 'deutero note', 'b0c1v1': 'core note'},
+            'spans': <String, dynamic>{},
+            'notes': {
+              'webc': {'b1000c1v2': 'deutero note'},
+              'kjv': {'b0c1v1': 'core note'},
+            },
           },
         },
       }),
@@ -171,6 +190,7 @@ void main() {
         theme: wwTheme(),
         home: MyNotesScreen(
           data: data,
+          tradition: WwTradition.catholic,
           textsLoader: () async => ScriptureText.fromPayloads(
             kjv: '[]',
             web: '[]',
@@ -195,7 +215,10 @@ void main() {
     await tester.pump();
     expect(find.text('Tobit 1:2'), findsOneWidget);
     expect(find.text('deutero note'), findsOneWidget);
-    expect(find.text('Genesis 1:1'), findsOneWidget);
+    // The Genesis note belongs to the KJV set: My Notes shows the
+    // active translation's set (board run 10), so it is not in
+    // this view — it returns when KJV is active again.
+    expect(find.text('Genesis 1:1'), findsNothing);
     await tester.tap(find.text('Tobit 1:2'));
     await tester.pump();
     expect(opened, [(1000, 1, 2)]);

@@ -59,13 +59,13 @@ void main() {
 
     test('the filter drops a zero-chapter note from the list rows', () {
       final userData = UserData();
-      userData.setNote('default', 'b0c1v1', 'real note');
+      userData.setNote('default', 'kjv', 'b0c1v1', 'real note');
       // Written straight into the bucket, the way a corrupt stored
       // document would load it — setNote would store it too, since
       // the store is key-agnostic by design.
-      userData.setNote('default', 'b0c0v1', 'corrupt note');
+      userData.setNote('default', 'kjv', 'b0c0v1', 'corrupt note');
       final rows = userData
-          .notesFor('default')
+          .notesFor('default', 'kjv')
           .where(
             (n) => notePositionInCanon(data, n.book, n.chapter, n.verse),
           )

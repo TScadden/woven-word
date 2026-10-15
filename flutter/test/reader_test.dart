@@ -653,7 +653,17 @@ void main() {
       UserData docWith(String activeId) {
         final doc = UserData();
         final p2 = doc.createProfile('Second');
-        doc.setHighlight(p2, verseKey(0, 1, 1), HlColor.gold);
+        doc.applySpan(
+          p2,
+          'kjv',
+          HighlightSpan(
+            verseKey: verseKey(0, 1, 1),
+            start: 0,
+            end: -1,
+            anchor: '',
+            color: HlColor.gold,
+          ),
+        );
         doc.setActiveProfile(activeId == 'p2' ? p2 : 'default');
         return doc;
       }

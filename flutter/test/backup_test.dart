@@ -36,9 +36,9 @@ void main() {
         jsonDecode(_currentJson) as Map<String, dynamic>,
       );
       expect(data.profileIds.length, 2);
-      expect(data.totalHighlights, 3);
+      expect(data.totalSpans, 3);
       expect(data.totalNotes, 3);
-      expect(UserData().totalHighlights, 0);
+      expect(UserData().totalSpans, 0);
       expect(UserData().totalNotes, 0);
     });
   });
@@ -48,7 +48,7 @@ void main() {
       final result = UserDataStore.validateImport(_fileJson);
       expect(result.isValid, isTrue);
       expect(result.data!.profileIds, ['solo']);
-      expect(result.data!.totalHighlights, 2);
+      expect(result.data!.totalSpans, 2);
       expect(result.data!.totalNotes, 1);
     });
 
@@ -137,11 +137,11 @@ void main() {
         '"notes":{}}}}',
       );
       expect(result.isValid, isTrue);
-      expect(result.data!.totalHighlights, 0);
+      expect(result.data!.totalSpans, 0);
       expect(result.data!.totalNotes, 0);
     });
 
-    test('a v1 document imports and upgrades to v2 on replace', () async {
+    test('a v1 document imports and upgrades to v3 on replace', () async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       final store = await UserDataStore.load(prefs);
@@ -154,9 +154,62 @@ void main() {
       final stored =
           jsonDecode(prefs.getString(UserDataStore.storageKey)!)
               as Map<String, dynamic>;
-      expect(stored['version'], 2);
-      expect(store.data.highlight('default', 'b18c23v1'), HlColor.gold);
-      expect(store.data.note('default', 'b18c23v1'), 'kept');
+      expect(stored['version'], 3);
+      expect(
+        store.data.fullVerseColor('default', 'kjv', 'b18c23v1'),
+        HlColor.gold,
+      );
+      expect(store.data.note('default', 'kjv', 'b18c23v1'), 'kept');
+    });
+
+    test('a v3 backup carries per-translation spans and imports '
+        'them exactly (board run 10)', () {
+      final data = UserData();
+      data.applySpan(
+        'default',
+        'kjv',
+        HighlightSpan(
+          verseKey: 'b0c1v1',
+          start: 3,
+          end: 6,
+          anchor: 'the',
+          color: HlColor.gold,
+        ),
+      );
+      data.applySpan(
+        'default',
+        'web',
+        HighlightSpan(
+          verseKey: 'b0c1v1',
+          start: 0,
+          end: -1,
+          anchor: '',
+          color: HlColor.blue,
+        ),
+      );
+      data.setNote('default', 'web', 'b0c1v1', 'web note');
+      final result = UserDataStore.validateImport(data.exportJson());
+      expect(result.isValid, isTrue);
+      expect(result.data!.toJson(), data.toJson());
+      final span = result.data!.spansFor('default', 'kjv', 'b0c1v1').single;
+      expect(span.anchor, 'the');
+      expect(span.start, 3);
+      expect(span.end, 6);
+    });
+
+    test('a legacy backup imports into the translation active at '
+        'import (board run 10)', () {
+      final result = UserDataStore.validateImport(
+        _fileJson,
+        legacyTranslation: 'web',
+      );
+      expect(result.isValid, isTrue);
+      expect(
+        result.data!.fullVerseColor('solo', 'web', 'b0c1v1'),
+        HlColor.gold,
+      );
+      expect(result.data!.note('solo', 'web', 'b0c1v1'), 'hello');
+      expect(result.data!.spansFor('solo', 'kjv', 'b0c1v1'), isEmpty);
     });
   });
 
@@ -166,8 +219,18 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final store = await UserDataStore.load(prefs);
       final id = store.data.createProfile('Family');
-      store.data.setHighlight('default', 'b0c1v1', HlColor.gold);
-      store.data.setNote(id, 'b39c1v1', 'family note');
+      store.data.applySpan(
+        'default',
+        'kjv',
+        HighlightSpan(
+          verseKey: 'b0c1v1',
+          start: 0,
+          end: -1,
+          anchor: '',
+          color: HlColor.gold,
+        ),
+      );
+      store.data.setNote(id, 'kjv', 'b39c1v1', 'family note');
       store.data.renameProfile('default', 'Mine');
       await store.save();
 
@@ -191,7 +254,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       final store = await UserDataStore.load(prefs);
-      store.data.setNote('default', 'b0c1v1', 'keep me');
+      store.data.setNote('default', 'kjv', 'b0c1v1', 'keep me');
       await store.save();
       final before = prefs.getString(UserDataStore.storageKey);
 
@@ -213,7 +276,7 @@ void main() {
         // still returns the untouched model.
         expect(prefs.getString(UserDataStore.storageKey), before);
         final reloaded = await UserDataStore.load(prefs);
-        expect(reloaded.data.note('default', 'b0c1v1'), 'keep me');
+        expect(reloaded.data.note('default', 'kjv', 'b0c1v1'), 'keep me');
       }
     });
 
@@ -280,10 +343,11 @@ void main() {
       expect(find.text('Backup'), findsOneWidget);
       expect(
         find.text(
-          'Export saves every profile, highlight, and note on this '
-          'device as one JSON file. Import replaces everything here '
-          'with the contents of a backup file. Nothing leaves this '
-          'device unless you export it.',
+          'Export saves every profile \u2014 with every '
+          'translation\u2019s highlights and notes \u2014 as one JSON '
+          'file. Import replaces everything here with the contents '
+          'of a backup file. Nothing leaves this device unless you '
+          'export it.',
         ),
         findsOneWidget,
       );
@@ -308,7 +372,12 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(shared, isNotNull);
-      expect(jsonDecode(shared!), jsonDecode(_currentJson));
+      // The v2 fixture loads through the run 10 migration, so
+      // the shared document is the loaded model's v3 document.
+      final loaded = UserData.fromJson(
+        jsonDecode(_currentJson) as Map<String, dynamic>,
+      );
+      expect(jsonDecode(shared!), loaded.toJson());
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.byType(SnackBar), findsNothing);
     });

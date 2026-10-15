@@ -87,7 +87,7 @@ size).
   line-by-line audit; live behavior unchanged (no test
   modified). After the fix: local suite **446/446 twice**
   (438 shipped + 8 equality), conference_shell standalone
-  10/10, parity harness 72/72 on the data layer.
+  4/4, parity harness 72/72 on the data layer.
 - **Final CI: run 38820853425 — SUCCESS** (android, web, iOS)
   on head a5b1748.
 

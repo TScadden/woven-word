@@ -617,3 +617,19 @@ rounds Rusty ran before the studio was founded).
     rollback is the same setting reversed. Rule: a served
     surface's source of truth is the host's configuration,
     read live — never the repo layout you assume it serves.
+57. **Reduced motion is a construction swap, not a zero
+    duration (reader arch package, Oct 15, 2026).** Setting
+    an AnimatedSize's duration to zero under reduced motion
+    threw "RenderAnimatedSize was mutated in its own
+    performLayout implementation" — the size controller
+    notifies during layout and re-dirties its own render
+    object. The design law's "reduced motion renders final
+    states" is a TREE decision: under
+    `MediaQuery.disableAnimations` the animated widget
+    leaves the tree and the final child renders directly —
+    the `WwPageRoute` instant-swap pattern at widget scale.
+    It was caught because the reduced-motion toggle was a
+    named widget test (ARCH-11), not a manual check: every
+    new animated surface ships a reduced-motion test in the
+    same package, or the construction ships unverified.
+ (Reader arch (records): spec, Petra gate PASS, lesson 56, payroll accrual)

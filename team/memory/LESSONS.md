@@ -502,3 +502,31 @@ rounds Rusty ran before the studio was founded).
     full scale as the card's title and caption outside it. A
     decorative surface may cap its own typography; the
     information it carries must exist unclamped one level up.
+## Live search & verification hygiene (search fix package)
+
+49. **Results derived from current state at build cannot go
+    stale; results cached per query can.** The Library live
+    search is a pure function of the field's current text +
+    the loaded datasets + the layer states, re-derived
+    synchronously on every build — no debounce, no stored
+    result list, no submit step. The per-keystroke tests pin
+    the property (Job matches "jo", is gone at "joh", no
+    submit anywhere). Rule: when freshness is the feature,
+    make staleness structurally impossible instead of
+    managing it with timers and invalidation.
+50. **A fixture written from memory of another dataset's
+    shape parses to empty and impersonates a product bug.**
+    DeuterocanonData.parse drops a malformed book whole (by
+    design); a fixture with invented minified keys therefore
+    yielded zero books, and two model tests failed looking
+    exactly like a search-model defect. The model was right;
+    the fixture was fiction. Rule: copy fixture shapes from
+    a test that parses the same asset, never from the shape
+    of a different dataset.
+51. **Verify worktrees live under ~/workspace, never /tmp.**
+    A /tmp worktree was reaped mid-package; its test runs
+    died silently and one "result" was a grep pipeline
+    buffering a corpse. The ~/workspace replacement survived
+    the whole package. Rule: any tree a verification claim
+    rests on lives in durable storage, and a long test run
+    writes its log to that same storage.

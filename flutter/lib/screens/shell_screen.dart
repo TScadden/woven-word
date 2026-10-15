@@ -1485,6 +1485,16 @@ class _WwShellState extends State<WwShell> {
       onOpenTanakh: _ctl._openTanakhGrid,
       onOpenCatholicOt: _ctl._openCatholicOtGrid,
       onOpenConfessions: _ctl._openConfessions,
+      // Live search (search fix package, §5): result taps push
+      // inside the Library navigator over the root, whose
+      // search state survives underneath. The talk view takes
+      // the direct push, not openConferenceTalk — that path
+      // resets the stack for the reader sheet's landings.
+      onOpenBook: _ctl._pushChapterGrid,
+      onOpenDeuteroBook: _ctl._pushDeuteroChapters,
+      onOpenDeuteroChapter: (book, chapterInBook) =>
+          _ctl._openDeuteroReader(_ctl.libraryNavKey, book, chapterInBook, null),
+      onOpenTalk: _ctl._pushTalkView,
     );
   }
 

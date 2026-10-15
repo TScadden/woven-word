@@ -6,6 +6,7 @@ import '../data/bible_data.dart';
 import '../data/confession_data.dart';
 import '../data/conference_data.dart';
 import '../data/deuterocanon.dart';
+import '../data/library_search.dart';
 import '../data/tradition.dart';
 import '../theme/ww_theme.dart';
 
@@ -174,6 +175,10 @@ class LibraryRoot extends StatefulWidget {
     this.onOpenTanakh,
     this.onOpenCatholicOt,
     this.onOpenConfessions,
+    this.onOpenBook,
+    this.onOpenDeuteroBook,
+    this.onOpenDeuteroChapter,
+    this.onOpenTalk,
   });
 
   final Future<BibleData> dataFuture;
@@ -201,6 +206,26 @@ class LibraryRoot extends StatefulWidget {
   /// Pushes the confessions browse (Protestant tradition).
   final VoidCallback? onOpenConfessions;
 
+  /// Live search (search fix package, spec §5): pushes one
+  /// core book's chapter grid from a BOOKS result. Optional —
+  /// a pump that omits it renders no core-book result rows
+  /// (absent, never dead).
+  final void Function(int bookIndex)? onOpenBook;
+
+  /// Pushes one deuterocanon book's chapter grid from a BOOKS
+  /// result (Catholic tradition).
+  final void Function(DeuteroBook book)? onOpenDeuteroBook;
+
+  /// Opens the deuterocanon reader at one chapter, from a
+  /// CHAPTERS result or a bare-book submit.
+  final void Function(DeuteroBook book, int chapterInBook)?
+  onOpenDeuteroChapter;
+
+  /// Pushes one talk's talk view from a TALKS result — the
+  /// direct push, not the stack-resetting sheet path, so the
+  /// search state survives underneath (§4).
+  final void Function(ConferenceTalk talk)? onOpenTalk;
+
   @override
   State<LibraryRoot> createState() => LibraryRootState();
 }
@@ -209,7 +234,11 @@ class LibraryRootState extends State<LibraryRoot> {
   final _searchCtl = TextEditingController();
   final _searchFocus = FocusNode();
   final _scrollCtl = ScrollController();
-  bool _noMatch = false;
+
+  /// The search field's current text (search fix package).
+  /// Results derive from it synchronously at build (§2.1), so
+  /// no frame can show a previous query's results.
+  String _query = '';
 
   @override
   void dispose() {
@@ -232,15 +261,79 @@ class LibraryRootState extends State<LibraryRoot> {
     }
   }
 
-  void _submit(BibleData data, String raw) {
-    final ch = data.parseSearch(raw);
-    if (ch == null) {
-      setState(() => _noMatch = true);
+  /// The layer listenable the search surfaces rebuild on, the
+  /// conference tile slot's rule (§5): the first of the two
+  /// layer states that is a [Listenable]. In the shell both
+  /// are the one controller.
+  Listenable? get _layerListenable {
+    final conference = widget.conferenceState;
+    if (conference is Listenable) return conference as Listenable;
+    final tradition = widget.traditionState;
+    if (tradition is Listenable) return tradition as Listenable;
+    return null;
+  }
+
+  bool get _conferenceOn {
+    final state = widget.conferenceState;
+    return state != null && state.conferenceEnabled;
+  }
+
+  /// The §3 model over the current query and layer states.
+  /// The conference dataset enters only while the layer is on
+  /// (the tile slot's exact conditions), so layer-off searches
+  /// have no TALKS group, structurally.
+  LibrarySearchResults _results(BibleData data) {
+    final traditionState = widget.traditionState;
+    final conferenceState = widget.conferenceState;
+    return searchLibrary(
+      data: data,
+      tradition: traditionState?.tradition ?? WwTradition.none,
+      query: _query,
+      deuterocanon: traditionState?.deuterocanonData,
+      conference: _conferenceOn ? conferenceState?.conferenceData : null,
+    );
+  }
+
+  /// The keyboard search action (§2.6): the shipped jump,
+  /// resolved through the §3 model — the first CHAPTERS
+  /// result, else (for a query with no trailing number) the
+  /// first BOOKS result's chapter 1. An out-of-range reference
+  /// ("John 99") jumps nowhere: search never invents a chapter.
+  ///
+  /// A submitted jump keeps the shipped run-7 field contract:
+  /// it clears the field, so the root beneath the destination
+  /// is the browse view (NAV-3 pins those tiles after a
+  /// search jump + re-tap). Result-row taps are the other
+  /// contract — they keep the query (§4).
+  void _jump(BibleData data) {
+    if (_query.trim().isEmpty) return;
+    final results = _results(data);
+    void land(VoidCallback go) {
+      _searchCtl.clear();
+      setState(() => _query = '');
+      go();
+    }
+
+    if (results.chapters.isNotEmpty) {
+      land(() => widget.onOpenChapter(results.chapters.first));
       return;
     }
-    setState(() => _noMatch = false);
-    _searchCtl.clear();
-    widget.onOpenChapter(ch);
+    if (results.deuteroChapters.isNotEmpty &&
+        widget.onOpenDeuteroChapter != null) {
+      final (book, chapterInBook) = results.deuteroChapters.first;
+      land(() => widget.onOpenDeuteroChapter!(book, chapterInBook));
+      return;
+    }
+    if (RegExp(r'\d+$').hasMatch(_query.trim())) return;
+    if (results.books.isNotEmpty) {
+      land(() => widget.onOpenChapter(data.books[results.books.first].start));
+      return;
+    }
+    if (results.deuteroBooks.isNotEmpty &&
+        widget.onOpenDeuteroChapter != null) {
+      final book = results.deuteroBooks.first;
+      land(() => widget.onOpenDeuteroChapter!(book, 1));
+    }
   }
 
   @override
@@ -271,33 +364,13 @@ class LibraryRootState extends State<LibraryRoot> {
                     ),
                     children: [
                       const SizedBox(height: 8),
-                      SizedBox(
-                        height: WwSpace.minTarget,
-                        child: TextField(
-                          controller: _searchCtl,
-                          focusNode: _searchFocus,
-                          style: WwType.controlLabel,
-                          textInputAction: TextInputAction.search,
-                          onChanged: (_) {
-                            if (_noMatch) setState(() => _noMatch = false);
-                          },
-                          onSubmitted: (raw) => _submit(data, raw),
-                          decoration: const InputDecoration(
-                            hintText:
-                                'Jump to a book or chapter: John 3, Psalms 23…',
-                          ),
-                        ),
-                      ),
-                      if (_noMatch) ...[
-                        const SizedBox(height: 8),
-                        const Text(
-                          'No match — try a book name and chapter, like John 3.',
-                          style: WwType.captionOnDark,
-                        ),
-                      ],
+                      _searchField(data),
                       const SizedBox(height: 16),
-                      _tilesRegion(data),
-                      _conferenceTileSlot(),
+                      if (_query.trim().isEmpty) ...[
+                        _tilesRegion(data),
+                        _conferenceTileSlot(),
+                      ] else
+                        _resultsRegion(data),
                       const SizedBox(height: 24),
                     ],
                   );
@@ -305,6 +378,237 @@ class LibraryRootState extends State<LibraryRoot> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// The search field (search fix package): live results on
+  /// every keystroke; the keyboard search action keeps its
+  /// jump meaning (§2.6). The hint names exactly the groups
+  /// that can appear (§2.5), so the field rebuilds on the
+  /// layer listenable alongside the results region.
+  Widget _searchField(BibleData data) {
+    Widget field() => SizedBox(
+      height: WwSpace.minTarget,
+      child: TextField(
+        controller: _searchCtl,
+        focusNode: _searchFocus,
+        style: WwType.controlLabel,
+        textInputAction: TextInputAction.search,
+        onChanged: (value) => setState(() => _query = value),
+        onSubmitted: (_) => _jump(data),
+        decoration: InputDecoration(
+          hintText: _conferenceOn
+              ? 'Search books, chapters, talks…'
+              : 'Search books and chapters…',
+        ),
+      ),
+    );
+    final listenable = _layerListenable;
+    if (listenable == null) return field();
+    return ListenableBuilder(listenable: listenable, builder: (_, _) => field());
+  }
+
+  /// The results region (§2.3): rebuilds on the layer
+  /// listenable under the tile slot's rule, so a layer or
+  /// tradition change on another tab agrees with the next
+  /// keystroke's results.
+  Widget _resultsRegion(BibleData data) {
+    final listenable = _layerListenable;
+    if (listenable == null) return _resultsList(data);
+    return ListenableBuilder(
+      listenable: listenable,
+      builder: (_, _) => _resultsList(data),
+    );
+  }
+
+  Widget _resultsList(BibleData data) {
+    final results = _results(data);
+    if (results.isEmpty) {
+      return const Text(
+        'No match — try a book name and chapter, like John 3.',
+        style: WwType.captionOnDark,
+      );
+    }
+    final groups = <Widget>[];
+
+    // BOOKS (§3.1 + §3.2): a group renders only the rows whose
+    // navigation was supplied (§5 — absent, never dead).
+    final bookRows = <Widget>[];
+    if (widget.onOpenBook != null) {
+      for (final bookIndex in results.books) {
+        final book = data.books[bookIndex];
+        bookRows.add(
+          _searchRow(
+            title: book.name,
+            subtitle: book.chapters == 1
+                ? '1 chapter'
+                : '${book.chapters} chapters',
+            semanticsLabel: 'Open book: ${book.name}',
+            onTap: () => widget.onOpenBook!(bookIndex),
+          ),
+        );
+      }
+    }
+    if (widget.onOpenDeuteroBook != null) {
+      for (final book in results.deuteroBooks) {
+        bookRows.add(
+          _searchRow(
+            title: book.name,
+            subtitle:
+                '${book.chapters == 1 ? '1 chapter' : '${book.chapters} chapters'}'
+                ' · Deuterocanon',
+            semanticsLabel: 'Open book: ${book.name}',
+            onTap: () => widget.onOpenDeuteroBook!(book),
+          ),
+        );
+      }
+    }
+    if (bookRows.isNotEmpty) {
+      groups.add(_group('BOOKS', bookRows));
+    }
+
+    // CHAPTERS (§3.3): core rows ride the shipped onOpenChapter;
+    // deutero rows render only with their navigation supplied.
+    final chapterRows = <Widget>[];
+    for (final ch in results.chapters) {
+      final verses = data.chapters[ch].v;
+      chapterRows.add(
+        _searchRow(
+          title: data.chapterName(ch),
+          subtitle: verses == 1 ? '1 verse' : '$verses verses',
+          semanticsLabel: 'Open chapter: ${data.chapterName(ch)}',
+          onTap: () => widget.onOpenChapter(ch),
+        ),
+      );
+    }
+    if (widget.onOpenDeuteroChapter != null) {
+      for (final (book, chapterInBook) in results.deuteroChapters) {
+        final verses = book.verseCounts[chapterInBook - 1];
+        chapterRows.add(
+          _searchRow(
+            title: '${book.name} $chapterInBook',
+            subtitle:
+                '${verses == 1 ? '1 verse' : '$verses verses'} · Deuterocanon',
+            semanticsLabel: 'Open chapter: ${book.name} $chapterInBook',
+            onTap: () => widget.onOpenDeuteroChapter!(book, chapterInBook),
+          ),
+        );
+      }
+    }
+    if (chapterRows.isNotEmpty) {
+      groups.add(_group('CHAPTERS', chapterRows));
+    }
+
+    // TALKS (§3.4).
+    if (widget.onOpenTalk != null && results.talks.isNotEmpty) {
+      groups.add(
+        _group('TALKS', [
+          for (final talk in results.talks)
+            _searchRow(
+              title: talk.title,
+              subtitle: '${talk.speaker} · ${talk.conferenceLabel}',
+              semanticsLabel: 'Open talk: ${talk.title}, by ${talk.speaker}',
+              onTap: () => widget.onOpenTalk!(talk),
+            ),
+        ]),
+      );
+    }
+
+    if (groups.isEmpty) {
+      // Matches exist but no supplied navigation can open any
+      // of them (a bare standalone pump): the honest line, not
+      // dead rows.
+      return const Text(
+        'No match — try a book name and chapter, like John 3.',
+        style: WwType.captionOnDark,
+      );
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < groups.length; i++) ...[
+          if (i > 0) const SizedBox(height: 24),
+          groups[i],
+        ],
+      ],
+    );
+  }
+
+  /// One results group: the shipped section header (the
+  /// sectioned grids' appSubtitle eyebrow) over browse rows
+  /// at the shipped 8dp row gap.
+  Widget _group(String title, List<Widget> rows) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(title, style: WwType.appSubtitle),
+        const SizedBox(height: 12),
+        for (var i = 0; i < rows.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          rows[i],
+        ],
+      ],
+    );
+  }
+
+  /// One search result row: the shipped browse-row
+  /// construction (conference browse's `browseRow`, built
+  /// locally — that file imports this one for the top bar, so
+  /// the construction is mirrored, not imported): Material
+  /// surface + row radius + InkWell, minHeight 48, the whole
+  /// row the tap target, one container semantics node with
+  /// the §4 label (lesson 25).
+  Widget _searchRow({
+    required String title,
+    required String subtitle,
+    required String semanticsLabel,
+    required VoidCallback onTap,
+  }) {
+    return Semantics(
+      container: true,
+      button: true,
+      label: semanticsLabel,
+      child: ExcludeSemantics(
+        child: Material(
+          color: WwColors.surface,
+          borderRadius: BorderRadius.circular(WwRadius.row),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(WwRadius.row),
+            onTap: onTap,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          style: WwType.controlLabel.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(subtitle, style: WwType.captionOnDark),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right,
+                    size: 20,
+                    color: WwColors.mutedOnDark,
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );

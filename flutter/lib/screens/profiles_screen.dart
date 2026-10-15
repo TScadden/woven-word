@@ -178,87 +178,29 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   /// Name entry dialog shared by create and rename. Returns the
   /// entered name, or null on cancel. The confirm action stays
   /// disabled while the field is empty after trimming.
+  ///
+  /// The dialog is a StatefulWidget that OWNS its controller
+  /// (run-8 fix round, Item 4 audit): the previous construction
+  /// disposed the controller from the dialog future's
+  /// whenComplete, which fires while the route's exit transition
+  /// still builds the field — every dismissal (Cancel, barrier,
+  /// system back) threw "TextEditingController used after being
+  /// disposed" in debug/profile builds. A State disposes its
+  /// controller only when the route's subtree unmounts, after
+  /// the transition has finished.
   Future<String?> _nameDialog({
     required String title,
     required String actionLabel,
     required String initial,
   }) {
-    final controller = TextEditingController(text: initial);
     return wwShowDialog<String>(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (dialogContext, setDialogState) {
-            final canSubmit = controller.text.trim().isNotEmpty;
-            return AlertDialog(
-              backgroundColor: WwColors.surfaceHigh,
-              surfaceTintColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(WwRadius.sheet),
-              ),
-              title: Text(title, style: WwType.selectionTitle),
-              content: TextField(
-                controller: controller,
-                autofocus: true,
-                style: WwType.controlLabel,
-                textCapitalization: TextCapitalization.words,
-                decoration: InputDecoration(
-                  hintText: 'Profile name',
-                  // Inside a surfaceHigh dialog the field steps DOWN
-                  // to surface so it reads as an inset, bordered
-                  // like every other input in the app (Petra FIX
-                  // D-2: the fill override is explicit, never the
-                  // theme's surfaceHigh input fill).
-                  filled: true,
-                  fillColor: WwColors.surface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(WwRadius.input),
-                    borderSide: const BorderSide(color: WwColors.borderDark),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(WwRadius.input),
-                    borderSide: const BorderSide(color: WwColors.borderDark),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(WwRadius.input),
-                    borderSide: const BorderSide(color: WwColors.goldBright),
-                  ),
-                ),
-                onChanged: (_) => setDialogState(() {}),
-                onSubmitted: (value) {
-                  if (value.trim().isNotEmpty) {
-                    Navigator.of(dialogContext).pop(value);
-                  }
-                },
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(64, WwSpace.minTarget),
-                  ),
-                  child: const Text('Cancel', style: WwType.buttonLabel),
-                ),
-                TextButton(
-                  onPressed: canSubmit
-                      ? () => Navigator.of(dialogContext).pop(controller.text)
-                      : null,
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(64, WwSpace.minTarget),
-                  ),
-                  child: Text(
-                    actionLabel,
-                    style: canSubmit
-                        ? WwType.dialogActionLabel
-                        : WwType.dialogActionLabelDisabled,
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    ).whenComplete(controller.dispose);
+      builder: (_) => _ProfileNameDialog(
+        title: title,
+        actionLabel: actionLabel,
+        initial: initial,
+      ),
+    );
   }
 
   /// Export (board run 6): the full backup document goes to the
@@ -807,6 +749,107 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
             ? WwType.avatarLetterOnGold
             : WwType.avatarLetterOnDark,
       ),
+    );
+  }
+}
+
+/// The profile name entry dialog (create + rename): owns its
+/// [TextEditingController] for exactly the dialog route's
+/// lifetime — see [_ProfilesScreenState._nameDialog] for why the
+/// controller must not be disposed from the dialog future.
+class _ProfileNameDialog extends StatefulWidget {
+  const _ProfileNameDialog({
+    required this.title,
+    required this.actionLabel,
+    required this.initial,
+  });
+
+  final String title;
+  final String actionLabel;
+  final String initial;
+
+  @override
+  State<_ProfileNameDialog> createState() => _ProfileNameDialogState();
+}
+
+class _ProfileNameDialogState extends State<_ProfileNameDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initial,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canSubmit = _controller.text.trim().isNotEmpty;
+    return AlertDialog(
+      backgroundColor: WwColors.surfaceHigh,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(WwRadius.sheet),
+      ),
+      title: Text(widget.title, style: WwType.selectionTitle),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        style: WwType.controlLabel,
+        textCapitalization: TextCapitalization.words,
+        decoration: InputDecoration(
+          hintText: 'Profile name',
+          // Inside a surfaceHigh dialog the field steps DOWN
+          // to surface so it reads as an inset, bordered
+          // like every other input in the app (Petra FIX
+          // D-2: the fill override is explicit, never the
+          // theme's surfaceHigh input fill).
+          filled: true,
+          fillColor: WwColors.surface,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(WwRadius.input),
+            borderSide: const BorderSide(color: WwColors.borderDark),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(WwRadius.input),
+            borderSide: const BorderSide(color: WwColors.borderDark),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(WwRadius.input),
+            borderSide: const BorderSide(color: WwColors.goldBright),
+          ),
+        ),
+        onChanged: (_) => setState(() {}),
+        onSubmitted: (value) {
+          if (value.trim().isNotEmpty) {
+            Navigator.of(context).pop(value);
+          }
+        },
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          style: TextButton.styleFrom(
+            minimumSize: const Size(64, WwSpace.minTarget),
+          ),
+          child: const Text('Cancel', style: WwType.buttonLabel),
+        ),
+        TextButton(
+          onPressed: canSubmit
+              ? () => Navigator.of(context).pop(_controller.text)
+              : null,
+          style: TextButton.styleFrom(
+            minimumSize: const Size(64, WwSpace.minTarget),
+          ),
+          child: Text(
+            widget.actionLabel,
+            style: canSubmit
+                ? WwType.dialogActionLabel
+                : WwType.dialogActionLabelDisabled,
+          ),
+        ),
+      ],
     );
   }
 }

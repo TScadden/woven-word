@@ -139,9 +139,6 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
   /// goldTextOnPaper focused, never the theme's goldBright border.
   void _editNote(String key, int globalChapter, int verse) {
     final data = widget.data;
-    final controller = TextEditingController(
-      text: _userData.note(_profileId, key) ?? '',
-    );
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: WwColors.paper,
@@ -152,106 +149,22 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
           top: Radius.circular(WwRadius.sheet),
         ),
       ),
-      builder: (sheetContext) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: WwSpace.screenMargin,
-            right: WwSpace.screenMargin,
-            top: WwSpace.screenMargin,
-            bottom:
-                WwSpace.screenMargin +
-                MediaQuery.of(sheetContext).viewInsets.bottom,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                data.refName(globalChapter, verse),
-                style: WwType.sheetRefTitle,
-              ),
-              const SizedBox(height: 8),
-              const Text('Note', style: WwType.refLabel),
-              const SizedBox(height: 8),
-              TextField(
-                controller: controller,
-                style: WwType.bodyOnPaper,
-                minLines: 3,
-                maxLines: 8,
-                autofocus: true,
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: WwColors.paper,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 12,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(WwRadius.input),
-                    borderSide: const BorderSide(color: WwColors.line),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(WwRadius.input),
-                    borderSide: const BorderSide(color: WwColors.line),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(WwRadius.input),
-                    borderSide: const BorderSide(
-                      color: WwColors.goldTextOnPaper,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Saving an empty note removes it.',
-                style: WwType.captionOnPaper,
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(sheetContext).pop(),
-                    style: TextButton.styleFrom(
-                      minimumSize: const Size(64, WwSpace.minTarget),
-                    ),
-                    child: const Text(
-                      'Cancel',
-                      style: WwType.paperButtonLabel,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  TextButton(
-                    onPressed: () {
-                      // UserData.setNote semantics (board run 4):
-                      // empty-after-trim removes the note.
-                      setState(
-                        () => _userData.setNote(
-                          _profileId,
-                          key,
-                          controller.text,
-                        ),
-                      );
-                      _persist();
-                      Navigator.of(sheetContext).pop();
-                    },
-                    style: TextButton.styleFrom(
-                      backgroundColor: WwColors.goldBright,
-                      minimumSize: const Size(64, WwSpace.minTarget),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(WwRadius.chip),
-                      ),
-                    ),
-                    child: const Text('Save', style: WwType.goldButtonLabel),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    ).whenComplete(controller.dispose);
+      // The sheet OWNS its controller (run-8 fix round, Item 4
+      // audit): disposing it from the sheet future's whenComplete
+      // is the same lifetime bug the Profiles name dialog had —
+      // the future can complete while the exit transition still
+      // builds the field. See _NoteEditorSheet.
+      builder: (_) => _NoteEditorSheet(
+        refLabel: data.refName(globalChapter, verse),
+        initialText: _userData.note(_profileId, key) ?? '',
+        onSave: (text) {
+          // UserData.setNote semantics (board run 4):
+          // empty-after-trim removes the note.
+          setState(() => _userData.setNote(_profileId, key, text));
+          _persist();
+        },
+      ),
+    );
   }
 
   Future<void> _deleteNote(String key, String refLabel) async {
@@ -466,6 +379,122 @@ class _MyNotesScreenState extends State<MyNotesScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The My Notes note editor sheet: owns its [TextEditingController]
+/// for exactly the sheet route's lifetime, so no dismissal path
+/// (Save, Cancel, barrier, system back) can dispose the controller
+/// while the sheet's exit transition still builds the field — the
+/// lifetime bug the run-8 fix-round audit proved on the Profiles
+/// name dialog's whenComplete disposal.
+class _NoteEditorSheet extends StatefulWidget {
+  const _NoteEditorSheet({
+    required this.refLabel,
+    required this.initialText,
+    required this.onSave,
+  });
+
+  final String refLabel;
+  final String initialText;
+  final void Function(String text) onSave;
+
+  @override
+  State<_NoteEditorSheet> createState() => _NoteEditorSheetState();
+}
+
+class _NoteEditorSheetState extends State<_NoteEditorSheet> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialText,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: WwSpace.screenMargin,
+        right: WwSpace.screenMargin,
+        top: WwSpace.screenMargin,
+        bottom:
+            WwSpace.screenMargin + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(widget.refLabel, style: WwType.sheetRefTitle),
+          const SizedBox(height: 8),
+          const Text('Note', style: WwType.refLabel),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _controller,
+            style: WwType.bodyOnPaper,
+            minLines: 3,
+            maxLines: 8,
+            autofocus: true,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: WwColors.paper,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(WwRadius.input),
+                borderSide: const BorderSide(color: WwColors.line),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(WwRadius.input),
+                borderSide: const BorderSide(color: WwColors.line),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(WwRadius.input),
+                borderSide: const BorderSide(color: WwColors.goldTextOnPaper),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Saving an empty note removes it.',
+            style: WwType.captionOnPaper,
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(64, WwSpace.minTarget),
+                ),
+                child: const Text('Cancel', style: WwType.paperButtonLabel),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: () {
+                  widget.onSave(_controller.text);
+                  Navigator.of(context).pop();
+                },
+                style: TextButton.styleFrom(
+                  backgroundColor: WwColors.goldBright,
+                  minimumSize: const Size(64, WwSpace.minTarget),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(WwRadius.chip),
+                  ),
+                ),
+                child: const Text('Save', style: WwType.goldButtonLabel),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

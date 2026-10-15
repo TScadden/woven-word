@@ -12,13 +12,14 @@ Verification of the final tree (after Fix Item 4, added
 mid-round): `flutter analyze` — no issues. Full `flutter test`
 — **202 tests, all passed** (192 through Item 3, plus Item 4's
 10-test system-back suite). `flutter build web --release` —
-green. **CI: "Build Flutter app" run 38655650765 — completed,
-success** for the Items 1–3 tree (head 508b037); the Item 4 CI
-run id is reported to Silas with this report and recorded in
-the follow-up records commit. Commits: Defect 1 `69e0d07`,
-Defect 2 `bd3e458`, Fix Item 3 `9e0fd7d`, records `508b037` /
-`564ca11`, Fix Item 4 in its own commit after this section was
-written.
+green. **CI: "Build Flutter app" run 38657791978 — completed,
+success** on the final tree including Item 4 (head 8e13fe2;
+run 38655650765, also success, covered the Items 1–3 tree).
+Commits: Defect 1 `69e0d07`, Defect 2 `bd3e458`, Fix Item 3
+`9e0fd7d`, records `508b037` / `564ca11`, Fix Item 4 `cb540af`,
+Item 4 records `8e13fe2` (this sentence's own amendment is a
+docs-only follow-up the workflow's path filter does not
+rebuild).
 
 ---
 

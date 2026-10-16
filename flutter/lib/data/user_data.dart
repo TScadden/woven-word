@@ -219,8 +219,7 @@ List<HighlightSpan> _normalizeSpans(List<HighlightSpan> spans) {
     if (prev.color == next.color && prev.end != -1 && prev.end == next.start) {
       final anchor =
           (prev.anchor.length == prev.end - prev.start &&
-              (next.end == -1 ||
-                  next.anchor.length == next.end - next.start))
+              (next.end == -1 || next.anchor.length == next.end - next.start))
           ? prev.anchor + next.anchor
           : '';
       out[out.length - 1] = HighlightSpan(
@@ -264,12 +263,10 @@ class ProfileData {
   bool readerArchExpanded;
 
   /// Span count across every translation set.
-  int get spanCount =>
-      spans.values.fold(0, (sum, list) => sum + list.length);
+  int get spanCount => spans.values.fold(0, (sum, list) => sum + list.length);
 
   /// Note count across every translation set.
-  int get noteCount =>
-      notes.values.fold(0, (sum, byKey) => sum + byKey.length);
+  int get noteCount => notes.values.fold(0, (sum, byKey) => sum + byKey.length);
 
   Map<String, dynamic> toJson() => {
     'spans': {
@@ -290,7 +287,10 @@ class ProfileData {
   /// [legacyTranslation] set — whole-verse highlights as
   /// full-verse spans — with no duplication into other sets
   /// (founder ruling, 2026-10-15).
-  factory ProfileData.fromJson(Object? json, {String legacyTranslation = 'kjv'}) {
+  factory ProfileData.fromJson(
+    Object? json, {
+    String legacyTranslation = 'kjv',
+  }) {
     final profile = ProfileData();
     if (json is! Map) return profile;
     // The reader arch setting (reader arch package): only a
@@ -513,8 +513,10 @@ class UserData {
   /// order) — each entry carrying its parsed position. Notes whose
   /// key does not parse are dropped (defensive; our own writes
   /// always parse).
-  List<({String key, int book, int chapter, int verse, String text})>
-  notesFor(String profileId, String translationKey) {
+  List<({String key, int book, int chapter, int verse, String text})> notesFor(
+    String profileId,
+    String translationKey,
+  ) {
     final profile = profiles[profileId];
     if (profile == null) return const [];
     final notes = profile.notes[translationKey];
@@ -570,8 +572,7 @@ class UserData {
 
   /// This document as a pretty-printed JSON string — the backup
   /// file's contents (board run 6). Exactly the [toJson] shape.
-  String exportJson() =>
-      const JsonEncoder.withIndent('  ').convert(toJson());
+  String exportJson() => const JsonEncoder.withIndent('  ').convert(toJson());
 
   ProfileData _bucketForWrite(String profileId) =>
       profiles.putIfAbsent(profileId, () => ProfileData());
@@ -589,17 +590,16 @@ class UserData {
     if (profile == null) return const [];
     final list = profile.spans[translationKey];
     if (list == null) return const [];
-    return [for (final span in list) if (span.verseKey == key) span];
+    return [
+      for (final span in list)
+        if (span.verseKey == key) span,
+    ];
   }
 
   /// The color of the verse's full-verse span in [translationKey]'s
   /// set, or null. By the non-overlap invariant such a span is the
   /// verse's only span.
-  HlColor? fullVerseColor(
-    String profileId,
-    String translationKey,
-    String key,
-  ) {
+  HlColor? fullVerseColor(String profileId, String translationKey, String key) {
     for (final span in spansFor(profileId, translationKey, key)) {
       if (span.isFullVerse) return span.color;
     }
@@ -656,9 +656,17 @@ class UserData {
     if (profile == null) return;
     final list = profile.spans[translationKey];
     if (list == null) return;
-    final existing = [for (final s in list) if (s.verseKey == key) s];
+    final existing = [
+      for (final s in list)
+        if (s.verseKey == key) s,
+    ];
     if (existing.isEmpty) return;
-    final remaining = _subtractRange(existing, start, end, verseText: verseText);
+    final remaining = _subtractRange(
+      existing,
+      start,
+      end,
+      verseText: verseText,
+    );
     final all = [
       for (final s in list)
         if (s.verseKey != key) s,
@@ -678,7 +686,10 @@ class UserData {
     if (profile == null) return;
     final list = profile.spans[translationKey];
     if (list == null) return;
-    final all = [for (final s in list) if (s.verseKey != key) s];
+    final all = [
+      for (final s in list)
+        if (s.verseKey != key) s,
+    ];
     if (all.isEmpty) {
       profile.spans.remove(translationKey);
     } else {
@@ -797,6 +808,10 @@ enum BackupImportError {
   /// A backup-shaped document that parses to zero profile
   /// buckets, zero highlights, and zero notes.
   emptyDocument,
+
+  /// The backup's `plans` member is present but malformed
+  /// (study plans v2, spec §8.2).
+  invalidPlans,
 }
 
 /// The outcome of validating a candidate backup document: either
@@ -804,13 +819,100 @@ enum BackupImportError {
 /// [BackupImportError] that rejected it. Validation is pure — it
 /// never writes anything.
 class BackupImportResult {
-  const BackupImportResult.valid(this.data) : error = null;
-  const BackupImportResult.invalid(this.error) : data = null;
+  const BackupImportResult.valid(this.data, {this.plans}) : error = null;
+  const BackupImportResult.invalid(this.error) : data = null, plans = null;
 
   final UserData? data;
   final BackupImportError? error;
 
+  /// The validated `plans` member — non-null only when present
+  /// and valid (spec §8.2).
+  final Map<String, dynamic>? plans;
+
   bool get isValid => error == null;
+}
+
+/// Strict plans-member date check (spec §8.2 P4).
+bool _validPlansDate(Object? v) {
+  if (v is! String) return false;
+  if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(v)) return false;
+  final y = int.parse(v.substring(0, 4));
+  final m = int.parse(v.substring(5, 7));
+  final d = int.parse(v.substring(8, 10));
+  final dt = DateTime(y, m, d);
+  final back =
+      '${dt.year.toString().padLeft(4, '0')}-'
+      '${dt.month.toString().padLeft(2, '0')}-'
+      '${dt.day.toString().padLeft(2, '0')}';
+  return back == v;
+}
+
+/// The strict plans checklist (spec §8.2, P1-P6). Pure, shape-only.
+bool _plansMemberValid(Object? plans) {
+  if (plans is! Map) return false;
+  if (plans['version'] is! int || plans['version'] != 2) return false;
+  final progress = plans['progress'];
+  final custom = plans['custom'];
+  final customSeq = plans['customSeq'];
+  if (progress is! Map || custom is! Map || customSeq is! Map) return false;
+  // P4 progress
+  for (final pv in progress.values) {
+    if (pv is! Map) return false;
+    for (final planVal in pv.values) {
+      if (planVal is! Map) return false;
+      if (!_validPlansDate(planVal['startedOn'])) return false;
+      final done = planVal['done'];
+      if (done is! List) return false;
+      final seen = <int>{};
+      for (final e in done) {
+        if (e is! int || e < 0) return false;
+        if (!seen.add(e)) return false;
+      }
+    }
+  }
+  // P5 custom
+  for (final cv in custom.values) {
+    if (cv is! List) return false;
+    final ids = <String>{};
+    for (final def in cv) {
+      if (def is! Map) return false;
+      final id = def['id'];
+      if (id is! String || !RegExp(r'^custom-\d+$').hasMatch(id)) return false;
+      final n = int.tryParse(id.substring(7));
+      if (n == null || n < 1) return false;
+      if (!ids.add(id)) return false;
+      final name = def['name'];
+      if (name is! String || name.trim().isEmpty) return false;
+      final segs = def['segments'];
+      if (segs is! List || segs.isEmpty) return false;
+      for (final seg in segs) {
+        if (seg is! Map) return false;
+        final book = seg['book'];
+        final from = seg['from'];
+        final to = seg['to'];
+        if (book is! int || book < 0) return false;
+        if (from is! int || to is! int) return false;
+        if (!(1 <= from && from <= to)) return false;
+      }
+      final pace = def['pace'];
+      if (pace is! Map) return false;
+      final mode = pace['mode'];
+      if (mode == 'verses') {
+        final v = pace['versesPerDay'];
+        if (v is! int || v < 1 || v > 1000) return false;
+      } else if (mode == 'days') {
+        final d = pace['days'];
+        if (d is! int || d < 1) return false;
+      } else {
+        return false;
+      }
+    }
+  }
+  // P6 seq
+  for (final v in customSeq.values) {
+    if (v is! int || v < 0) return false;
+  }
+  return true;
 }
 
 /// Persists a [UserData] model to SharedPreferences under the single
@@ -878,9 +980,17 @@ class UserDataStore {
       return const BackupImportResult.invalid(BackupImportError.notBackup);
     }
     if (rawVersion is num && rawVersion > UserData.version) {
-      return const BackupImportResult.invalid(
-        BackupImportError.newerVersion,
-      );
+      return const BackupImportResult.invalid(BackupImportError.newerVersion);
+    }
+    // Plans checklist (spec §8.2): a present-but-malformed
+    // member rejects the whole import, outranking emptiness.
+    Map<String, dynamic>? validatedPlans;
+    if (decoded.containsKey('plans')) {
+      final rawPlans = decoded['plans'];
+      if (!_plansMemberValid(rawPlans)) {
+        return const BackupImportResult.invalid(BackupImportError.invalidPlans);
+      }
+      validatedPlans = (rawPlans as Map).cast<String, dynamic>();
     }
     final parsed = UserData.fromJson(
       decoded,
@@ -889,11 +999,9 @@ class UserDataStore {
     if (parsed.profiles.isEmpty &&
         parsed.totalSpans == 0 &&
         parsed.totalNotes == 0) {
-      return const BackupImportResult.invalid(
-        BackupImportError.emptyDocument,
-      );
+      return const BackupImportResult.invalid(BackupImportError.emptyDocument);
     }
-    return BackupImportResult.valid(parsed);
+    return BackupImportResult.valid(parsed, plans: validatedPlans);
   }
 
   /// Loads the stored model; a missing or corrupt document loads as

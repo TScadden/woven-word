@@ -1,59 +1,37 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'bible_data.dart';
 import 'tradition.dart';
 
-/// Study Plans (board run 11, spec §4): three plans generated
-/// from canon data, their schedules derived (never stored), and
-/// per-profile progress persisted OUTSIDE `UserData` — the
-/// backup format is untouched — under [plansPrefsKey].
+/// Study Plans v2: verse-sized schedule engine (two modes),
+/// target-derived built-ins, custom plans, v2 store document.
 
-/// One plan's fixed definition: id, name, day count, and the
-/// books it covers in definition order (null = every book in the
-/// data).
+const int wwBuiltinVersesPerDay = 40;
+
 class StudyPlanDef {
-  const StudyPlanDef({
-    required this.id,
-    required this.name,
-    required this.days,
-    this.bookIndices,
-  });
-
+  const StudyPlanDef({required this.id, required this.name, this.bookIndices});
   final String id;
   final String name;
-  final int days;
   final List<int>? bookIndices;
 }
 
-/// The three plans, in the order Home offers them.
 const List<StudyPlanDef> wwStudyPlans = [
   StudyPlanDef(
     id: 'gospels',
     name: 'The Gospels',
-    days: 30,
     bookIndices: [39, 40, 41, 42],
   ),
   StudyPlanDef(
     id: 'psalms-proverbs',
     name: 'Psalms & Proverbs',
-    days: 60,
     bookIndices: [18, 19],
   ),
-  StudyPlanDef(
-    id: 'whole-bible',
-    name: 'The Whole Bible',
-    days: 365,
-    bookIndices: null,
-  ),
+  StudyPlanDef(id: 'whole-bible', name: 'The Whole Bible', bookIndices: null),
 ];
 
-/// The plan's chapters as global indices, in canonical
-/// (BibleData) order: the definition's books in definition order,
-/// each book's chapters expanded via `book.start`. Presentation
-/// order (e.g. the Tanakh's Ketuvim order) never reorders a plan.
-/// Totals are derived from [BibleData], never hard-coded.
 List<int> planChapters(BibleData data, StudyPlanDef plan) {
   final books =
       plan.bookIndices ?? [for (var i = 0; i < data.books.length; i++) i];
@@ -63,49 +41,76 @@ List<int> planChapters(BibleData data, StudyPlanDef plan) {
   ];
 }
 
-/// A plan is offered only when EVERY book in its definition is
-/// inside [tradition]'s canon. Switching tradition never mutates
-/// plan state — an out-of-canon plan is simply not offered
-/// (dormancy, the run-10 pattern).
 bool planAvailable(StudyPlanDef plan, WwTradition tradition, BibleData data) {
   final books =
       plan.bookIndices ?? [for (var i = 0; i < data.books.length; i++) i];
   return books.every((b) => canonContainsBook(tradition, data, b));
 }
 
-/// The plan's schedule (spec §4.2, base/remainder — interpretation
-/// I-2): with `T` chapters over `D` days, `base = T ~/ D` and
-/// `rem = T % D`; day `i` (1-based) receives `base + 1` chapters
-/// when `i <= rem`, else `base`, taken consecutively from
-/// [planChapters] in order. Day sizes differ by at most 1,
-/// earlier days are never smaller than later days, no day is
-/// empty (every plan here has T > D), and concatenating the days
-/// reproduces [planChapters] exactly.
-List<List<int>> planSchedule(BibleData data, StudyPlanDef plan) {
-  final chapters = planChapters(data, plan);
-  final total = chapters.length;
-  final days = plan.days;
-  final base = total ~/ days;
-  final rem = total % days;
-  final schedule = <List<int>>[];
-  var offset = 0;
-  for (var i = 1; i <= days; i++) {
-    final size = base + (i <= rem ? 1 : 0);
-    schedule.add(chapters.sublist(offset, offset + size));
-    offset += size;
+// ---- Engine §1 ----
+List<List<int>> scheduleByVerses(
+  BibleData data,
+  List<int> chapters,
+  int targetVerses,
+) {
+  final t = math.max(1, targetVerses);
+  final days = <List<int>>[];
+  var open = <int>[];
+  var tot = 0;
+  for (final ch in chapters) {
+    final v = data.chapters[ch].v;
+    if (open.isNotEmpty &&
+        (tot >= t || (tot + v - t).abs() >= (tot - t).abs())) {
+      days.add(open);
+      open = <int>[];
+      tot = 0;
+    }
+    open.add(ch);
+    tot += v;
   }
-  return schedule;
+  if (open.isNotEmpty) days.add(open);
+  return days;
 }
 
-/// 'yyyy-mm-dd' from [local]'s local components, zero-padded.
+List<List<int>> scheduleByDays(
+  BibleData data,
+  List<int> chapters,
+  int dayCount,
+) {
+  final c = chapters.length;
+  if (c == 0) return [];
+  final n = dayCount.clamp(1, c);
+  var totalVerses = 0;
+  for (final ch in chapters) {
+    totalVerses += data.chapters[ch].v;
+  }
+  final days = <List<int>>[];
+  var open = <int>[];
+  var cum = 0;
+  var closed = 0;
+  for (var i = 0; i < chapters.length; i++) {
+    final ch = chapters[i];
+    open.add(ch);
+    cum += data.chapters[ch].v;
+    final remaining = c - (i + 1);
+    if (closed < n - 1 &&
+        (cum * n >= (closed + 1) * totalVerses ||
+            remaining == n - closed - 1)) {
+      days.add(open);
+      open = <int>[];
+      closed++;
+    }
+  }
+  if (open.isNotEmpty) days.add(open);
+  return days;
+}
+
+// ---- dates/helpers retained ----
 String planDateKey(DateTime local) =>
     '${local.year.toString().padLeft(4, '0')}-'
     '${local.month.toString().padLeft(2, '0')}-'
     '${local.day.toString().padLeft(2, '0')}';
 
-/// A strict date-key parse: the `yyyy-mm-dd` shape AND a real
-/// calendar date (verified by re-formatting to the identical
-/// string, so month 13 and Feb 30 fail). Null when invalid.
 DateTime? _parseDateKey(String value) {
   if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) return null;
   final parsed = DateTime(
@@ -116,18 +121,12 @@ DateTime? _parseDateKey(String value) {
   return planDateKey(parsed) == value ? parsed : null;
 }
 
-/// Calendar days from [fromLocal] to [toLocal], computed through
-/// UTC midnights (the [daysSinceEpochLocal] method) so DST can
-/// never shift the difference.
 int calendarDaysBetween(DateTime fromLocal, DateTime toLocal) {
   final from = DateTime.utc(fromLocal.year, fromLocal.month, fromLocal.day);
   final to = DateTime.utc(toLocal.year, toLocal.month, toLocal.day);
   return to.difference(from).inDays;
 }
 
-/// The plan's current day: `clamp(days since start + 1, 1,
-/// days)`. An unparseable [startedOn] yields 1; a [startedOn] in
-/// the future (clock skew) yields 1.
 int planDayFor({
   required String startedOn,
   required DateTime today,
@@ -135,184 +134,532 @@ int planDayFor({
 }) {
   final start = _parseDateKey(startedOn);
   if (start == null) return 1;
+  if (days < 1) return 1;
   return (calendarDaysBetween(start, today) + 1).clamp(1, days);
 }
 
-/// Done chapters that belong to THIS plan: the intersection of
-/// the stored set with the plan's chapters, never the raw set,
-/// so a corrupt store can never push progress past 100% or count
-/// another plan's chapters.
 int planDoneCount(PlanProgress? progress, List<int> chapters) {
   if (progress == null) return 0;
   return chapters.where(progress.done.contains).length;
 }
 
-/// Integer-floor percent: the same value on the Home card, in
-/// the detail status, and in tests.
 int planPercent(int done, int total) => total == 0 ? 0 : (done * 100) ~/ total;
 
-/// One profile's progress in one plan.
 class PlanProgress {
   PlanProgress({required this.startedOn, required this.done});
-
-  /// 'yyyy-mm-dd' local start date.
   final String startedOn;
-
-  /// Global chapter indices checked off.
   final Set<int> done;
-
   Map<String, dynamic> toJson() => {
     'startedOn': startedOn,
     'done': [...done]..sort(),
   };
-
   @override
   bool operator ==(Object other) =>
       other is PlanProgress &&
       other.startedOn == startedOn &&
       other.done.length == done.length &&
       other.done.containsAll(done);
-
   @override
   int get hashCode => Object.hash(startedOn, Object.hashAllUnordered(done));
 }
 
-/// The SharedPreferences key for the plans store.
+// ---- v2 model §4.2 ----
+enum PlanPaceMode { verses, days }
+
+class PlanPace {
+  const PlanPace.verses(this.versesPerDay)
+    : mode = PlanPaceMode.verses,
+      days = null;
+  const PlanPace.days(this.days)
+    : mode = PlanPaceMode.days,
+      versesPerDay = null;
+  final PlanPaceMode mode;
+  final int? versesPerDay;
+  final int? days;
+  Map<String, dynamic> toJson() => mode == PlanPaceMode.verses
+      ? {'mode': 'verses', 'versesPerDay': versesPerDay}
+      : {'mode': 'days', 'days': days};
+  @override
+  bool operator ==(Object other) =>
+      other is PlanPace &&
+      other.mode == mode &&
+      other.versesPerDay == versesPerDay &&
+      other.days == days;
+  @override
+  int get hashCode => Object.hash(mode, versesPerDay, days);
+}
+
+class PlanSegment {
+  const PlanSegment({required this.book, required this.from, required this.to});
+  final int book;
+  final int from;
+  final int to;
+  Map<String, dynamic> toJson() => {'book': book, 'from': from, 'to': to};
+  @override
+  bool operator ==(Object other) =>
+      other is PlanSegment &&
+      other.book == book &&
+      other.from == from &&
+      other.to == to;
+  @override
+  int get hashCode => Object.hash(book, from, to);
+}
+
+class CustomPlanDef {
+  const CustomPlanDef({
+    required this.id,
+    required this.name,
+    required this.segments,
+    required this.pace,
+  });
+  final String id;
+  final String name;
+  final List<PlanSegment> segments;
+  final PlanPace pace;
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'segments': [for (final s in segments) s.toJson()],
+    'pace': pace.toJson(),
+  };
+  @override
+  bool operator ==(Object other) {
+    if (other is! CustomPlanDef) return false;
+    if (other.id != id || other.name != name || other.pace != pace) {
+      return false;
+    }
+    if (other.segments.length != segments.length) return false;
+    for (var i = 0; i < segments.length; i++) {
+      if (other.segments[i] != segments[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, pace, Object.hashAll(segments));
+}
+
+bool _progressMapEq(
+  Map<String, Map<String, PlanProgress>> a,
+  Map<String, Map<String, PlanProgress>> b,
+) {
+  if (a.length != b.length) return false;
+  for (final e in a.entries) {
+    final bv = b[e.key];
+    if (bv == null || bv.length != e.value.length) return false;
+    for (final pe in e.value.entries) {
+      if (bv[pe.key] != pe.value) return false;
+    }
+  }
+  return true;
+}
+
+bool _customMapEq(
+  Map<String, List<CustomPlanDef>> a,
+  Map<String, List<CustomPlanDef>> b,
+) {
+  if (a.length != b.length) return false;
+  for (final e in a.entries) {
+    final bv = b[e.key];
+    if (bv == null || bv.length != e.value.length) return false;
+    for (var i = 0; i < e.value.length; i++) {
+      if (bv[i] != e.value[i]) return false;
+    }
+  }
+  return true;
+}
+
+bool _seqEq(Map<String, int> a, Map<String, int> b) {
+  if (a.length != b.length) return false;
+  for (final e in a.entries) {
+    if (b[e.key] != e.value) return false;
+  }
+  return true;
+}
+
+class PlansDocument {
+  PlansDocument({
+    Map<String, Map<String, PlanProgress>>? progress,
+    Map<String, List<CustomPlanDef>>? custom,
+    Map<String, int>? customSeq,
+  }) : progress = progress ?? {},
+       custom = custom ?? {},
+       customSeq = customSeq ?? {};
+  final Map<String, Map<String, PlanProgress>> progress;
+  final Map<String, List<CustomPlanDef>> custom;
+  final Map<String, int> customSeq;
+  bool get isEmpty => progress.isEmpty && custom.isEmpty;
+
+  Map<String, dynamic> toJson() => {
+    'version': 2,
+    'progress': {
+      for (final e in progress.entries)
+        if (e.value.isNotEmpty)
+          e.key: {for (final p in e.value.entries) p.key: p.value.toJson()},
+    },
+    'custom': {
+      for (final e in custom.entries)
+        if (e.value.isNotEmpty) e.key: [for (final d in e.value) d.toJson()],
+    },
+    'customSeq': {...customSeq},
+  };
+
+  static PlansDocument fromJson(Object? decoded) {
+    if (decoded is! Map) return PlansDocument();
+    final progress = _parseProgressMap(decoded['progress']);
+    final custom = <String, List<CustomPlanDef>>{};
+    final rawCustom = decoded['custom'];
+    if (rawCustom is Map) {
+      for (final entry in rawCustom.entries) {
+        final profileId = entry.key;
+        if (profileId is! String) continue;
+        final list = entry.value;
+        if (list is! List) continue;
+        final kept = <CustomPlanDef>[];
+        final seen = <String>{};
+        for (final item in list) {
+          final def = _parseCustomDef(item);
+          if (def == null) continue;
+          if (!seen.add(def.id)) continue;
+          kept.add(def);
+        }
+        if (kept.isNotEmpty) custom[profileId] = kept;
+      }
+    }
+    final seq = <String, int>{};
+    final rawSeq = decoded['customSeq'];
+    if (rawSeq is Map) {
+      for (final entry in rawSeq.entries) {
+        final k = entry.key;
+        final v = entry.value;
+        if (k is String && v is int && v >= 0) seq[k] = v;
+      }
+    }
+    // self-heal
+    for (final e in custom.entries) {
+      var highest = 0;
+      for (final d in e.value) {
+        final n = int.tryParse(d.id.substring('custom-'.length)) ?? 0;
+        if (n > highest) highest = n;
+      }
+      final stored = seq[e.key] ?? 0;
+      if (highest > stored) seq[e.key] = highest;
+    }
+    return PlansDocument(progress: progress, custom: custom, customSeq: seq);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlansDocument &&
+      _progressMapEq(progress, other.progress) &&
+      _customMapEq(custom, other.custom) &&
+      _seqEq(customSeq, other.customSeq);
+  @override
+  int get hashCode =>
+      Object.hash(progress.length, custom.length, customSeq.length);
+}
+
+CustomPlanDef? _parseCustomDef(Object? item) {
+  if (item is! Map) return null;
+  final id = item['id'];
+  if (id is! String || !RegExp(r'^custom-\d+$').hasMatch(id)) return null;
+  final n = int.tryParse(id.substring(7));
+  if (n == null || n < 1) return null;
+  final nameRaw = item['name'];
+  if (nameRaw is! String) return null;
+  final name = nameRaw.trim();
+  if (name.isEmpty) return null;
+  final segsRaw = item['segments'];
+  if (segsRaw is! List || segsRaw.isEmpty) return null;
+  final segs = <PlanSegment>[];
+  for (final s in segsRaw) {
+    if (s is! Map) return null;
+    final book = s['book'];
+    final from = s['from'];
+    final to = s['to'];
+    if (book is! int || book < 0) return null;
+    if (from is! int || to is! int) return null;
+    if (!(1 <= from && from <= to)) return null;
+    segs.add(PlanSegment(book: book, from: from, to: to));
+  }
+  final paceRaw = item['pace'];
+  if (paceRaw is! Map) return null;
+  final mode = paceRaw['mode'];
+  PlanPace pace;
+  if (mode == 'verses') {
+    final v = paceRaw['versesPerDay'];
+    if (v is! int || v < 1 || v > 1000) return null;
+    pace = PlanPace.verses(v);
+  } else if (mode == 'days') {
+    final d = paceRaw['days'];
+    if (d is! int || d < 1) return null;
+    pace = PlanPace.days(d);
+  } else {
+    return null;
+  }
+  return CustomPlanDef(id: id, name: name, segments: segs, pace: pace);
+}
+
+Map<String, Map<String, PlanProgress>> _parseProgressMap(Object? raw) {
+  final out = <String, Map<String, PlanProgress>>{};
+  if (raw is! Map) return out;
+  for (final profileEntry in raw.entries) {
+    final profileId = profileEntry.key;
+    final plans = profileEntry.value;
+    if (profileId is! String || plans is! Map) continue;
+    for (final planEntry in plans.entries) {
+      final planId = planEntry.key;
+      final value = planEntry.value;
+      if (planId is! String || value is! Map) continue;
+      final startedOn = value['startedOn'];
+      if (startedOn is! String || _parseDateKey(startedOn) == null) continue;
+      final rawDone = value['done'];
+      if (rawDone is! List) continue;
+      final done = <int>{
+        for (final e in rawDone)
+          if (e is int && e >= 0) e,
+      };
+      out.putIfAbsent(profileId, () => <String, PlanProgress>{})[planId] =
+          PlanProgress(startedOn: startedOn, done: done);
+    }
+  }
+  return out;
+}
+
 const String plansPrefsKey = 'ww_plans_v1';
 
-/// Per-profile plan progress, persisted as one SharedPreferences
-/// string whose JSON is exactly
-/// `{profileId: {planId: {"startedOn": "yyyy-mm-dd", "done": [int, …]}}}`.
-///
-/// Mutators are synchronous and in-memory; persistence is [save]
-/// (the UI calls it fire-and-forget with a catch after each
-/// mutation — the Profiles `_persist` pattern, so the visible
-/// change never waits on disk).
 class PlansStore {
-  PlansStore._(this._prefs, this.state);
-
+  PlansStore._(this._prefs, this.document);
   final SharedPreferences _prefs;
-
-  /// profileId -> planId -> progress.
-  final Map<String, Map<String, PlanProgress>> state;
+  final PlansDocument document;
 
   static Future<PlansStore> load(SharedPreferences prefs) async =>
-      PlansStore._(prefs, parse(prefs.getString(plansPrefsKey)));
+      PlansStore._(prefs, parseDocument(prefs.getString(plansPrefsKey)));
 
-  /// Defensive load (lesson 18/22 discipline): bad shapes are
-  /// dropped entry by entry, never thrown. Unknown plan ids and
-  /// unknown profile ids are PRESERVED verbatim (forward
-  /// compatibility; display and counting filter by known
-  /// definitions). Non-negative `done` integers beyond the canon
-  /// are kept in state (they may belong to a plan not currently
-  /// offered; counting always intersects).
-  static Map<String, Map<String, PlanProgress>> parse(String? raw) {
-    final out = <String, Map<String, PlanProgress>>{};
-    if (raw == null) return out;
-    final Object? decoded;
+  static PlansDocument parseDocument(String? raw) {
+    if (raw == null) return PlansDocument();
+    Object? decoded;
     try {
       decoded = jsonDecode(raw);
     } catch (_) {
-      return out;
+      return PlansDocument();
     }
-    if (decoded is! Map) return out;
-    for (final profileEntry in decoded.entries) {
-      final profileId = profileEntry.key;
-      final plans = profileEntry.value;
-      if (profileId is! String || plans is! Map) continue;
-      for (final planEntry in plans.entries) {
-        final planId = planEntry.key;
-        final value = planEntry.value;
-        if (planId is! String || value is! Map) continue;
-        final startedOn = value['startedOn'];
-        if (startedOn is! String || _parseDateKey(startedOn) == null) {
-          continue;
-        }
-        final rawDone = value['done'];
-        if (rawDone is! List) continue;
-        final done = <int>{
-          for (final e in rawDone)
-            if (e is int && e >= 0) e,
-        };
-        out.putIfAbsent(profileId, () => <String, PlanProgress>{})[planId] =
-            PlanProgress(startedOn: startedOn, done: done);
-      }
+    if (decoded is Map &&
+        decoded['version'] is int &&
+        decoded['version'] == 2) {
+      return PlansDocument.fromJson(decoded);
     }
-    return out;
+    // v1 bare progress
+    return PlansDocument(progress: _parseProgressMap(decoded));
   }
 
-  /// The JSON string [parse] reads back: `done` sorted ascending,
-  /// empty parent maps omitted (a profile whose last plan is
-  /// restarted away disappears from the JSON).
-  static String encode(Map<String, Map<String, PlanProgress>> state) {
-    final out = <String, dynamic>{};
-    for (final profileEntry in state.entries) {
-      if (profileEntry.value.isEmpty) continue;
-      out[profileEntry.key] = {
-        for (final planEntry in profileEntry.value.entries)
-          planEntry.key: planEntry.value.toJson(),
-      };
-    }
-    return jsonEncode(out);
-  }
+  static String encodeDocument(PlansDocument doc) => jsonEncode(doc.toJson());
+
+  static Map<String, Map<String, PlanProgress>> parse(String? raw) =>
+      parseDocument(raw).progress;
 
   PlanProgress? progressFor(String profileId, String planId) =>
-      state[profileId]?[planId];
+      document.progress[profileId]?[planId];
 
-  /// Starts a plan today. No-op when an entry already exists.
   void startPlan(String profileId, String planId, DateTime today) {
-    final plans = state.putIfAbsent(profileId, () => <String, PlanProgress>{});
+    final plans = document.progress.putIfAbsent(
+      profileId,
+      () => <String, PlanProgress>{},
+    );
     if (plans.containsKey(planId)) return;
     plans[planId] = PlanProgress(startedOn: planDateKey(today), done: {});
   }
 
-  /// Toggles one chapter's check mark. No-op when the plan has
-  /// no entry (the mechanism does not exist before the plan
-  /// starts).
   void toggleChapter(String profileId, String planId, int globalChapter) {
-    final progress = state[profileId]?[planId];
+    final progress = document.progress[profileId]?[planId];
     if (progress == null) return;
-    if (!progress.done.remove(globalChapter)) {
-      progress.done.add(globalChapter);
+    if (!progress.done.remove(globalChapter)) progress.done.add(globalChapter);
+  }
+
+  void restartPlan(String profileId, String planId) {
+    final plans = document.progress[profileId];
+    if (plans == null) return;
+    plans.remove(planId);
+    if (plans.isEmpty) document.progress.remove(profileId);
+  }
+
+  List<CustomPlanDef> customsFor(String profileId) =>
+      document.custom[profileId] ?? const [];
+  CustomPlanDef? customFor(String profileId, String planId) {
+    for (final d in customsFor(profileId)) {
+      if (d.id == planId) return d;
+    }
+    return null;
+  }
+
+  CustomPlanDef createCustom(
+    String profileId, {
+    required String name,
+    required List<PlanSegment> segments,
+    required PlanPace pace,
+  }) {
+    final n = (document.customSeq[profileId] ?? 0) + 1;
+    final def = CustomPlanDef(
+      id: 'custom-$n',
+      name: name.trim(),
+      segments: segments,
+      pace: pace,
+    );
+    document.custom.putIfAbsent(profileId, () => <CustomPlanDef>[]).add(def);
+    document.customSeq[profileId] = n;
+    return def;
+  }
+
+  void updateCustom(String profileId, CustomPlanDef def) {
+    final list = document.custom[profileId];
+    if (list == null) return;
+    final i = list.indexWhere((d) => d.id == def.id);
+    if (i < 0) return;
+    list[i] = def;
+  }
+
+  void deleteCustom(String profileId, String planId) {
+    final list = document.custom[profileId];
+    if (list != null) {
+      list.removeWhere((d) => d.id == planId);
+      if (list.isEmpty) document.custom.remove(profileId);
+    }
+    final plans = document.progress[profileId];
+    if (plans != null) {
+      plans.remove(planId);
+      if (plans.isEmpty) document.progress.remove(profileId);
     }
   }
 
-  /// Removes the plan's entry entirely, pruning the now-empty
-  /// profile map.
-  void restartPlan(String profileId, String planId) {
-    final plans = state[profileId];
-    if (plans == null) return;
-    plans.remove(planId);
-    if (plans.isEmpty) state.remove(profileId);
-  }
-
   Future<void> save() async {
-    await _prefs.setString(plansPrefsKey, encode(state));
+    await _prefs.setString(plansPrefsKey, encodeDocument(document));
   }
 }
 
-/// Everything a Home plan card renders, computed by the shell
-/// (spec §7.1): HomeTab formats and renders, it does not compute.
+// ---- Resolution §5.1 ----
+class ResolvedPlan {
+  const ResolvedPlan({
+    required this.id,
+    required this.name,
+    required this.isCustom,
+    required this.pace,
+    required this.chapters,
+    required this.schedule,
+    required this.coverBooks,
+    required this.totalVerses,
+  });
+  final String id;
+  final String name;
+  final bool isCustom;
+  final PlanPace pace;
+  final List<int> chapters;
+  final List<List<int>> schedule;
+  final List<int> coverBooks;
+  final int totalVerses;
+  int get days => schedule.length;
+  int get totalChapters => chapters.length;
+}
+
+int _versesOf(BibleData data, List<int> chapters) {
+  var s = 0;
+  for (final ch in chapters) {
+    s += data.chapters[ch].v;
+  }
+  return s;
+}
+
+ResolvedPlan resolveBuiltinPlan(BibleData data, StudyPlanDef def) {
+  final chapters = planChapters(data, def);
+  const pace = PlanPace.verses(wwBuiltinVersesPerDay);
+  return ResolvedPlan(
+    id: def.id,
+    name: def.name,
+    isCustom: false,
+    pace: pace,
+    chapters: chapters,
+    schedule: scheduleByVerses(data, chapters, wwBuiltinVersesPerDay),
+    coverBooks:
+        def.bookIndices ?? [for (var i = 0; i < data.books.length; i++) i],
+    totalVerses: _versesOf(data, chapters),
+  );
+}
+
+List<int> customChapters(BibleData data, List<PlanSegment> segments) {
+  final out = <int>[];
+  final seen = <int>{};
+  for (final seg in segments) {
+    if (seg.book >= data.books.length || seg.book < 0) continue;
+    final count = data.books[seg.book].chapters;
+    if (seg.from > count) continue;
+    final to = math.min(seg.to, count);
+    for (var c = seg.from; c <= to; c++) {
+      final g = data.books[seg.book].start + c - 1;
+      if (seen.add(g)) out.add(g);
+    }
+  }
+  return out;
+}
+
+ResolvedPlan resolveCustomPlan(BibleData data, CustomPlanDef def) {
+  final chapters = customChapters(data, def.segments);
+  final schedule = def.pace.mode == PlanPaceMode.verses
+      ? scheduleByVerses(data, chapters, def.pace.versesPerDay!)
+      : scheduleByDays(data, chapters, def.pace.days!);
+  final cover = <int>[];
+  for (final s in def.segments) {
+    if (!cover.contains(s.book)) cover.add(s.book);
+  }
+  return ResolvedPlan(
+    id: def.id,
+    name: def.name,
+    isCustom: true,
+    pace: def.pace,
+    chapters: chapters,
+    schedule: schedule,
+    coverBooks: cover,
+    totalVerses: _versesOf(data, chapters),
+  );
+}
+
+bool customAvailable(CustomPlanDef def, WwTradition tradition, BibleData data) {
+  for (final s in def.segments) {
+    if (s.book < 0 || s.book >= data.books.length) return false;
+    if (!canonContainsBook(tradition, data, s.book)) return false;
+  }
+  return customChapters(data, def.segments).isNotEmpty;
+}
+
+({int customPlans, int plansInProgress}) plansBackupCounts(
+  Map<String, dynamic> plansMember,
+) {
+  var customs = 0;
+  var inProgress = 0;
+  final c = plansMember['custom'];
+  if (c is Map) {
+    for (final v in c.values) {
+      if (v is List) customs += v.length;
+    }
+  }
+  final p = plansMember['progress'];
+  if (p is Map) {
+    for (final v in p.values) {
+      if (v is Map) inProgress += v.length;
+    }
+  }
+  return (customPlans: customs, plansInProgress: inProgress);
+}
+
 class PlanCardData {
   const PlanCardData({
-    required this.def,
-    required this.totalChapters,
+    required this.plan,
     required this.started,
     required this.doneCount,
     required this.currentDay,
     required this.percent,
   });
-
-  final StudyPlanDef def;
-  final int totalChapters;
+  final ResolvedPlan plan;
   final bool started;
-
-  /// The intersected done count (§4.3).
   final int doneCount;
-
-  /// 0 when not started (sentinel).
   final int currentDay;
-
-  /// `planPercent(doneCount, totalChapters)`.
   final int percent;
 }

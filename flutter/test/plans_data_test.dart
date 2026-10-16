@@ -362,8 +362,9 @@ void main() {
       );
       expect(c1.id, 'custom-1');
       expect(c1.name, 'Morning Psalms');
+      // §11.2.1 fixture: TWO customs on ONE profile, one per pace mode.
       store.createCustom(
-        'p2',
+        'default',
         name: 'In a month',
         segments: [PlanSegment(book: 39, from: 1, to: 28)],
         pace: PlanPace.days(30),
@@ -372,9 +373,14 @@ void main() {
       final decoded =
           jsonDecode(prefs.getString(plansPrefsKey)!) as Map<String, dynamic>;
       expect(decoded.keys, ['version', 'progress', 'custom', 'customSeq']);
-      final def0 = ((decoded['custom'] as Map)['default'] as List).first as Map;
+      final defs = (decoded['custom'] as Map)['default'] as List;
+      expect(defs.length, 2);
+      final def0 = defs.first as Map;
       expect(def0.keys, ['id', 'name', 'segments', 'pace']);
       expect((def0['segments'] as List).first.keys, ['book', 'from', 'to']);
+      // Pace key order: mode first, then its value key (§11.2.1).
+      expect((def0['pace'] as Map).keys, ['mode', 'versesPerDay']);
+      expect(((defs[1] as Map)['pace'] as Map).keys, ['mode', 'days']);
       final reloaded = await PlansStore.load(prefs);
       expect(reloaded.document, store.document);
     });

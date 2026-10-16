@@ -3,7 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/bible_data.dart';
 import '../data/plans.dart';
+import '../data/tradition.dart';
 import '../theme/ww_theme.dart';
+import 'plan_editor_screen.dart';
 
 /// Comma grouping for counts, the shipped `HomeTab._fmt` style
 /// (`1,189`, never `1189`).
@@ -32,15 +34,19 @@ class PlanDetailScreen extends StatefulWidget {
     required this.data,
     required this.plan,
     required this.profileId,
+    required this.tradition,
     required this.onOpenChapter,
     this.now,
   });
 
   final BibleData data;
-  final StudyPlanDef plan;
+  final ResolvedPlan plan;
 
   /// The active profile at push time.
   final String profileId;
+
+  /// The active tradition at push time (seeds the editor).
+  final WwTradition tradition;
 
   /// Opens a chapter (a GLOBAL chapter index) in the reader.
   final void Function(int globalChapter) onOpenChapter;
@@ -56,12 +62,14 @@ class PlanDetailScreen extends StatefulWidget {
 class _PlanDetailScreenState extends State<PlanDetailScreen> {
   PlansStore? _store;
   bool _loaded = false;
+  late ResolvedPlan _plan;
 
   DateTime _today() => (widget.now ?? DateTime.now)();
 
   @override
   void initState() {
     super.initState();
+    _plan = widget.plan;
     _load();
   }
 
@@ -114,7 +122,7 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
   }
 
   Future<void> _restart() async {
-    final plan = widget.plan;
+    final plan = _plan;
     final confirmed = await wwShowDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -155,6 +163,75 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
     _persist();
   }
 
+  Future<void> _edit() async {
+    final store = _store;
+    if (store == null) return;
+    final def = store.customFor(widget.profileId, _plan.id);
+    if (def == null) return;
+    await Navigator.of(context).push(
+      WwPageRoute(
+        builder: (_) => PlanEditorScreen(
+          data: widget.data,
+          tradition: widget.tradition,
+          profileId: widget.profileId,
+          initialDef: def,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    await _load();
+    if (!mounted) return;
+    final fresh = _store?.customFor(widget.profileId, _plan.id);
+    if (fresh == null) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() => _plan = resolveCustomPlan(widget.data, fresh));
+  }
+
+  Future<void> _delete() async {
+    final plan = _plan;
+    final confirmed = await wwShowDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: WwColors.surfaceHigh,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(WwRadius.sheet),
+        ),
+        title: Text('Delete ${plan.name}?', style: WwType.selectionTitle),
+        content: const Text(
+          'This plan and its check marks will be deleted. Your '
+          'highlights and notes are not affected.',
+          style: WwType.bodyOnDark,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            style: TextButton.styleFrom(
+              minimumSize: const Size(64, WwSpace.minTarget),
+            ),
+            child: const Text('Cancel', style: WwType.buttonLabel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: TextButton.styleFrom(
+              minimumSize: const Size(64, WwSpace.minTarget),
+            ),
+            child: const Text('Delete', style: WwType.dangerActionLabel),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final store = _store;
+    if (store == null) return;
+    store.deleteCustom(widget.profileId, plan.id);
+    await _persist();
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -190,7 +267,7 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
             ),
           ),
           const SizedBox(width: 8),
-          Expanded(child: Text(widget.plan.name, style: WwType.screenTitle)),
+          Expanded(child: Text(_plan.name, style: WwType.screenTitle)),
         ],
       ),
     );
@@ -204,8 +281,8 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
 
   Widget _body() {
     final data = widget.data;
-    final plan = widget.plan;
-    final chapters = planChapters(data, plan);
+    final plan = _plan;
+    final chapters = plan.chapters;
     final total = chapters.length;
     final progress = _progress;
     final started = progress != null;
@@ -219,7 +296,7 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
             days: plan.days,
           )
         : 0;
-    final schedule = planSchedule(data, plan);
+    final schedule = plan.schedule;
 
     final String status;
     if (!started) {
@@ -244,6 +321,8 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(status, style: WwType.bodyOnDark),
+                const SizedBox(height: 4),
+                Text(_paceLine(plan), style: WwType.captionOnDark),
                 if (started) ...[
                   const SizedBox(height: 8),
                   _progressBar(done, total),
@@ -307,25 +386,69 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
             ),
           ],
         ],
-        if (started) ...[
+        if (started || plan.isCustom) ...[
           const SizedBox(height: 24),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              key: const ValueKey('plan-restart'),
-              onPressed: _restart,
-              style: TextButton.styleFrom(
-                minimumSize: const Size(64, WwSpace.minTarget),
-              ),
-              child: const Text(
-                'Restart plan',
-                style: WwType.dangerActionLabel,
-              ),
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (started)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    key: const ValueKey('plan-restart'),
+                    onPressed: _restart,
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(64, WwSpace.minTarget),
+                    ),
+                    child: const Text(
+                      'Restart plan',
+                      style: WwType.dangerActionLabel,
+                    ),
+                  ),
+                ),
+              if (plan.isCustom) ...[
+                if (started) const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    key: const ValueKey('plan-edit'),
+                    onPressed: _edit,
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(64, WwSpace.minTarget),
+                    ),
+                    child: const Text('Edit plan', style: WwType.buttonLabel),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    key: const ValueKey('plan-delete'),
+                    onPressed: _delete,
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(64, WwSpace.minTarget),
+                    ),
+                    child: const Text(
+                      'Delete plan',
+                      style: WwType.dangerActionLabel,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ],
     );
+  }
+
+  String _paceLine(ResolvedPlan plan) {
+    if (plan.pace.mode == PlanPaceMode.verses) {
+      final t = plan.pace.versesPerDay!;
+      return t == 1 ? 'About 1 verse a day' : 'About $t verses a day';
+    }
+    final x = plan.days == 0 ? 0 : (plan.totalVerses / plan.days).round();
+    return x == 1 ? 'About 1 verse a day' : 'About $x verses a day';
   }
 
   /// The summary card's progress bar (spec §4.6): full

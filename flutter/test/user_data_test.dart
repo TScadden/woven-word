@@ -194,6 +194,10 @@ void main() {
             'notes': {
               'kjv': {key: 'shape'},
             },
+            // Reader arch package: the per-profile arch
+            // setting is part of the document shape now
+            // (spec I-6 — version stays 3, member defaulted).
+            'readerArchExpanded': true,
           },
         },
       });

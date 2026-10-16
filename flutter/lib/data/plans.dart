@@ -355,8 +355,26 @@ class PlansDocument {
       _customMapEq(custom, other.custom) &&
       _seqEq(customSeq, other.customSeq);
   @override
-  int get hashCode =>
-      Object.hash(progress.length, custom.length, customSeq.length);
+  int get hashCode => Object.hash(
+    Object.hashAllUnordered(
+      progress.entries.map(
+        (e) => Object.hash(
+          e.key,
+          Object.hashAllUnordered(
+            e.value.entries.map((p) => Object.hash(p.key, p.value)),
+          ),
+        ),
+      ),
+    ),
+    Object.hashAllUnordered(
+      custom.entries.map(
+        (e) => Object.hash(e.key, Object.hashAll(e.value)),
+      ),
+    ),
+    Object.hashAllUnordered(
+      customSeq.entries.map((e) => Object.hash(e.key, e.value)),
+    ),
+  );
 }
 
 CustomPlanDef? _parseCustomDef(Object? item) {

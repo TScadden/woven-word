@@ -17,14 +17,12 @@ void main() {
 
   PlanCardData card(
     String id, {
-    int total = 89,
     bool started = false,
     int done = 0,
     int day = 0,
     int percent = 0,
   }) => PlanCardData(
-    def: def(id),
-    totalChapters: total,
+    plan: resolveBuiltinPlan(data, def(id)),
     started: started,
     doneCount: done,
     currentDay: day,
@@ -57,6 +55,7 @@ void main() {
     double textScale = 1.0,
     void Function(int, int)? onVotd,
     void Function(String)? onPlan,
+    void Function()? onCreate,
     Map<String, int>? toolTaps,
     Size size = const Size(360, 800),
   }) async {
@@ -93,6 +92,7 @@ void main() {
               toolTaps?['notes'] = (toolTaps['notes'] ?? 0) + 1,
           onOpenVerseOfDay: onVotd ?? (_, _) {},
           onOpenPlan: onPlan ?? (_) {},
+          onCreatePlan: onCreate ?? () {},
           onOpenHighlights: () =>
               toolTaps?['highlights'] = (toolTaps['highlights'] ?? 0) + 1,
           onRetryLoad: () {},
@@ -228,7 +228,7 @@ void main() {
         plans: [card('gospels')],
         onPlan: (id) => openedPlan = id,
       );
-      expect(find.text('30 days · 89 chapters'), findsOneWidget);
+      expect(find.text('23 days · 89 chapters'), findsOneWidget);
       expect(find.byKey(const ValueKey('plan-progress-gospels')), findsNothing);
       await tester.tap(find.byKey(const ValueKey('plan-cover-gospels')));
       expect(openedPlan, 'gospels');
@@ -237,7 +237,7 @@ void main() {
         tester,
         plans: [card('gospels', started: true, done: 45, day: 12, percent: 50)],
       );
-      expect(find.text('Day 12 of 30 · 50%'), findsOneWidget);
+      expect(find.text('Day 12 of 23 · 50%'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('plan-progress-gospels')),
         findsOneWidget,
@@ -256,7 +256,7 @@ void main() {
   testWidgets('plan cards: a single offered plan renders exactly one card', (
     tester,
   ) async {
-    await pumpHome(tester, plans: [card('psalms-proverbs', total: 181)]);
+    await pumpHome(tester, plans: [card('psalms-proverbs')]);
     expect(
       find.byKey(const ValueKey('plan-cover-psalms-proverbs')),
       findsOneWidget,
@@ -373,5 +373,111 @@ void main() {
       );
     }
     expect(tester.takeException(), isNull);
+  });
+  testWidgets('create tile: only child when no plans; tap fires (§11.6.1)', (
+    tester,
+  ) async {
+    var taps = 0;
+    await pumpHome(tester, plans: const [], onCreate: () => taps++);
+    expect(find.text('STUDY PLANS'), findsOneWidget);
+    expect(find.byKey(const ValueKey('plan-cover-create')), findsOneWidget);
+    expect(find.byKey(const ValueKey('plan-cover-gospels')), findsNothing);
+    expect(find.text('Create your own plan'), findsOneWidget);
+    expect(find.text('Choose books and a pace'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('Create your own plan, Choose books and a pace'),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const ValueKey('plan-cover-create')));
+    expect(taps, 1);
+  });
+
+  testWidgets('create tile sits after the last card (§11.6.1/3)', (
+    tester,
+  ) async {
+    await pumpHome(tester, plans: [card('gospels'), card('psalms-proverbs')]);
+    final g = tester
+        .getTopLeft(find.byKey(const ValueKey('plan-cover-gospels')))
+        .dx;
+    final ps = tester
+        .getTopLeft(find.byKey(const ValueKey('plan-cover-psalms-proverbs')))
+        .dx;
+    final tile = tester
+        .getTopLeft(find.byKey(const ValueKey('plan-cover-create')))
+        .dx;
+    expect(g < ps, isTrue);
+    expect(ps < tile, isTrue);
+  });
+
+  testWidgets('custom cards render like built-ins (§11.6.2)', (tester) async {
+    final custom = resolveCustomPlan(
+      data,
+      CustomPlanDef(
+        id: 'custom-1',
+        name: 'My Psalms',
+        segments: [PlanSegment(book: 18, from: 1, to: 10)],
+        pace: PlanPace.verses(40),
+      ),
+    );
+    await pumpHome(
+      tester,
+      plans: [
+        PlanCardData(
+          plan: custom,
+          started: false,
+          doneCount: 0,
+          currentDay: 0,
+          percent: 0,
+        ),
+      ],
+    );
+    expect(find.text('My Psalms'), findsOneWidget);
+    expect(find.text('3 days · 10 chapters'), findsOneWidget);
+    expect(find.text('Psalms'), findsWidgets);
+    await pumpHome(
+      tester,
+      plans: [
+        PlanCardData(
+          plan: custom,
+          started: true,
+          doneCount: 5,
+          currentDay: 1,
+          percent: 50,
+        ),
+      ],
+    );
+    expect(find.text('Day 1 of 3 · 50%'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('plan-progress-custom-1')),
+      findsOneWidget,
+    );
+    // 5+ books -> first / ellipsis / last
+    final wide = resolveCustomPlan(
+      data,
+      CustomPlanDef(
+        id: 'custom-2',
+        name: 'Wide',
+        segments: [
+          for (final b in [0, 1, 2, 3, 4, 5])
+            PlanSegment(book: b, from: 1, to: 1),
+        ],
+        pace: PlanPace.verses(40),
+      ),
+    );
+    await pumpHome(
+      tester,
+      plans: [
+        PlanCardData(
+          plan: wide,
+          started: false,
+          doneCount: 0,
+          currentDay: 0,
+          percent: 0,
+        ),
+      ],
+    );
+    expect(find.text('Genesis'), findsWidgets);
+    expect(find.text('…'), findsOneWidget);
+    expect(find.text('Joshua'), findsWidgets);
   });
 }

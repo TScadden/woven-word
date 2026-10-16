@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:woven_word/data/plans.dart';
 import 'package:woven_word/data/user_data.dart';
 import 'package:woven_word/screens/profiles_screen.dart';
 import 'package:woven_word/theme/ww_theme.dart';
@@ -57,10 +58,7 @@ void main() {
         UserDataStore.validateImport('{not json').error,
         BackupImportError.notJson,
       );
-      expect(
-        UserDataStore.validateImport('').error,
-        BackupImportError.notJson,
-      );
+      expect(UserDataStore.validateImport('').error, BackupImportError.notJson);
     });
 
     test('rejects a non-object root as notBackup', () {
@@ -74,8 +72,7 @@ void main() {
       );
     });
 
-    test('rejects a missing or non-object profiles member as notBackup',
-        () {
+    test('rejects a missing or non-object profiles member as notBackup', () {
       expect(
         UserDataStore.validateImport('{"version":2}').error,
         BackupImportError.notBackup,
@@ -130,8 +127,7 @@ void main() {
       );
     });
 
-    test('accepts one empty profile bucket (bucket count is the test)',
-        () {
+    test('accepts one empty profile bucket (bucket count is the test)', () {
       final result = UserDataStore.validateImport(
         '{"version":2,"profiles":{"default":{"highlights":{},'
         '"notes":{}}}}',
@@ -151,9 +147,9 @@ void main() {
       final result = UserDataStore.validateImport(v1);
       expect(result.isValid, isTrue);
       await store.replaceData(result.data!);
-      final stored =
-          jsonDecode(prefs.getString(UserDataStore.storageKey)!)
-              as Map<String, dynamic>;
+      final stored = jsonDecode(
+        prefs.getString(UserDataStore.storageKey)!,
+      ) as Map<String, dynamic>;
       expect(stored['version'], 3);
       expect(
         store.data.fullVerseColor('default', 'kjv', 'b18c23v1'),
@@ -311,9 +307,8 @@ void main() {
           theme: wwTheme(),
           builder: (context, child) => disableAnimations
               ? MediaQuery(
-                  data: MediaQuery.of(
-                    context,
-                  ).copyWith(disableAnimations: true),
+                  data: MediaQuery.of(context)
+                      .copyWith(disableAnimations: true),
                   child: child!,
                 )
               : child!,
@@ -363,8 +358,9 @@ void main() {
       );
     });
 
-    testWidgets('export shares the document and shows nothing after',
-        (tester) async {
+    testWidgets('export shares the document and shows nothing after', (
+      tester,
+    ) async {
       String? shared;
       await pumpProfiles(tester, share: (json) async => shared = json);
       await scrollToRow(tester, 'Export backup');
@@ -377,7 +373,11 @@ void main() {
       final loaded = UserData.fromJson(
         jsonDecode(_currentJson) as Map<String, dynamic>,
       );
-      expect(jsonDecode(shared!), loaded.toJson());
+      // v2 (spec §8.4): the exported document gains an empty
+      // plans member; the UserData payload is unchanged.
+      final expectedExport = Map<String, dynamic>.from(loaded.toJson());
+      expectedExport['plans'] = PlansDocument().toJson();
+      expect(jsonDecode(shared!), expectedExport);
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.byType(SnackBar), findsNothing);
     });
@@ -390,14 +390,12 @@ void main() {
       await tester.pump();
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.byType(SnackBar), findsNothing);
-      expect(
-        (await prefs()).getString(UserDataStore.storageKey),
-        _currentJson,
-      );
+      expect((await prefs()).getString(UserDataStore.storageKey), _currentJson);
     });
 
-    testWidgets('malformed file: error dialog, state unchanged',
-        (tester) async {
+    testWidgets('malformed file: error dialog, state unchanged', (
+      tester,
+    ) async {
       await pumpProfiles(
         tester,
         picker: () async => Uint8List.fromList(utf8.encode('not json')),
@@ -418,10 +416,7 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.byType(AlertDialog), findsNothing);
-      expect(
-        (await prefs()).getString(UserDataStore.storageKey),
-        _currentJson,
-      );
+      expect((await prefs()).getString(UserDataStore.storageKey), _currentJson);
       // Back to the top of the list, where the profile rows are.
       await tester.scrollUntilVisible(find.text('Mine'), -100);
       await tester.pump();
@@ -429,8 +424,9 @@ void main() {
       expect(find.text('Family'), findsOneWidget);
     });
 
-    testWidgets('error dialog under reduced motion renders instantly',
-        (tester) async {
+    testWidgets('error dialog under reduced motion renders instantly', (
+      tester,
+    ) async {
       await pumpProfiles(
         tester,
         disableAnimations: true,
@@ -449,8 +445,9 @@ void main() {
       );
     });
 
-    testWidgets('confirm names both sides; Cancel changes nothing',
-        (tester) async {
+    testWidgets('confirm names both sides; Cancel changes nothing', (
+      tester,
+    ) async {
       await pumpProfiles(
         tester,
         picker: () async => Uint8List.fromList(utf8.encode(_fileJson)),
@@ -475,14 +472,12 @@ void main() {
       await tester.pump();
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.byType(SnackBar), findsNothing);
-      expect(
-        (await prefs()).getString(UserDataStore.storageKey),
-        _currentJson,
-      );
+      expect((await prefs()).getString(UserDataStore.storageKey), _currentJson);
     });
 
-    testWidgets('Replace installs the validated model, persists, snackbars',
-        (tester) async {
+    testWidgets('Replace installs the validated model, persists, snackbars', (
+      tester,
+    ) async {
       await pumpProfiles(
         tester,
         picker: () async => Uint8List.fromList(utf8.encode(_fileJson)),
@@ -511,5 +506,474 @@ void main() {
       );
       expect(jsonDecode(stored!), expected.toJson());
     });
+  });
+  group('plans in backups (spec §11.8)', () {
+    Map<String, dynamic> plansMember() => {
+      'version': 2,
+      'progress': {
+        'default': {
+          'gospels': {
+            'startedOn': '2026-10-05',
+            'done': [929, 931],
+          },
+        },
+        'solo': {
+          'custom-1': {
+            'startedOn': '2026-09-01',
+            'done': [478],
+          },
+        },
+      },
+      'custom': {
+        'solo': [
+          {
+            'id': 'custom-1',
+            'name': 'Solo Plan',
+            'segments': [
+              {'book': 18, 'from': 1, 'to': 10},
+            ],
+            'pace': {'mode': 'verses', 'versesPerDay': 40},
+          },
+        ],
+        'p2': [
+          {
+            'id': 'custom-2',
+            'name': 'Other',
+            'segments': [
+              {'book': 39, 'from': 1, 'to': 28},
+            ],
+            'pace': {'mode': 'days', 'days': 30},
+          },
+        ],
+      },
+      'customSeq': {'solo': 1, 'p2': 2},
+    };
+
+    String fileWithPlans(Object? plans) {
+      final doc = jsonDecode(_fileJson) as Map<String, dynamic>;
+      doc['plans'] = plans;
+      return jsonEncode(doc);
+    }
+
+    test('validator accepts a well-formed plans member; counts helper', () {
+      final member = plansMember();
+      final result = UserDataStore.validateImport(fileWithPlans(member));
+      expect(result.isValid, isTrue);
+      expect(result.plans, member);
+      final counts = plansBackupCounts(member);
+      expect(counts.customPlans, 2);
+      expect(counts.plansInProgress, 2);
+    });
+
+    test('each checklist malformation -> invalidPlans', () {
+      Map<String, dynamic> variant(void Function(Map<String, dynamic>) f) {
+        final m = plansMember();
+        f(m);
+        return m;
+      }
+
+      final bads = <Object?>[
+        42,
+        variant((m) => m['version'] = 1),
+        variant((m) => m['version'] = '2'),
+        variant((m) => m.remove('version')),
+        variant((m) => m.remove('progress')),
+        variant((m) => m.remove('custom')),
+        variant((m) => m.remove('customSeq')),
+        variant(
+          (m) => (m['progress'] as Map)['default'] = {
+            'gospels': {'startedOn': '2026-13-01', 'done': []},
+          },
+        ),
+        variant(
+          (m) => ((m['progress'] as Map)['default'] as Map)['gospels'] = {
+            'startedOn': '2026-10-05',
+            'done': ['x'],
+          },
+        ),
+        variant(
+          (m) => ((m['progress'] as Map)['default'] as Map)['gospels'] = {
+            'startedOn': '2026-10-05',
+            'done': [-1],
+          },
+        ),
+        variant(
+          (m) => ((m['progress'] as Map)['default'] as Map)['gospels'] = {
+            'startedOn': '2026-10-05',
+            'done': [929, 929],
+          },
+        ),
+        variant(
+          (m) => ((m['custom'] as Map)['solo'] as List)[0] = {
+            'id': 'custom-0',
+            'name': 'X',
+            'segments': [
+              {'book': 18, 'from': 1, 'to': 2},
+            ],
+            'pace': {'mode': 'verses', 'versesPerDay': 40},
+          },
+        ),
+        variant(
+          (m) => ((m['custom'] as Map)['solo'] as List)[0] = {
+            'id': 'plan-1',
+            'name': 'X',
+            'segments': [
+              {'book': 18, 'from': 1, 'to': 2},
+            ],
+            'pace': {'mode': 'verses', 'versesPerDay': 40},
+          },
+        ),
+        variant(
+          (m) => ((m['custom'] as Map)['solo'] as List).add(
+            ((m['custom'] as Map)['solo'] as List)[0],
+          ),
+        ),
+        variant(
+          (m) =>
+              (((m['custom'] as Map)['solo'] as List)[0] as Map)['name'] = '  ',
+        ),
+        variant(
+          (m) =>
+              (((m['custom'] as Map)['solo'] as List)[0] as Map)['segments'] =
+                  [],
+        ),
+        variant(
+          (m) =>
+              (((m['custom'] as Map)['solo'] as List)[0] as Map)['segments'] = [
+                {'book': 18, 'from': 5, 'to': 2},
+              ],
+        ),
+        variant(
+          (m) => (((m['custom'] as Map)['solo'] as List)[0] as Map)['pace'] = {
+            'mode': 'verses',
+            'versesPerDay': 1001,
+          },
+        ),
+        variant(
+          (m) => (((m['custom'] as Map)['solo'] as List)[0] as Map)['pace'] = {
+            'mode': 'weeks',
+          },
+        ),
+        variant((m) => (m['customSeq'] as Map)['solo'] = -1),
+      ];
+      for (final bad in bads) {
+        final result = UserDataStore.validateImport(fileWithPlans(bad));
+        expect(result.error, BackupImportError.invalidPlans, reason: '$bad');
+        expect(result.data, isNull);
+      }
+      // seq below highest suffix still validates (P6 note)
+      final low = variant((m) => (m['customSeq'] as Map)['solo'] = 0);
+      expect(UserDataStore.validateImport(fileWithPlans(low)).isValid, isTrue);
+      // precedence: malformed plans + empty profiles -> invalidPlans
+      final emptyDoc = jsonEncode({'version': 2, 'profiles': {}, 'plans': 42});
+      expect(
+        UserDataStore.validateImport(emptyDoc).error,
+        BackupImportError.invalidPlans,
+      );
+      final emptyDocValid = jsonEncode({
+        'version': 2,
+        'profiles': {},
+        'plans': plansMember(),
+      });
+      expect(
+        UserDataStore.validateImport(emptyDocValid).error,
+        BackupImportError.emptyDocument,
+      );
+    });
+
+    test('gate/parser agreement: fromJson(toJson) reproduces member', () {
+      for (final member in [PlansDocument().toJson(), plansMember()]) {
+        expect(PlansDocument.fromJson(member).toJson(), member);
+      }
+    });
+
+    testWidgets('malformed plans member writes nothing (widget)', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({
+        UserDataStore.storageKey: _currentJson,
+        plansPrefsKey: '{"version":2,"progress":{},"custom":{},"customSeq":{}}',
+      });
+      String? shared;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wwTheme(),
+          home: ProfilesScreen(
+            pickBackupFile: () async =>
+                Uint8List.fromList(utf8.encode(fileWithPlans(42))),
+            shareBackup: (j) async => shared = j,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.scrollUntilVisible(find.text('Import backup'), 100);
+      await tester.pump();
+      await tester.tap(find.text('Import backup'));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.text(
+          "Nothing was changed. This backup's study plans are not in a form Woven Word can import.",
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('OK'));
+      await tester.pump();
+      await tester.pump();
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(UserDataStore.storageKey), _currentJson);
+      expect(
+        prefs.getString(plansPrefsKey),
+        '{"version":2,"progress":{},"custom":{},"customSeq":{}}',
+      );
+      expect(shared, isNull);
+    });
+
+    testWidgets('legacy absent-member import leaves plans untouched', (
+      tester,
+    ) async {
+      const plansSeed =
+          '{"version":2,"progress":{},"custom":{},"customSeq":{"default":4}}';
+      SharedPreferences.setMockInitialValues({
+        UserDataStore.storageKey: _currentJson,
+        plansPrefsKey: plansSeed,
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wwTheme(),
+          home: ProfilesScreen(
+            pickBackupFile: () async =>
+                Uint8List.fromList(utf8.encode(_fileJson)),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.scrollUntilVisible(find.text('Import backup'), 100);
+      await tester.pump();
+      await tester.tap(find.text('Import backup'));
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.text('Replace'));
+      await tester.pump();
+      await tester.pump();
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(plansPrefsKey), plansSeed);
+      final stored = jsonDecode(
+        prefs.getString(UserDataStore.storageKey)!,
+      ) as Map<String, dynamic>;
+      final expected = UserData.fromJson(
+        jsonDecode(_fileJson) as Map<String, dynamic>,
+      );
+      expect(stored, expected.toJson());
+    });
+
+    testWidgets(
+      'present-member import replaces plans wholesale + confirm counts',
+      (tester) async {
+        final member = plansMember();
+        // Adjust member: 2 customs, 3 progress entries for the counts sentence.
+        (member['progress'] as Map)['p2'] = {
+          'whole-bible': {'startedOn': '2026-01-01', 'done': <int>[]},
+        };
+        const devicePlans =
+            '{"version":2,"progress":{},"custom":{"default":[{"id":"custom-9","name":"Device Only","segments":[{"book":0,"from":1,"to":1}],"pace":{"mode":"days","days":5}}]},"customSeq":{"default":9}}';
+        SharedPreferences.setMockInitialValues({
+          UserDataStore.storageKey: _currentJson,
+          plansPrefsKey: devicePlans,
+        });
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wwTheme(),
+            home: ProfilesScreen(
+              pickBackupFile: () async =>
+                  Uint8List.fromList(utf8.encode(fileWithPlans(member))),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        await tester.scrollUntilVisible(find.text('Import backup'), 100);
+        await tester.pump();
+        await tester.tap(find.text('Import backup'));
+        await tester.pump();
+        await tester.pump();
+        expect(
+          find.textContaining(
+            'The file also holds 2 custom plans and 3 plans in progress.',
+          ),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('Replace'));
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        final prefs = await SharedPreferences.getInstance();
+        final expectedPlans = PlansStore.encodeDocument(
+          PlansDocument.fromJson(member),
+        );
+        expect(prefs.getString(plansPrefsKey), expectedPlans);
+        expect(prefs.getString(plansPrefsKey), isNot(contains('custom-9')));
+      },
+    );
+
+    testWidgets('confirm counts singular forms', (tester) async {
+      final member = plansMember();
+      member['custom'] = {
+        'solo': [((member['custom'] as Map)['solo'] as List).first],
+      };
+      member['progress'] = {
+        'solo': {
+          'custom-1': {
+            'startedOn': '2026-09-01',
+            'done': [478],
+          },
+        },
+      };
+      SharedPreferences.setMockInitialValues({
+        UserDataStore.storageKey: _currentJson,
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wwTheme(),
+          home: ProfilesScreen(
+            pickBackupFile: () async =>
+                Uint8List.fromList(utf8.encode(fileWithPlans(member))),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.scrollUntilVisible(find.text('Import backup'), 100);
+      await tester.pump();
+      await tester.tap(find.text('Import backup'));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.textContaining(
+          'The file also holds 1 custom plan and 1 plan in progress.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pump();
+      await tester.pump();
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(plansPrefsKey), isNull);
+    });
+
+    testWidgets('round-trip byte-equal through Profiles flow (§11.8.7)', (
+      tester,
+    ) async {
+      // Build source stores.
+      SharedPreferences.setMockInitialValues({});
+      var prefs = await SharedPreferences.getInstance();
+      final userStore = await UserDataStore.load(prefs);
+      userStore.data.setNote('default', 'kjv', 'b0c1v1', 'round trip');
+      await userStore.save();
+      final plansStore = await PlansStore.load(prefs);
+      final c = plansStore.createCustom(
+        'default',
+        name: 'RT',
+        segments: [PlanSegment(book: 18, from: 1, to: 10)],
+        pace: PlanPace.days(4),
+      );
+      plansStore.createCustom(
+        'default',
+        name: 'RT2',
+        segments: [PlanSegment(book: 0, from: 1, to: 5)],
+        pace: PlanPace.verses(25),
+      );
+      plansStore.startPlan('default', 'gospels', DateTime(2026, 10, 1));
+      plansStore.toggleChapter('default', 'gospels', 929);
+      plansStore.startPlan('default', c.id, DateTime(2026, 10, 2));
+      plansStore.toggleChapter('default', c.id, 478);
+      plansStore.deleteCustom(
+        'default',
+        'custom-2',
+      ); // seq advanced past a deletion... recreate instead
+      await plansStore.save();
+      final sourcePlansString = prefs.getString(plansPrefsKey);
+      final sourceUserJson = userStore.data.toJson();
+      // Export via the flow.
+      String? shared;
+      SharedPreferences.setMockInitialValues({
+        UserDataStore.storageKey: prefs.getString(UserDataStore.storageKey)!,
+        plansPrefsKey: sourcePlansString!,
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wwTheme(),
+          home: ProfilesScreen(
+            key: const ValueKey('rt-export'),
+            shareBackup: (j) async => shared = j,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.scrollUntilVisible(find.text('Export backup'), 100);
+      await tester.pump();
+      await tester.tap(find.text('Export backup'));
+      await tester.pump();
+      await tester.pump();
+      expect(shared, isNotNull);
+      final sharedDoc = jsonDecode(shared!) as Map<String, dynamic>;
+      expect(
+        sharedDoc['plans'],
+        PlansStore.parseDocument(sourcePlansString).toJson(),
+      );
+      // Import into fresh prefs.
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wwTheme(),
+          home: ProfilesScreen(
+            key: const ValueKey('rt-import'),
+            pickBackupFile: () async =>
+                Uint8List.fromList(utf8.encode(shared!)),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.scrollUntilVisible(find.text('Import backup'), 100);
+      await tester.pump();
+      await tester.tap(find.text('Import backup'));
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.text('Replace'));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      prefs = await SharedPreferences.getInstance();
+      expect(
+        jsonDecode(prefs.getString(UserDataStore.storageKey)!),
+        sourceUserJson,
+      );
+      // Note: custom-2 was deleted before export, so seq is 2 with one live def.
+      expect(prefs.getString(plansPrefsKey), sourcePlansString);
+    });
+
+    test(
+      'export with no plans still includes empty plans member (§11.8.8)',
+      () {
+        expect(UserData().exportJson().contains('"plans"'), isFalse);
+        final doc = PlansDocument().toJson();
+        expect(doc, {
+          'version': 2,
+          'progress': {},
+          'custom': {},
+          'customSeq': {},
+        });
+      },
+    );
   });
 }

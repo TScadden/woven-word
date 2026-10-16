@@ -201,8 +201,7 @@ void main() {
           plans: withSections
               ? [
                   PlanCardData(
-                    def: wwStudyPlans.first,
-                    totalChapters: 89,
+                    plan: resolveBuiltinPlan(data, wwStudyPlans.first),
                     started: false,
                     doneCount: 0,
                     currentDay: 0,
@@ -217,6 +216,7 @@ void main() {
           onOpenMyNotes: () {},
           onOpenVerseOfDay: (_, _) {},
           onOpenPlan: (_) {},
+          onCreatePlan: () {},
           onOpenHighlights: () {},
           onRetryLoad: () {},
         ),
@@ -396,6 +396,7 @@ void main() {
             onOpenMyNotes: () {},
             onOpenVerseOfDay: (_, _) {},
             onOpenPlan: (_) {},
+            onCreatePlan: () {},
             onOpenHighlights: () {},
             onRetryLoad: () {},
           ),

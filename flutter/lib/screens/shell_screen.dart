@@ -25,6 +25,7 @@ import 'home_tab.dart';
 import 'library_tab.dart';
 import 'my_notes_screen.dart';
 import 'plan_detail_screen.dart';
+import 'plan_editor_screen.dart';
 import 'profiles_screen.dart';
 import 'reader_screen.dart';
 import 'screens_tab.dart';
@@ -1251,23 +1252,52 @@ class ShellController extends ChangeNotifier
     final d = data;
     final nav = homeNavKey.currentState;
     if (d == null || nav == null) return;
-    StudyPlanDef? def;
+    ResolvedPlan? resolved;
     for (final candidate in wwStudyPlans) {
-      if (candidate.id == planId) def = candidate;
+      if (candidate.id == planId && planAvailable(candidate, tradition, d)) {
+        resolved = resolveBuiltinPlan(d, candidate);
+      }
     }
-    if (def == null) return;
-    final plan = def;
+    if (resolved == null) {
+      final store = _plansStore;
+      if (store != null) {
+        final def = store.customFor(userData.activeProfileId, planId);
+        if (def != null && customAvailable(def, tradition, d)) {
+          resolved = resolveCustomPlan(d, def);
+        }
+      }
+    }
+    if (resolved == null) return;
+    final plan = resolved;
     await nav.push(
       WwPageRoute(
         builder: (_) => PlanDetailScreen(
           data: d,
           plan: plan,
           profileId: userData.activeProfileId,
+          tradition: tradition,
           onOpenChapter: (ch) => openChapter(ch),
         ),
       ),
     );
     if (_disposed) return;
+    _loadPlans();
+  }
+
+  Future<void> _openPlanEditor() async {
+    final d = data;
+    final nav = homeNavKey.currentState;
+    if (d == null || nav == null) return;
+    await nav.push(
+      WwPageRoute(
+        builder: (_) => PlanEditorScreen(
+          data: d,
+          tradition: tradition,
+          profileId: userData.activeProfileId,
+          initialDef: null,
+        ),
+      ),
+    );
     _loadPlans();
   }
 
@@ -1541,7 +1571,13 @@ class _WwShellState extends State<WwShell> {
       planCards = [
         for (final def in wwStudyPlans)
           if (planAvailable(def, _ctl.tradition, d))
-            _planCardData(_ctl, d, def, today),
+            _planCardData(_ctl, resolveBuiltinPlan(d, def), today),
+        if (_ctl._plansStore != null)
+          for (final def in _ctl._plansStore!.customsFor(
+            _ctl.userData.activeProfileId,
+          ))
+            if (customAvailable(def, _ctl.tradition, d))
+              _planCardData(_ctl, resolveCustomPlan(d, def), today),
       ];
     }
     return HomeTab(
@@ -1562,6 +1598,7 @@ class _WwShellState extends State<WwShell> {
       onOpenMyNotes: _ctl._openMyNotes,
       onOpenVerseOfDay: (ch, v) => _ctl.openChapter(ch, verse: v),
       onOpenPlan: _ctl._openPlanDetail,
+      onCreatePlan: _ctl._openPlanEditor,
       onOpenHighlights: _ctl._openAllHighlights,
       onRetryLoad: () {
         // The data future is fixed at construction; a retry reloads
@@ -1577,19 +1614,16 @@ class _WwShellState extends State<WwShell> {
   /// (§4.3), and its current day from the shell's clock.
   PlanCardData _planCardData(
     ShellController ctl,
-    BibleData data,
-    StudyPlanDef def,
+    ResolvedPlan plan,
     DateTime today,
   ) {
-    final chapters = planChapters(data, def);
     final progress = ctl._plansStore?.progressFor(
       ctl.userData.activeProfileId,
-      def.id,
+      plan.id,
     );
-    final done = planDoneCount(progress, chapters);
+    final done = planDoneCount(progress, plan.chapters);
     return PlanCardData(
-      def: def,
-      totalChapters: chapters.length,
+      plan: plan,
       started: progress != null,
       doneCount: done,
       currentDay: progress == null
@@ -1597,9 +1631,9 @@ class _WwShellState extends State<WwShell> {
           : planDayFor(
               startedOn: progress.startedOn,
               today: today,
-              days: def.days,
+              days: plan.days,
             ),
-      percent: planPercent(done, chapters.length),
+      percent: planPercent(done, plan.totalChapters),
     );
   }
 

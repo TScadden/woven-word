@@ -51,6 +51,7 @@ class HomeTab extends StatefulWidget {
     required this.onOpenMyNotes,
     required this.onOpenVerseOfDay,
     required this.onOpenPlan,
+    required this.onCreatePlan,
     required this.onOpenHighlights,
     required this.onRetryLoad,
     this.ambientActive = true,
@@ -93,6 +94,7 @@ class HomeTab extends StatefulWidget {
   final VoidCallback onOpenMyNotes;
   final void Function(int chapter, int verse) onOpenVerseOfDay;
   final void Function(String planId) onOpenPlan;
+  final VoidCallback onCreatePlan;
   final VoidCallback onOpenHighlights;
   final VoidCallback onRetryLoad;
 
@@ -631,10 +633,8 @@ class HomeTabState extends State<HomeTab>
             const SizedBox(height: 16),
             _verseOfDayCard(),
           ],
-          if (widget.plans.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _plansSection(data),
-          ],
+          const SizedBox(height: 16),
+          _plansSection(data),
           const SizedBox(height: 16),
           _toolsSection(),
           const SizedBox(height: 24),
@@ -787,6 +787,8 @@ class HomeTabState extends State<HomeTab>
                   if (i > 0) const SizedBox(width: 12),
                   _planCard(data, widget.plans[i]),
                 ],
+                if (widget.plans.isNotEmpty) const SizedBox(width: 12),
+                _createTile(),
               ],
             ),
           ),
@@ -800,28 +802,32 @@ class HomeTabState extends State<HomeTab>
   /// the plan is started — the progress bar across the cover's
   /// bottom edge. The whole card is one tap target.
   Widget _planCard(BibleData data, PlanCardData card) {
-    final def = card.def;
+    final plan = card.plan;
     final caption = !card.started
-        ? '${def.days} days · ${_fmt(card.totalChapters)} chapters'
-        : card.doneCount == card.totalChapters
+        ? '${plan.days} days · ${_fmt(plan.totalChapters)} chapters'
+        : card.doneCount == plan.totalChapters
         ? 'Complete · 100%'
-        : 'Day ${card.currentDay} of ${def.days} · ${card.percent}%';
+        : 'Day ${card.currentDay} of ${plan.days} · ${card.percent}%';
     final List<String> bookLines;
-    if (def.bookIndices == null) {
-      bookLines = [data.books.first.name, '…', data.books.last.name];
+    if (plan.coverBooks.length > 4) {
+      bookLines = [
+        data.books[plan.coverBooks.first].name,
+        '…',
+        data.books[plan.coverBooks.last].name,
+      ];
     } else {
-      bookLines = [for (final b in def.bookIndices!) data.books[b].name];
+      bookLines = [for (final b in plan.coverBooks) data.books[b].name];
     }
     return Semantics(
       container: true,
       button: true,
-      label: '${def.name}, $caption',
+      label: '${plan.name}, $caption',
       child: ExcludeSemantics(
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(WwRadius.row),
-            onTap: () => widget.onOpenPlan(def.id),
+            onTap: () => widget.onOpenPlan(plan.id),
             child: SizedBox(
               width: 112,
               child: Column(
@@ -846,7 +852,7 @@ class HomeTabState extends State<HomeTab>
                       child: Stack(
                         children: [
                           Container(
-                            key: ValueKey('plan-cover-${def.id}'),
+                            key: ValueKey('plan-cover-${plan.id}'),
                             width: 112,
                             height: 144,
                             decoration: BoxDecoration(
@@ -874,7 +880,7 @@ class HomeTabState extends State<HomeTab>
                                     ),
                                   const Expanded(child: SizedBox()),
                                   Text(
-                                    '${_fmt(card.totalChapters)} chapters',
+                                    '${_fmt(plan.totalChapters)} chapters',
                                     style: WwType.planCoverMeta,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -890,7 +896,7 @@ class HomeTabState extends State<HomeTab>
                               bottom: 0,
                               height: 4,
                               child: Container(
-                                key: ValueKey('plan-progress-${def.id}'),
+                                key: ValueKey('plan-progress-${plan.id}'),
                                 child: Stack(
                                   children: [
                                     Container(color: WwColors.borderDark),
@@ -898,7 +904,7 @@ class HomeTabState extends State<HomeTab>
                                       width:
                                           112 *
                                           card.doneCount /
-                                          card.totalChapters,
+                                          plan.totalChapters,
                                       height: 4,
                                       child: Container(
                                         color: WwColors.goldBright,
@@ -914,7 +920,7 @@ class HomeTabState extends State<HomeTab>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    def.name,
+                    plan.name,
                     style: WwType.controlLabel.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
@@ -924,6 +930,76 @@ class HomeTabState extends State<HomeTab>
                   const SizedBox(height: 2),
                   Text(
                     caption,
+                    style: WwType.captionOnDark,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The create tile (spec §5.4): always the row's last child.
+  Widget _createTile() {
+    return Semantics(
+      container: true,
+      button: true,
+      label: 'Create your own plan, Choose books and a pace',
+      child: ExcludeSemantics(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(WwRadius.row),
+            onTap: widget.onCreatePlan,
+            child: SizedBox(
+              width: 112,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    key: const ValueKey('plan-cover-create'),
+                    width: 112,
+                    height: 144,
+                    decoration: BoxDecoration(
+                      color: WwColors.surfaceHigh,
+                      border: Border.all(color: WwColors.borderDark),
+                      borderRadius: BorderRadius.circular(WwRadius.row),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(width: 24, height: 2, color: WwColors.gold),
+                          const Expanded(
+                            child: Center(
+                              child: Icon(
+                                Icons.add,
+                                size: 32,
+                                color: WwColors.goldBright,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Create your own plan',
+                    style: WwType.controlLabel.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Choose books and a pace',
                     style: WwType.captionOnDark,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,

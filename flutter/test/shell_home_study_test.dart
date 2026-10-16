@@ -510,6 +510,7 @@ void main() {
     final prefs1 = await SharedPreferences.getInstance();
     final doc1 = PlansStore.parseDocument(prefs1.getString(plansPrefsKey));
     expect(doc1.custom['default']!.single.id, 'custom-1');
+    final deletedId = doc1.custom['default']!.single.id;
     // Open, start, check.
     await tester.tap(find.byKey(const ValueKey('plan-cover-custom-1')));
     await tester.pump();
@@ -529,8 +530,61 @@ void main() {
       tester,
       find.byKey(const ValueKey('plan-cover-custom-1')),
     );
-    // Psalms whole book at 40/day: schedule days derived; percent 1/150 -> 0%? 150 chapters: 1 done = 0%.
-    expect(find.textContaining('Day 1 of'), findsWidgets);
+    // Psalms whole book at 40 verses/day on the fake canon derives
+    // 39 days; 1 of 150 chapters checked is 0% — the exact derived
+    // caption (§11.6.6).
+    expect(find.text('Day 1 of 39 · 0%'), findsOneWidget);
+    // Edit its name from the detail -> the card shows the new name.
+    await tester.tap(find.byKey(const ValueKey('plan-cover-custom-1')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await settle(tester);
+    final editList = find.descendant(
+      of: find.byType(PlanDetailScreen),
+      matching: find.byType(ListView),
+    );
+    for (var i = 0;
+        i < 40 &&
+            find.byKey(const ValueKey('plan-edit')).evaluate().isEmpty;
+        i++) {
+      await tester.drag(editList, const Offset(0, -3000));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.ensureVisible(find.byKey(const ValueKey('plan-edit')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('plan-edit')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await settle(tester);
+    expect(find.text('Edit plan'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'Shell Renamed');
+    await tester.pump();
+    for (var i = 0;
+        i < 30 &&
+            find
+                .byKey(const ValueKey('plan-editor-save'))
+                .evaluate()
+                .isEmpty;
+        i++) {
+      await tester.drag(find.byType(ListView).last, const Offset(0, -400));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.ensureVisible(find.byKey(const ValueKey('plan-editor-save')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('plan-editor-save')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await settle(tester);
+    expect(find.byType(PlanDetailScreen), findsOneWidget);
+    expect(find.text('Shell Renamed'), findsWidgets);
+    await back(tester);
+    await scrollHomeTo(
+      tester,
+      find.byKey(const ValueKey('plan-cover-custom-1')),
+    );
+    expect(find.text('Shell Renamed'), findsWidgets);
     // Delete from detail.
     await tester.tap(find.byKey(const ValueKey('plan-cover-custom-1')));
     await tester.pump();
@@ -569,6 +623,64 @@ void main() {
     final doc2 = PlansStore.parseDocument(prefs2.getString(plansPrefsKey));
     expect(doc2.custom['default'], isNull);
     expect(doc2.customSeq['default'], 1);
+    // Recreate a plan with the same name: it gets a NEW id (never
+    // the deleted one) and starts unchecked (§11.6.6).
+    await scrollHomeTo(tester, find.byKey(const ValueKey('plan-cover-create')));
+    await tester.tap(find.byKey(const ValueKey('plan-cover-create')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await settle(tester);
+    expect(find.text('New plan'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'Shell Renamed');
+    await tester.pump();
+    for (var i = 0;
+        i < 30 &&
+            find
+                .byKey(const ValueKey('plan-editor-book-18'))
+                .evaluate()
+                .isEmpty;
+        i++) {
+      await tester.drag(find.byType(ListView).last, const Offset(0, -400));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('plan-editor-book-18')),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('plan-editor-book-18')));
+    await tester.pump();
+    for (var i = 0;
+        i < 30 &&
+            find
+                .byKey(const ValueKey('plan-editor-save'))
+                .evaluate()
+                .isEmpty;
+        i++) {
+      await tester.drag(find.byType(ListView).last, const Offset(0, -400));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.ensureVisible(find.byKey(const ValueKey('plan-editor-save')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('plan-editor-save')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await settle(tester);
+    final prefs3 = await SharedPreferences.getInstance();
+    final doc3 = PlansStore.parseDocument(prefs3.getString(plansPrefsKey));
+    final recreated = doc3.custom['default']!.single;
+    expect(recreated.name, 'Shell Renamed');
+    expect(recreated.id, isNot(deletedId));
+    expect(recreated.id, 'custom-2');
+    // Starts unchecked: no progress entry was inherited.
+    expect(doc3.progress['default']?[recreated.id], isNull);
+    await scrollHomeTo(
+      tester,
+      find.byKey(const ValueKey('plan-cover-custom-2')),
+    );
+    expect(find.text('Shell Renamed'), findsWidgets);
+    expect(find.text('39 days · 150 chapters'), findsOneWidget);
   });
 
   testWidgets('custom dormancy at shell level (§11.6.7)', (tester) async {

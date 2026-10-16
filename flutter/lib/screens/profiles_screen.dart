@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/plans.dart';
 import '../data/reader_theme.dart';
 import '../data/tradition.dart';
 import '../data/user_data.dart';
@@ -103,6 +104,7 @@ class ProfilesScreen extends StatefulWidget {
 
 class _ProfilesScreenState extends State<ProfilesScreen> {
   UserDataStore? _store;
+  PlansStore? _plansStore;
   UserData _data = UserData();
   bool _loaded = false;
   late WwTradition _tradition;
@@ -137,6 +139,11 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       final prefs = await SharedPreferences.getInstance();
       _store = await UserDataStore.load(prefs);
       _data = _store!.data;
+      try {
+        _plansStore = await PlansStore.load(prefs);
+      } catch (_) {
+        _plansStore = null;
+      }
     } catch (_) {
       // Persistence failure leaves an empty in-memory model; the
       // screen still renders (the session just cannot save).
@@ -264,7 +271,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   /// is the feedback — nothing is shown after it, and export
   /// mutates nothing.
   Future<void> _exportBackup() async {
-    final json = _data.exportJson();
+    final doc = Map<String, dynamic>.from(_data.toJson());
+    doc['plans'] = (_plansStore?.document ?? PlansDocument()).toJson();
+    final json = const JsonEncoder.withIndent('  ').convert(doc);
     final share = widget.shareBackup;
     if (share != null) {
       await share(json);
@@ -329,11 +338,25 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       return;
     }
     final incoming = result.data!;
-    final confirmed = await _confirmImport(incoming);
+    final confirmed = await _confirmImport(incoming, plans: result.plans);
     if (confirmed != true || !mounted) return;
     final store = _store;
     if (store == null) return;
     await store.replaceData(incoming);
+    if (result.plans != null) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        // Wholesale replacement: install the file's document
+        // (spec §8.3 — both replacements complete before the
+        // success snackbar).
+        await prefs.setString(
+          plansPrefsKey,
+          PlansStore.encodeDocument(PlansDocument.fromJson(result.plans)),
+        );
+        _plansStore = await PlansStore.load(prefs);
+      } catch (_) {}
+      if (!mounted) return;
+    }
     if (!mounted) return;
     setState(() => _data = store.data);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -358,7 +381,10 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   /// data and the exact [UserData] instance to be installed, each
   /// counted by the same model getters), the destructive action
   /// last, in danger text only.
-  Future<bool?> _confirmImport(UserData incoming) {
+  Future<bool?> _confirmImport(
+    UserData incoming, {
+    Map<String, dynamic>? plans,
+  }) {
     final currentProfiles = _counted(
       _data.profileIds.length,
       'profile',
@@ -381,6 +407,17 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       'highlights',
     );
     final fileNotes = _counted(incoming.totalNotes, 'note', 'notes');
+    var plansSentence = '';
+    if (plans != null) {
+      final counts = plansBackupCounts(plans);
+      final fc = _counted(counts.customPlans, 'custom plan', 'custom plans');
+      final fp = _counted(
+        counts.plansInProgress,
+        'plan in progress',
+        'plans in progress',
+      );
+      plansSentence = ' The file also holds $fc and $fp.';
+    }
     return wwShowDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -395,7 +432,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
           'The $currentProfiles, $currentHighlights, and $currentNotes '
           'now on this device will be removed, and $fileProfiles, '
           '$fileHighlights, and $fileNotes from the file will take '
-          'their place. This cannot be undone.',
+          'their place.$plansSentence This cannot be undone.',
           style: WwType.bodyOnDark,
         ),
         actions: [
@@ -430,6 +467,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         'This backup was made by a newer version of Woven Word.',
       BackupImportError.emptyDocument =>
         'This backup contains no profiles, highlights, or notes.',
+      BackupImportError.invalidPlans =>
+        "This backup's study plans are not in a form Woven Word can import.",
     };
     return wwShowDialog<void>(
       context: context,

@@ -471,6 +471,48 @@ void main() {
       find.byKey(const ValueKey('plan-editor-save')),
     );
     expect(saveSize.height >= 48, isTrue);
-        expect(tester.takeException(), isNull);
+    // §11.5.10: every segment renders ≥ 48 high (rendered size of
+    // each segment's tap surface, from rendered positions).
+    Finder segmentOf(String label) => find.ancestor(
+      of: find.text(label),
+      matching: find.byType(InkWell),
+    );
+    await scrollUpTo(tester, find.text('Daily amount'));
+    for (final label in ['Daily amount', 'Finish in']) {
+      expect(
+        tester.getSize(segmentOf(label)).height >= 48,
+        isTrue,
+        reason: label,
+      );
+    }
+    await scrollTo(tester, find.text('Chapter range'));
+    for (final label in ['Whole book', 'Chapter range']) {
+      expect(
+        tester.getSize(segmentOf(label)).height >= 48,
+        isTrue,
+        reason: label,
+      );
+    }
+    // §11.5.10: the summary counts line's rect lies within the
+    // summary card's rect (rendered positions).
+    final summary = find.textContaining(
+      RegExp(r'chapters · .* verses · .* days'),
+    );
+    await scrollTo(tester, summary);
+    expect(summary, findsOneWidget);
+    final summaryRect = tester.getRect(summary);
+    final cardRect = tester.getRect(
+      find.ancestor(
+        of: summary,
+        matching: find.byWidgetPredicate(
+          (w) => w is Material && w.color == WwColors.surface,
+        ),
+      ),
+    );
+    expect(cardRect.left <= summaryRect.left, isTrue);
+    expect(cardRect.top <= summaryRect.top, isTrue);
+    expect(cardRect.right >= summaryRect.right, isTrue);
+    expect(cardRect.bottom >= summaryRect.bottom, isTrue);
+    expect(tester.takeException(), isNull);
   });
 }

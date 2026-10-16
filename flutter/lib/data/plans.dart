@@ -431,7 +431,10 @@ const String plansPrefsKey = 'ww_plans_v1';
 class PlansStore {
   PlansStore._(this._prefs, this.document);
   final SharedPreferences _prefs;
-  final PlansDocument document;
+
+  /// Assignable so an import can set the freshly loaded store's
+  /// document wholesale before awaiting save() (spec §8.3).
+  PlansDocument document;
 
   static Future<PlansStore> load(SharedPreferences prefs) async =>
       PlansStore._(prefs, parseDocument(prefs.getString(plansPrefsKey)));

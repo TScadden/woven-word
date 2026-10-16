@@ -346,15 +346,19 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     if (result.plans != null) {
       try {
         final prefs = await SharedPreferences.getInstance();
-        // Wholesale replacement: install the file's document
-        // (spec §8.3 — both replacements complete before the
-        // success snackbar).
-        await prefs.setString(
-          plansPrefsKey,
-          PlansStore.encodeDocument(PlansDocument.fromJson(result.plans)),
-        );
-        _plansStore = await PlansStore.load(prefs);
-      } catch (_) {}
+        // Wholesale replacement through a freshly loaded store
+        // (spec §8.3): set its document to the file's document
+        // and await save() — both replacements complete before
+        // the success snackbar. If the plans write throws, the
+        // import does NOT claim success: return without the
+        // snackbar so the failure surfaces honestly.
+        final freshPlans = await PlansStore.load(prefs);
+        freshPlans.document = PlansDocument.fromJson(result.plans);
+        await freshPlans.save();
+        _plansStore = freshPlans;
+      } catch (_) {
+        return;
+      }
       if (!mounted) return;
     }
     if (!mounted) return;

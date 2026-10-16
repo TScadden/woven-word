@@ -138,8 +138,9 @@ void main() {
       for (var i = 1; i <= days; i++) {
         final size = base + (i <= rem ? 1 : 0);
         var sum = 0;
-        for (var j = 0; j < size; j++)
+        for (var j = 0; j < size; j++) {
           sum += data.chapters[chapters[off + j]].v;
+        }
         if (sum > peak) peak = sum;
         off += size;
       }

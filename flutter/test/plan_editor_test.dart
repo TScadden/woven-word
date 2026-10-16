@@ -61,7 +61,7 @@ void main() {
     await tester.pump();
   }
 
-  Future<void> _dragUntil(WidgetTester tester, Finder f, double dy) async {
+  Future<void> dragUntilHelper(WidgetTester tester, Finder f, double dy) async {
     for (var i = 0; i < 40 && f.evaluate().isEmpty; i++) {
       await tester.drag(find.byType(Scrollable).first, Offset(0, dy));
       await tester.pump();
@@ -74,10 +74,10 @@ void main() {
   }
 
   Future<void> scrollUpTo(WidgetTester tester, Finder f) =>
-      _dragUntil(tester, f, 400);
+      dragUntilHelper(tester, f, 400);
 
   Future<void> scrollTo(WidgetTester tester, Finder f) =>
-      _dragUntil(tester, f, -400);
+      dragUntilHelper(tester, f, -400);
 
   testWidgets('create defaults (§11.5.1)', (tester) async {
     final semH = tester.ensureSemantics();

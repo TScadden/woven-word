@@ -48,12 +48,12 @@ kinda."
   document member legitimately superseded. Translated
   under lesson 40 (the assertion still pins the complete
   shape, now including the member); committed 325cf4a
-  (rebased over the Pages records commit 151da22).
-  Disclosed anomaly: one earlier local full-suite run
-  reported 463/463 against the pre-translation test — not
-  reproducible afterward in file scope, standalone scope,
-  CI, or the post-clean run, all of which agreed; the
-  post-clean full run on the final tree is the record.
+  (rebased over the Pages records commit 151da22). The
+  failure was consistent in every environment — CI, the
+  local full suite (462 passed, 1 failed), file scope, and
+  standalone scope all agreed; an early read of a background
+  log excerpt as a local pass was the coordinator's error,
+  corrected here (records correction, Oct 15, 2026).
 - Final CI: **run 38827165114 — SUCCESS**, all four jobs
   (android, web, ios, pages), head 325cf4a. Commits:
   app 3a10a38, tests 1c85038, records a48ee4d, fix 325cf4a.

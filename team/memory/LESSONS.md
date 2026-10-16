@@ -668,3 +668,38 @@ rounds Rusty ran before the studio was founded).
     differed, the candidate universe did not. When analysis and
     implementation derive the same set two ways, reconcile the
     sets explicitly before building on either.
+61. **Store progress on the smallest unit; derive schedules, never
+    store them (study plans v2 package, Oct 15, 2026).** Plan
+    progress lives on chapters (startedOn + a done set of chapter
+    indices); day schedules are a pure function re-derived on every
+    load. Rebalancing every built-in's pacing therefore migrated
+    every user's check marks with zero migration code and zero
+    loss — percent and current day recompute against the new
+    derivation. A stored schedule strands progress the first time
+    pacing changes.
+62. **A backup that omits a store the same package creates breaks
+    the file's promise (study plans v2 package, Oct 15, 2026).**
+    When a feature creates user content, its definitions join the
+    backup export/import in the SAME package, behind the strict
+    validator: a malformed member rejects the whole import and
+    writes nothing, and backups predating the member import as
+    before, leaving the new store untouched. Custom plan
+    definitions scoped to on-device only would have been silently
+    destroyed by the first backup restore.
+63. **Verify an arithmetic superlative against every instance, not
+    the famous one (study plans v2 package, Oct 15, 2026).** The
+    producer brief asserted the heaviest non-Psalm-119 day as 80
+    verses; the gate's independent recomputation over the full
+    corpus found Numbers 7 alone at 89, 1 Chronicles 6 at 81,
+    Luke 1 at 80, and the heaviest multi-chapter day at 71. Any
+    largest/smallest/first claim that ships in a spec gets
+    recomputed over the whole dataset, never spot-checked against
+    the well-known case.
+64. **A CI job that fails in seconds with zero steps is
+    infrastructure, not code (study plans v2 package, Oct 15,
+    2026).** The integrated branch run showed pages: failure —
+    0 steps, 2 seconds — while android/web/ios passed: the
+    github-pages environment blocks branch deployments. Before
+    treating a red job as a code failure, check its step count
+    and duration, and compare against a known-good run of the
+    same workflow (main's runs deploy pages with 6 steps).

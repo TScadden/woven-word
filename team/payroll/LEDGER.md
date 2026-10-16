@@ -36,3 +36,5 @@ Its craft lessons (#5, #6) remain in team memory, scoped.
 | 2026-10-15 | Study Tools + All Highlights (board run 11) | Studio crew | $1,000 | Accrued — pays on founder verification |
 | 2026-10-15 | Home arch goes ambient: rotating featured chapter + caption, panel removed, chapter partners in the reader (arch ambient home package) | Studio crew | $1,000 | Accrued — pays on founder verification |
 | 2026-10-15 | Reader connection arch: collapsible chapter web in the reader, remembered per profile (reader arch package) | Studio crew | $1,000 | Accrued — pays on founder verification |
+| 2026-10-15 | Custom study plans: user-created plans with editor, pace engine, dormancy, plans carried in backups (study plans v2 package) | Studio crew | $1,000 | Accrued — pays on founder verification |
+| 2026-10-15 | Realistic study plan schedules: length-weighted built-ins at a 40-verse daily target, Gospels 87 days / Psalms & Proverbs 84 / Whole Bible 767 (study plans v2 package) | Studio crew | $1,000 | Accrued — pays on founder verification |

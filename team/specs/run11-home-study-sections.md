@@ -84,6 +84,7 @@ durations: none. New `WwType` roles: exactly three (§8).**
    caption (`716 connections` style — real data, our identity).
    Whole card is the tap target → opens the reader at that
    chapter/verse via the My Notes path.
+   *Supersession note: the pool rule in this decision is replaced in full by `team/specs/verse-of-day-quotable.md` (founder ruling, Oct 15, 2026); the card, the pick, and the tap routing stand.*
 3. **STUDY PLANS** — exactly three, generated from canon data,
    ids/names/day counts fixed: `gospels` "The Gospels"
    (Matthew–John, 89 chapters, 30 days), `psalms-proverbs`
@@ -391,6 +392,7 @@ Full verse text, no truncation, no ellipsis, no summary.
 `ScriptureText`'s own per-chapter KJV fallback applies as
 shipped. When `effective.isRtl` (Hebrew), the verse text
 renders with `TextDirection.rtl`, exactly as the reader does.
+*Supersession note: the pool whose text this section resolves is now defined by `team/specs/verse-of-day-quotable.md`; this section's text resolution is unchanged.*
 
 ### 3.3 Shell computation and the loading/failure branches
 

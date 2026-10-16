@@ -95,6 +95,17 @@ ConferenceData _parsePayload((Uint8List, List<List<int>>) args) {
   );
 }
 
+/// Top-level counts entry for [compute] in
+/// [ConferenceData.loadCitationCounts]: inflate in the parse
+/// isolate, then count via [ConferenceData.citationCountsFromSource].
+Map<(int, int), int> _citationCountsPayload((Uint8List, int) args) {
+  final (bytes, chapterCount) = args;
+  return ConferenceData.citationCountsFromSource(
+    inflateBundledJson(bytes),
+    chapterCount: chapterCount,
+  );
+}
+
 /// The General Conference connections dataset (board run 8):
 /// talks plus verse-level citation edges from talks to Bible
 /// verses, parsed from the bundled `assets/conference.json.gz`.
@@ -353,5 +364,53 @@ class ConferenceData {
       for (final c in canon.chapters) [c.b, c.c, c.v],
     ];
     return compute(_parsePayload, (bytes, rows));
+  }
+
+  /// Pure citation counts over the bundled shape (quotable spec
+  /// §3.2): the number of DISTINCT talk ids citing each
+  /// (chapter, verse) over the same edges [parse] reads.
+  ///
+  /// Edge discipline follows [parse] with the one relaxation the
+  /// spec pins: an edge drops when its chapter is outside
+  /// `[0, chapterCount)` or its verse is < 1, but verse upper
+  /// bounds are NOT clamped — counts for verses that do not exist
+  /// are inert, since the Verse of the Day builder only ever asks
+  /// about real verses. No canon table beyond [chapterCount] is
+  /// needed, so the counts can be computed without a [BibleData].
+  static Map<(int, int), int> citationCountsFromSource(
+    String source, {
+    required int chapterCount,
+  }) {
+    final json = jsonDecode(source) as Map<String, dynamic>;
+    final talkIds = <(int, int), Set<int>>{};
+    final rawEdges = json['edges'];
+    if (rawEdges is List) {
+      for (final raw in rawEdges) {
+        if (raw is! List || raw.length < 3) continue;
+        final talkId = (raw[0] as num).toInt();
+        final chapter = (raw[1] as num).toInt();
+        final verse = (raw[2] as num).toInt();
+        if (chapter < 0 || chapter >= chapterCount) continue;
+        if (verse < 1) continue;
+        talkIds.putIfAbsent((chapter, verse), () => {}).add(talkId);
+      }
+    }
+    return {
+      for (final e in talkIds.entries) e.key: e.value.length,
+    };
+  }
+
+  /// Loads just the citation counts from
+  /// assets/conference.json.gz off the UI thread (the Verse of
+  /// the Day pool's signal, quotable spec §3.2), inflated and
+  /// counted in the parse isolate via [citationCountsFromSource].
+  /// A missing or malformed asset throws here; the shell catches
+  /// it and resolves to the §2.5 fallback pool (failures-as-values
+  /// at the call site).
+  static Future<Map<(int, int), int>> loadCitationCounts(
+    BibleData canon,
+  ) async {
+    final bytes = await loadBundledBytes('assets/conference.json.gz');
+    return compute(_citationCountsPayload, (bytes, canon.chapters.length));
   }
 }

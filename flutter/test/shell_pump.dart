@@ -25,6 +25,8 @@ Future<void> pumpShell(
   Future<SefariaData> Function(BibleData canon)? sefariaLoader,
   Future<ConfessionData> Function(BibleData canon)? confessionLoader,
   Future<DeuterocanonData> Function()? deuteroLoader,
+  Future<Map<(int, int), int>> Function(BibleData canon)?
+  citationCountsLoader,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -49,6 +51,7 @@ Future<void> pumpShell(
         sefariaLoader: sefariaLoader,
         confessionLoader: confessionLoader,
         deuteroLoader: deuteroLoader,
+        citationCountsLoader: citationCountsLoader,
       ),
     ),
   );

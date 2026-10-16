@@ -633,3 +633,38 @@ rounds Rusty ran before the studio was founded).
     new animated surface ships a reduced-motion test in the
     same package, or the construction ships unverified.
  (Reader arch (records): spec, Petra gate PASS, lesson 56, payroll accrual)
+58. **KJV punctuation cannot proxy complete sense (verse-of-day
+    quotable package, Oct 15, 2026).** A "must end in terminal
+    punctuation" filter was the obvious mechanical test for
+    fragments — and measurement killed it: only 83.4% of the
+    verses cited by ≥ 20 conference talks end in `.?!`; Matthew
+    28:19, John 11:25 and Matthew 7:7 all end in colons. The KJV's
+    colons close complete periodic sayings. Any text-shape proxy
+    for a judgment property gets validated against a ground-truth
+    set (here, citation frequency) before it is adopted, and the
+    rejected candidates are recorded in the spec so nobody revives
+    them.
+59. **Floors beat rank cuts in tie-dense distributions, and the
+    signal must be the property itself (verse-of-day quotable
+    package, Oct 15, 2026).** The shipped pool ranked by
+    cross-reference connections: it admitted hub verses nobody
+    quotes (Daniel 9:24: 133 connections, cited by 0 talks) and
+    only 49 of its 365 survive a quotability rule. The replacement
+    ranks by the property the founder named — citation frequency,
+    verses speakers demonstrably reach for — and states an
+    eligibility floor (≥ 25 distinct talks) instead of cutting at
+    a round size: the citation band is tie-dense at 365 (the cut
+    lands at 27 and excludes "Jesus wept.", 25 talks). Pool sizes
+    are outcomes of a stated standard (410 core / 483 Jewish),
+    never targets to pad or truncate toward.
+60. **Prove audit coverage against the shipped rule's candidate
+    set, not the analysis file (verse-of-day quotable package,
+    Oct 15, 2026).** The curatorial read ran over ranked files
+    from an early analysis pass whose citation counts were
+    un-deduped (John 3:16 read 241; the shipped rule counts 167
+    distinct talks). The pass was only trusted after a
+    set-theoretic check: every candidate at the shipped floors
+    (504 core, 505 Jewish) appeared in the read set — the counts
+    differed, the candidate universe did not. When analysis and
+    implementation derive the same set two ways, reconcile the
+    sets explicitly before building on either.

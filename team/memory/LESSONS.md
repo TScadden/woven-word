@@ -598,7 +598,42 @@ rounds Rusty ran before the studio was founded).
     baseline is a regression until the mechanism is named;
     "the file is flaky" is a claim that needs its own baseline
     evidence, every time.
-56. **KJV punctuation cannot proxy complete sense (verse-of-day
+56. **The website is a pipeline output, not a folder — ask the
+    server what it publishes before changing anything (Pages
+    deploy package, Oct 15, 2026).** Pages served the repo root
+    (legacy, branch `main`, path `/`) for the entire Flutter
+    era, so the public site stayed the v1 web app while eleven
+    board runs shipped to the phone — one `gh api …/pages` call
+    named the actual state (build_type legacy, source main /)
+    before anything was touched. The fix was switching the
+    publisher, not copying files: build_type → workflow, the CI
+    web job builds with `--base-href=/woven-word/` (a project
+    page lives under its repo path; the placeholder in
+    flutter/web/index.html proves nothing — the BUILT
+    index.html was inspected and carries the base), and a
+    `pages` job deploys the artifact on every app-changing
+    push. v1 was preserved by leaving its files untouched at
+    the root and flipping the publisher away from them;
+    rollback is the same setting reversed. Rule: a served
+    surface's source of truth is the host's configuration,
+    read live — never the repo layout you assume it serves.
+57. **Reduced motion is a construction swap, not a zero
+    duration (reader arch package, Oct 15, 2026).** Setting
+    an AnimatedSize's duration to zero under reduced motion
+    threw "RenderAnimatedSize was mutated in its own
+    performLayout implementation" — the size controller
+    notifies during layout and re-dirties its own render
+    object. The design law's "reduced motion renders final
+    states" is a TREE decision: under
+    `MediaQuery.disableAnimations` the animated widget
+    leaves the tree and the final child renders directly —
+    the `WwPageRoute` instant-swap pattern at widget scale.
+    It was caught because the reduced-motion toggle was a
+    named widget test (ARCH-11), not a manual check: every
+    new animated surface ships a reduced-motion test in the
+    same package, or the construction ships unverified.
+ (Reader arch (records): spec, Petra gate PASS, lesson 56, payroll accrual)
+58. **KJV punctuation cannot proxy complete sense (verse-of-day
     quotable package, Oct 15, 2026).** A "must end in terminal
     punctuation" filter was the obvious mechanical test for
     fragments — and measurement killed it: only 83.4% of the
@@ -609,7 +644,7 @@ rounds Rusty ran before the studio was founded).
     set (here, citation frequency) before it is adopted, and the
     rejected candidates are recorded in the spec so nobody revives
     them.
-57. **Floors beat rank cuts in tie-dense distributions, and the
+59. **Floors beat rank cuts in tie-dense distributions, and the
     signal must be the property itself (verse-of-day quotable
     package, Oct 15, 2026).** The shipped pool ranked by
     cross-reference connections: it admitted hub verses nobody
@@ -622,7 +657,7 @@ rounds Rusty ran before the studio was founded).
     lands at 27 and excludes "Jesus wept.", 25 talks). Pool sizes
     are outcomes of a stated standard (410 core / 483 Jewish),
     never targets to pad or truncate toward.
-58. **Prove audit coverage against the shipped rule's candidate
+60. **Prove audit coverage against the shipped rule's candidate
     set, not the analysis file (verse-of-day quotable package,
     Oct 15, 2026).** The curatorial read ran over ranked files
     from an early analysis pass whose citation counts were

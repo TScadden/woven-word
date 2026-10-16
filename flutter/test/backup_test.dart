@@ -565,7 +565,7 @@ void main() {
       expect(counts.plansInProgress, 2);
     });
 
-    test('each checklist malformation -> invalidPlans', () {
+    test('each checklist malformation -> invalidPlans', () async {
       Map<String, dynamic> variant(void Function(Map<String, dynamic>) f) {
         final m = plansMember();
         f(m);
@@ -656,10 +656,26 @@ void main() {
         ),
         variant((m) => (m['customSeq'] as Map)['solo'] = -1),
       ];
+      // §11.8.3 pure-level repetition: seed BOTH prefs strings and
+      // assert byte-identity after EVERY malformation's rejection —
+      // validation is pure and writes nothing.
+      const plansSeed =
+          '{"version":2,"progress":{},"custom":{},"customSeq":{"default":4}}';
+      SharedPreferences.setMockInitialValues({
+        UserDataStore.storageKey: _currentJson,
+        plansPrefsKey: plansSeed,
+      });
+      final prefs = await SharedPreferences.getInstance();
       for (final bad in bads) {
         final result = UserDataStore.validateImport(fileWithPlans(bad));
         expect(result.error, BackupImportError.invalidPlans, reason: '$bad');
         expect(result.data, isNull);
+        expect(
+          prefs.getString(UserDataStore.storageKey),
+          _currentJson,
+          reason: '$bad',
+        );
+        expect(prefs.getString(plansPrefsKey), plansSeed, reason: '$bad');
       }
       // seq below highest suffix still validates (P6 note)
       final low = variant((m) => (m['customSeq'] as Map)['solo'] = 0);
@@ -834,8 +850,11 @@ void main() {
           },
         },
       };
+      const devicePlans =
+          '{"version":2,"progress":{},"custom":{"default":[{"id":"custom-9","name":"Device Only","segments":[{"book":0,"from":1,"to":1}],"pace":{"mode":"days","days":5}}]},"customSeq":{"default":9}}';
       SharedPreferences.setMockInitialValues({
         UserDataStore.storageKey: _currentJson,
+        plansPrefsKey: devicePlans,
       });
       await tester.pumpWidget(
         MaterialApp(
@@ -863,8 +882,11 @@ void main() {
       await tester.tap(find.text('Cancel'));
       await tester.pump();
       await tester.pump();
+      // §11.8.6: Cancel changes nothing — BOTH prefs strings
+      // byte-identical to their seeded values.
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString(plansPrefsKey), isNull);
+      expect(prefs.getString(UserDataStore.storageKey), _currentJson);
+      expect(prefs.getString(plansPrefsKey), devicePlans);
     });
 
     testWidgets('round-trip byte-equal through Profiles flow (§11.8.7)', (
@@ -968,6 +990,40 @@ void main() {
         expect(UserData().exportJson().contains('"plans"'), isFalse);
         final doc = PlansDocument().toJson();
         expect(doc, {
+          'version': 2,
+          'progress': {},
+          'custom': {},
+          'customSeq': {},
+        });
+      },
+    );
+
+    testWidgets(
+      'export with no plans state includes the member via Profiles flow '
+      '(§11.8.8)',
+      (tester) async {
+        // No plans prefs string at all on this device.
+        SharedPreferences.setMockInitialValues({
+          UserDataStore.storageKey: _currentJson,
+        });
+        String? shared;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wwTheme(),
+            home: ProfilesScreen(shareBackup: (j) async => shared = j),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        await tester.scrollUntilVisible(find.text('Export backup'), 100);
+        await tester.pump();
+        await tester.tap(find.text('Export backup'));
+        await tester.pump();
+        await tester.pump();
+        expect(shared, isNotNull);
+        final sharedDoc = jsonDecode(shared!) as Map<String, dynamic>;
+        expect(sharedDoc['plans'], {
           'version': 2,
           'progress': {},
           'custom': {},

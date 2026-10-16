@@ -467,13 +467,12 @@ void main() {
     expect(find.text('New plan'), findsOneWidget);
     await tester.enterText(find.byType(TextField).first, 'Shell Custom');
     await tester.pump();
-    for (var i = 0;
-        i < 30 &&
-            find
-                .byKey(const ValueKey('plan-editor-book-18'))
-                .evaluate()
-                .isEmpty;
-        i++) {
+    for (
+      var i = 0;
+      i < 30 &&
+          find.byKey(const ValueKey('plan-editor-book-18')).evaluate().isEmpty;
+      i++
+    ) {
       await tester.drag(find.byType(ListView).last, const Offset(0, -400));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -484,13 +483,12 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('plan-editor-book-18')));
     await tester.pump();
-    for (var i = 0;
-        i < 30 &&
-            find
-                .byKey(const ValueKey('plan-editor-save'))
-                .evaluate()
-                .isEmpty;
-        i++) {
+    for (
+      var i = 0;
+      i < 30 &&
+          find.byKey(const ValueKey('plan-editor-save')).evaluate().isEmpty;
+      i++
+    ) {
       await tester.drag(find.byType(ListView).last, const Offset(0, -400));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -543,10 +541,11 @@ void main() {
       of: find.byType(PlanDetailScreen),
       matching: find.byType(ListView),
     );
-    for (var i = 0;
-        i < 40 &&
-            find.byKey(const ValueKey('plan-edit')).evaluate().isEmpty;
-        i++) {
+    for (
+      var i = 0;
+      i < 40 && find.byKey(const ValueKey('plan-edit')).evaluate().isEmpty;
+      i++
+    ) {
       await tester.drag(editList, const Offset(0, -3000));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -560,13 +559,12 @@ void main() {
     expect(find.text('Edit plan'), findsOneWidget);
     await tester.enterText(find.byType(TextField).first, 'Shell Renamed');
     await tester.pump();
-    for (var i = 0;
-        i < 30 &&
-            find
-                .byKey(const ValueKey('plan-editor-save'))
-                .evaluate()
-                .isEmpty;
-        i++) {
+    for (
+      var i = 0;
+      i < 30 &&
+          find.byKey(const ValueKey('plan-editor-save')).evaluate().isEmpty;
+      i++
+    ) {
       await tester.drag(find.byType(ListView).last, const Offset(0, -400));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -594,10 +592,11 @@ void main() {
       of: find.byType(PlanDetailScreen),
       matching: find.byType(ListView),
     );
-    for (var i = 0;
-        i < 40 &&
-            find.byKey(const ValueKey('plan-delete')).evaluate().isEmpty;
-        i++) {
+    for (
+      var i = 0;
+      i < 40 && find.byKey(const ValueKey('plan-delete')).evaluate().isEmpty;
+      i++
+    ) {
       await tester.drag(detailList, const Offset(0, -3000));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -633,13 +632,12 @@ void main() {
     expect(find.text('New plan'), findsOneWidget);
     await tester.enterText(find.byType(TextField).first, 'Shell Renamed');
     await tester.pump();
-    for (var i = 0;
-        i < 30 &&
-            find
-                .byKey(const ValueKey('plan-editor-book-18'))
-                .evaluate()
-                .isEmpty;
-        i++) {
+    for (
+      var i = 0;
+      i < 30 &&
+          find.byKey(const ValueKey('plan-editor-book-18')).evaluate().isEmpty;
+      i++
+    ) {
       await tester.drag(find.byType(ListView).last, const Offset(0, -400));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -650,13 +648,12 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('plan-editor-book-18')));
     await tester.pump();
-    for (var i = 0;
-        i < 30 &&
-            find
-                .byKey(const ValueKey('plan-editor-save'))
-                .evaluate()
-                .isEmpty;
-        i++) {
+    for (
+      var i = 0;
+      i < 30 &&
+          find.byKey(const ValueKey('plan-editor-save')).evaluate().isEmpty;
+      i++
+    ) {
       await tester.drag(find.byType(ListView).last, const Offset(0, -400));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));

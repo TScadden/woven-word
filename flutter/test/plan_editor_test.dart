@@ -473,10 +473,8 @@ void main() {
     expect(saveSize.height >= 48, isTrue);
     // §11.5.10: every segment renders ≥ 48 high (rendered size of
     // each segment's tap surface, from rendered positions).
-    Finder segmentOf(String label) => find.ancestor(
-      of: find.text(label),
-      matching: find.byType(InkWell),
-    );
+    Finder segmentOf(String label) =>
+        find.ancestor(of: find.text(label), matching: find.byType(InkWell));
     await scrollUpTo(tester, find.text('Daily amount'));
     for (final label in ['Daily amount', 'Finish in']) {
       expect(

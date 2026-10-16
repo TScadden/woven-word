@@ -367,9 +367,7 @@ class PlansDocument {
       ),
     ),
     Object.hashAllUnordered(
-      custom.entries.map(
-        (e) => Object.hash(e.key, Object.hashAll(e.value)),
-      ),
+      custom.entries.map((e) => Object.hash(e.key, Object.hashAll(e.value))),
     ),
     Object.hashAllUnordered(
       customSeq.entries.map((e) => Object.hash(e.key, e.value)),

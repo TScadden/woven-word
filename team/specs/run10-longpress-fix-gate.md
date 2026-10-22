@@ -97,3 +97,17 @@ as LESSONS #49.
 Re-run of the run-10 checklist item 1–2 on the phone: hold a
 verse (the outline + tick should register the press), drag the
 handles, color a span.
+
+## Ship record (Oct 22, 2026)
+
+- PR https://github.com/TScadden/woven-word/pull/1, squash-merged
+  to main as `3f46141` (code `72ce548`, records `0766d7d`).
+- CI run **39734820822: success** — android, web, ios, pages
+  all green.
+- APK: 32,084,633 bytes, signer SHA-256
+  `05d5a45cf52fd141a54e2ecfd00472a568c9c0bdffd0458e44ba52bfe4b5be11`
+  (the pinned release key, identical to the previous shipped
+  run), md5 `5f4607e5d76340055f3ff5a7ad8e34bc`, staged at
+  `build-run10-longpress-fix/woven_word_run10_longpress_fix_arm64_20261022.apk`
+  for Rusty to deliver. Founder verification of the fixed entry
+  is the remaining step.

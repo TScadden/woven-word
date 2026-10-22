@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -12,6 +13,7 @@ import '../data/reader_theme.dart';
 import '../data/scripture_text.dart';
 import '../data/user_data.dart';
 import '../theme/ww_theme.dart';
+import '../widgets/verse_long_press.dart';
 import 'library_tab.dart';
 import 'reader_screen.dart';
 
@@ -833,6 +835,9 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
   /// bar closes (the selection bar is the surface while
   /// selecting).
   void _enterSelection(int chapterInBook, int verse) {
+    // Run 10 fix round: haptic the moment the press registers,
+    // and the block's outline marks the mode (see _verseBlock).
+    HapticFeedback.selectionClick();
     setState(() {
       _selected = null;
       _selVerse = (chapterInBook, verse);
@@ -1207,6 +1212,7 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
     final hl = fullColor ?? (spans.isNotEmpty ? spans.first.color : null);
     final hasNote = store?.data.note(_profileId, 'webc', key) != null;
     final selected = _selected == (chapterInBook, verse);
+    final selecting = _selVerse == (chapterInBook, verse);
     var bg = Colors.transparent;
     if (selected) {
       // The core reader's audited selected construction (run 4),
@@ -1226,7 +1232,9 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
           side: BorderSide(
-            color: selected ? _palette.accent : Colors.transparent,
+            // The selecting verse carries the outline too: the
+            // press visibly registered (run 10 fix round).
+            color: selected || selecting ? _palette.accent : Colors.transparent,
             width: 2,
           ),
         ),
@@ -1241,66 +1249,83 @@ class _DeuteroReaderScreenState extends State<DeuteroReaderScreen> {
           label:
               'Verse $verse${hasNote ? ', has note' : ''}'
               '${hl != null ? ', highlighted ${hl.key}' : ''}',
-          child: InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: () => _select(chapterInBook, verse),
+          // Run 10 fix round: the tuned long-press recognizer
+          // (see widgets/verse_long_press.dart), not InkWell's.
+          child: VerseLongPressDetector(
+            enabled: !selecting,
             onLongPress: () => _enterSelection(chapterInBook, verse),
-            child: ExcludeSemantics(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 32,
-                      child: Column(
-                        children: [
-                          Text(
-                            '$verse',
-                            style: spans.isNotEmpty || selected
-                                ? _palette.verseNumberOnTintStyle
-                                : _palette.verseNumberStyle,
-                            textAlign: TextAlign.center,
-                          ),
-                          if (hasNote)
-                            Icon(Icons.notes, size: 16, color: _palette.accent),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      // Board run 10: in selection mode the verse
-                      // text is a SelectableText — drag or
-                      // long-press takes the exact words and the
-                      // selection bar colors the span. Outside the
-                      // mode it is the shipped plain Text.
-                      child: _selVerse == (chapterInBook, verse)
-                          ? SelectableText.rich(
-                              TextSpan(
-                                children: _segments(
-                                  text,
-                                  spans,
-                                  suppressBg: fullColor != null,
-                                ),
-                              ),
-                              key: ValueKey(
-                                'dtext-$chapterInBook-$verse-$_selGen',
-                              ),
-                              style: _palette.bodyStyle,
-                              contextMenuBuilder: (menuContext, state) =>
-                                  _selectionMenu(menuContext, state, key, text),
-                            )
-                          : Text.rich(
-                              TextSpan(
-                                children: _segments(
-                                  text,
-                                  spans,
-                                  suppressBg: fullColor != null,
-                                ),
-                              ),
-                              style: _palette.bodyStyle,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => _select(chapterInBook, verse),
+              child: ExcludeSemantics(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 32,
+                        child: Column(
+                          children: [
+                            Text(
+                              '$verse',
+                              style: spans.isNotEmpty || selected
+                                  ? _palette.verseNumberOnTintStyle
+                                  : _palette.verseNumberStyle,
+                              textAlign: TextAlign.center,
                             ),
-                    ),
-                  ],
+                            if (hasNote)
+                              Icon(
+                                Icons.notes,
+                                size: 16,
+                                color: _palette.accent,
+                              ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        // Board run 10: in selection mode the verse
+                        // text is a SelectableText — drag or
+                        // long-press takes the exact words and the
+                        // selection bar colors the span. Outside the
+                        // mode it is the shipped plain Text.
+                        child: _selVerse == (chapterInBook, verse)
+                            ? SelectableText.rich(
+                                TextSpan(
+                                  children: _segments(
+                                    text,
+                                    spans,
+                                    suppressBg: fullColor != null,
+                                  ),
+                                ),
+                                key: ValueKey(
+                                  'dtext-$chapterInBook-$verse-$_selGen',
+                                ),
+                                style: _palette.bodyStyle,
+                                contextMenuBuilder: (menuContext, state) =>
+                                    _selectionMenu(
+                                      menuContext,
+                                      state,
+                                      key,
+                                      text,
+                                    ),
+                              )
+                            : Text.rich(
+                                TextSpan(
+                                  children: _segments(
+                                    text,
+                                    spans,
+                                    suppressBg: fullColor != null,
+                                  ),
+                                ),
+                                style: _palette.bodyStyle,
+                              ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

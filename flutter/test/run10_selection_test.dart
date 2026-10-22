@@ -85,8 +85,9 @@ void main() {
       expect(host.state.currentChapter, 1);
     });
 
-    testWidgets('SEL-2 a word selection colors exactly that span',
-        (tester) async {
+    testWidgets('SEL-2 a word selection colors exactly that span', (
+      tester,
+    ) async {
       final semantics = tester.ensureSemantics();
       final host = await pumpReader(tester, data: data, texts: texts);
       await tester.longPress(
@@ -162,16 +163,19 @@ void main() {
       expect(tinted, hasLength(1));
       expect(tinted.single.text, 'beginning');
       final block = tester.widget<Material>(
-        find.ancestor(
-          of: inPage(0, find.textContaining('KJV Genesis 1:1 ')),
-          matching: find.byType(Material),
-        ).first,
+        find
+            .ancestor(
+              of: inPage(0, find.textContaining('KJV Genesis 1:1 ')),
+              matching: find.byType(Material),
+            )
+            .first,
       );
       expect(block.color, Colors.transparent);
     });
 
-    testWidgets('SEL-4 the verse toolbar writes a full-verse span',
-        (tester) async {
+    testWidgets('SEL-4 the verse toolbar writes a full-verse span', (
+      tester,
+    ) async {
       final semantics = tester.ensureSemantics();
       await pumpReader(tester, data: data, texts: texts);
       await tester.tap(inPage(0, find.textContaining('KJV Genesis 1:1 ')));
@@ -280,8 +284,11 @@ void main() {
       for (final s in spans) {
         final e = s.end == -1 ? genText.length : s.end;
         expect(s.color, HlColor.gold);
-        expect(s.start < sel.end && e > sel.start, isFalse,
-            reason: 'no span covers the cleared range');
+        expect(
+          s.start < sel.end && e > sel.start,
+          isFalse,
+          reason: 'no span covers the cleared range',
+        );
         covered += e - s.start;
       }
       expect(covered, genText.length - (sel.end - sel.start));
@@ -319,8 +326,7 @@ void main() {
       ]),
     );
 
-    testWidgets('SEL-7 a word selection writes a webc span',
-        (tester) async {
+    testWidgets('SEL-7 a word selection writes a webc span', (tester) async {
       final semantics = tester.ensureSemantics();
       tester.view.physicalSize = const Size(360, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -347,9 +353,7 @@ void main() {
       await tester.longPress(find.byType(SelectableText));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
-      final editable = tester.widget<EditableText>(
-        find.byType(EditableText),
-      );
+      final editable = tester.widget<EditableText>(find.byType(EditableText));
       final sel = editable.controller.selection;
       expect(sel.isCollapsed, isFalse);
       await tester.tap(find.bySemanticsLabel('Gold highlight'));
@@ -390,9 +394,7 @@ void main() {
             data: data,
             tradition: tradition,
             textsLoader: () async => texts,
-            deuteroLoader: deuteroData == null
-                ? null
-                : () async => deuteroData,
+            deuteroLoader: deuteroData == null ? null : () async => deuteroData,
           ),
         ),
       );
@@ -419,14 +421,14 @@ void main() {
       await pumpNotes(tester, prefs: prefs, tradition: WwTradition.none);
       expect(find.text('nt note'), findsOneWidget);
       // Storage was never touched by either view.
-      final after = (await SharedPreferences.getInstance())
-          .getString(UserDataStore.storageKey);
+      final after = (await SharedPreferences.getInstance()).getString(
+        UserDataStore.storageKey,
+      );
       expect(after, before);
     });
 
     testWidgets('DORM-2 a deuterocanon note (WEBC, Catholic) is '
-        'dormant under Protestant and returns under Catholic',
-        (tester) async {
+        'dormant under Protestant and returns under Catholic', (tester) async {
       final deutero = DeuterocanonData.parse(
         jsonEncode({
           'books': [
@@ -487,6 +489,105 @@ void main() {
         tradition: WwTradition.none,
       );
       expect(find.text('web nt note'), findsOneWidget);
+    });
+  });
+
+  group('selection entry feel (run 10 fix round)', () {
+    testWidgets('SEL-8 a long-press with ~10 px of drift during '
+        'the press still enters selection mode for the pressed '
+        'verse', (tester) async {
+      final host = await pumpReader(tester, data: data, texts: texts);
+      final center = tester.getCenter(
+        inPage(0, find.textContaining('KJV Genesis 1:1 ')),
+      );
+      final gesture = await tester.startGesture(center);
+      await gesture.moveBy(const Offset(6, 2));
+      await tester.pump(const Duration(milliseconds: 120));
+      await gesture.moveBy(const Offset(4, 1));
+      // ~420 ms total and ~10.8 px of drift: inside the tuned
+      // recognizer's deadline and tolerance, beyond the stock
+      // 500 ms one — the founder's failed press, replayed.
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(inPage(0, find.byType(SelectableText)), findsOneWidget);
+      expect(host.state.currentChapter, 0);
+      await gesture.up();
+      await tester.pump();
+    });
+
+    testWidgets('SEL-9 a slow drag that crosses the slop before '
+        'the deadline is a scroll: no selection mode, no page '
+        'turn', (tester) async {
+      final host = await pumpReader(tester, data: data, texts: texts);
+      final center = tester.getCenter(
+        inPage(0, find.textContaining('KJV Genesis 1:1 ')),
+      );
+      final gesture = await tester.startGesture(center);
+      for (var i = 0; i < 6; i++) {
+        await gesture.moveBy(const Offset(-10, 0));
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await gesture.up();
+      await settleReader(tester, host);
+      expect(inPage(0, find.byType(SelectableText)), findsNothing);
+      expect(host.state.currentChapter, 0);
+    });
+
+    testWidgets('SEL-10 deuterocanon reader: a long-press with '
+        'drift enters selection mode there too', (tester) async {
+      final deutero = DeuterocanonData.parse(
+        jsonEncode({
+          'books': [
+            {
+              'slug': 'tobit',
+              'name': 'Tobit',
+              'abbr': 'Tob',
+              'chapters': 2,
+              'verseCounts': [3, 2],
+            },
+          ],
+        }),
+      );
+      final texts = ScriptureText.fromPayloads(
+        kjv: '[]',
+        web: '[]',
+        webc: jsonEncode([
+          [
+            ['Tobit verse one', 'Tobit verse two', 'Tobit verse three'],
+            ['Tobit two one', 'Tobit two two'],
+          ],
+        ]),
+        webcBooks: jsonEncode([
+          {'usfm': 'TOB', 'name': 'Tobit', 'core': null, 'extra': 'tobit'},
+        ]),
+      );
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wwTheme(),
+          home: DeuteroReaderScreen(
+            deutero: deutero,
+            book: deutero.books.single,
+            initialChapter: 1,
+            onBack: () {},
+            textsLoader: () async => texts,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      final center = tester.getCenter(find.text('Tobit verse two'));
+      final gesture = await tester.startGesture(center);
+      await gesture.moveBy(const Offset(5, 2));
+      await tester.pump(const Duration(milliseconds: 120));
+      await gesture.moveBy(const Offset(4, 1));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(SelectableText), findsOneWidget);
+      await gesture.up();
+      await tester.pump();
     });
   });
 }

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/bible_data.dart';
@@ -16,6 +17,7 @@ import '../data/tradition.dart';
 import '../data/user_data.dart';
 import '../theme/ww_theme.dart';
 import '../widgets/arc_stage.dart';
+import '../widgets/verse_long_press.dart';
 
 /// Host services the reader needs from the shell (Petra spec §7.4,
 /// §4.4, §6.4). The shell implements this; the reader never reaches
@@ -1055,6 +1057,10 @@ class ReaderScreenState extends State<ReaderScreen>
   /// SelectableText; the user's drag or second long-press on it
   /// takes the exact words.
   void _enterSelection(int ch, int v) {
+    // Run 10 fix round: the press visibly and audibly registers
+    // the moment it accepts — a haptic tick here, and the block's
+    // outline (see _verseBlock) for as long as the mode is open.
+    HapticFeedback.selectionClick();
     setState(() {
       if (_toolbarVerse != null) {
         if (_selectedChapter == _toolbarChapter &&
@@ -2161,6 +2167,7 @@ class ReaderScreenState extends State<ReaderScreen>
       }
     }
     final spans = _spansFor(ch, v);
+    final selecting = _selVerse == (ch, v);
     final fullColor = _userData.fullVerseColor(
       _profileId,
       _tKey,
@@ -2172,97 +2179,112 @@ class ReaderScreenState extends State<ReaderScreen>
         ? _palette.selectedBackground(fullTint)
         : (fullTint ?? Colors.transparent);
     final restingPlain = !selected && spans.isEmpty;
+    final inkWell = InkWell(
+      key: _keyForVerse(ch, v),
+      borderRadius: BorderRadius.circular(WwRadius.row),
+      onTap: () => _onVerseTap(ch, v),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(WwRadius.row),
+          // The selected verse's audited 2dp outline also marks
+          // the verse in selection mode: the press visibly
+          // registered (run 10 fix round).
+          border: selected || selecting
+              ? Border.all(color: _palette.accent, width: 2)
+              : null,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 24,
+              child: Column(
+                children: [
+                  Text(
+                    '$v',
+                    textAlign: TextAlign.center,
+                    style: restingPlain
+                        ? _palette.verseNumberStyle
+                        : _palette.verseNumberOnTintStyle,
+                  ),
+                  if (hasConns) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: restingPlain
+                            ? _palette.dotResting
+                            : _palette.accent,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
+                  if (hasNote) ...[
+                    const SizedBox(height: 4),
+                    Icon(Icons.notes, size: 16, color: _palette.accent),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              // Board run 10: in selection mode the verse text
+              // is a SelectableText — drag or long-press takes
+              // the exact words, the handles extend, and the
+              // §2.2 bar colors the span. Outside the mode it
+              // is the shipped plain Text.
+              child: _selVerse == (ch, v)
+                  ? SelectableText.rich(
+                      TextSpan(
+                        children: _verseSegments(
+                          text,
+                          spans,
+                          suppressBg: fullColor != null,
+                        ),
+                      ),
+                      key: ValueKey('vtext-$ch-$v-$_selGen'),
+                      style: _palette.bodyStyle,
+                      textDirection: _effT.isRtl ? TextDirection.rtl : null,
+                      contextMenuBuilder: (menuContext, state) =>
+                          _selectionMenu(menuContext, state, ch, v, text),
+                    )
+                  : Text.rich(
+                      TextSpan(
+                        children: _verseSegments(
+                          text,
+                          spans,
+                          suppressBg: fullColor != null,
+                        ),
+                      ),
+                      style: _palette.bodyStyle,
+                      textDirection: _effT.isRtl ? TextDirection.rtl : null,
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+    final material = Material(
+      color: background,
+      borderRadius: BorderRadius.circular(WwRadius.row),
+      child: inkWell,
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: WwSpace.screenMargin),
-      child: Material(
-        color: background,
-        borderRadius: BorderRadius.circular(WwRadius.row),
-        child: InkWell(
-          key: _keyForVerse(ch, v),
-          borderRadius: BorderRadius.circular(WwRadius.row),
-          onTap: () => _onVerseTap(ch, v),
-          onLongPress: () => _enterSelection(ch, v),
-          child: Container(
-            constraints: const BoxConstraints(minHeight: WwSpace.minTarget),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(WwRadius.row),
-              border: selected
-                  ? Border.all(color: _palette.accent, width: 2)
-                  : null,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 24,
-                  child: Column(
-                    children: [
-                      Text(
-                        '$v',
-                        textAlign: TextAlign.center,
-                        style: restingPlain
-                            ? _palette.verseNumberStyle
-                            : _palette.verseNumberOnTintStyle,
-                      ),
-                      if (hasConns) ...[
-                        const SizedBox(height: 4),
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: restingPlain
-                                ? _palette.dotResting
-                                : _palette.accent,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ],
-                      if (hasNote) ...[
-                        const SizedBox(height: 4),
-                        Icon(Icons.notes, size: 16, color: _palette.accent),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  // Board run 10: in selection mode the verse text
-                  // is a SelectableText — drag or long-press takes
-                  // the exact words, the handles extend, and the
-                  // §2.2 bar colors the span. Outside the mode it
-                  // is the shipped plain Text.
-                  child: _selVerse == (ch, v)
-                      ? SelectableText.rich(
-                          TextSpan(
-                            children: _verseSegments(
-                              text,
-                              spans,
-                              suppressBg: fullColor != null,
-                            ),
-                          ),
-                          key: ValueKey('vtext-$ch-$v-$_selGen'),
-                          style: _palette.bodyStyle,
-                          textDirection: _effT.isRtl ? TextDirection.rtl : null,
-                          contextMenuBuilder: (menuContext, state) =>
-                              _selectionMenu(menuContext, state, ch, v, text),
-                        )
-                      : Text.rich(
-                          TextSpan(
-                            children: _verseSegments(
-                              text,
-                              spans,
-                              suppressBg: fullColor != null,
-                            ),
-                          ),
-                          style: _palette.bodyStyle,
-                          textDirection: _effT.isRtl ? TextDirection.rtl : null,
-                        ),
-                ),
-              ],
-            ),
-          ),
-        ),
+      // Run 10 fix round: the long-press that enters selection
+      // mode is this block's own tuned recognizer (350 ms, wide
+      // drift tolerance), not InkWell's stock one — see
+      // widgets/verse_long_press.dart. The detector stands down
+      // while this verse IS in selection mode: inside the mode,
+      // a long-press belongs to the SelectableText (it takes a
+      // word), and the entry recognizer must not steal it.
+      child: VerseLongPressDetector(
+        enabled: !selecting,
+        onLongPress: () => _enterSelection(ch, v),
+        child: material,
       ),
     );
   }

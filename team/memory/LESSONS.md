@@ -502,6 +502,33 @@ rounds Rusty ran before the studio was founded).
     full scale as the card's title and caption outside it. A
     decorative surface may cap its own typography; the
     information it carries must exist unclamped one level up.
+
+## Selection entry (board run 10 fix round, Oct 22, 2026)
+
+49. **A late-accepting drag throws away the distance already
+    traveled — the stock touch slop is a budget, not a dial.**
+    Raising the readers' drag slop to 28dp (to stop drift
+    stealing the selection long-press) measurably regressed
+    the shipped suite: R-T10's in-page drag left the scroll
+    offset at 0, because a drag recognizer that accepts after
+    its slop discards the pending offset — the first 28dp of
+    every scroll would have vanished on device too. The arena
+    fix that works is on the PRESS side: shorten its deadline
+    (500→350ms) and widen ITS drift tolerance (18→42px), so
+    the press registers inside a natural hold while a movement
+    that still crosses 18dp in 350ms is, honestly, a swipe.
+    When two gestures compete, tune the one that is losing —
+    measured against the shipped suite, never by feel.
+50. **An entry recognizer must stand down inside its own
+    mode.** The tuned entry recognizer (350ms) won the arena
+    against the SelectableText's own long-press too, breaking
+    the in-mode word-taking press — SEL-2/6/7 went red the
+    moment the fix landed. The entry detector now registers
+    nothing while its verse is in selection mode. Any
+    recognizer installed to ENTER a state is a suspect in
+    every gesture that state owns; the suite for the state's
+    own gestures is its guard, and it must run in the same
+    package that installs the entry.
 ## Live search & verification hygiene (search fix package)
 
 49. **Results derived from current state at build cannot go
